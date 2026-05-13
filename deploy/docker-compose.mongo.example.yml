@@ -1,0 +1,15 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: quizsolver-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: quizsolver_admin
+      MONGO_INITDB_ROOT_PASSWORD: CHANGE_ME_MONGO_PASSWORD
+    volumes:
+      - quizsolver-mongo-data:/data/db
+
+volumes:
+  quizsolver-mongo-data:

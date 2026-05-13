@@ -16,8 +16,10 @@ const webhookRoutes = require('./routes/webhook');
 const User = require('./models/User');
 
 const app = express();
-const PORT = 30583;
-const ADMIN_PORT = 40583;
+const PORT = parseInt(process.env.PORT, 10) || 30583;
+const HOST = process.env.HOST || '127.0.0.1';
+const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
+const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 app.set('trust proxy', 1);
@@ -193,6 +195,9 @@ function startAdminServer() {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (!IS_PRODUCTION) return callback(null, true);
+      if (origin === `http://127.0.0.1:${ADMIN_PORT}` || origin === `http://localhost:${ADMIN_PORT}`) {
+        return callback(null, true);
+      }
       const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
       if (allowed.includes(origin)) return callback(null, true);
       callback(new Error('CORS blocked'));
@@ -221,13 +226,13 @@ function startAdminServer() {
     res.status(404).json({ error: 'Not found.' });
   });
 
-  adminApp.listen(ADMIN_PORT, '0.0.0.0', () => {
-    console.log(`[Server] Admin panel on port ${ADMIN_PORT}`);
+  adminApp.listen(ADMIN_PORT, ADMIN_HOST, () => {
+    console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
   });
 }
 
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`[Server] QuizSolver v2.0 | port ${PORT} | env: ${process.env.NODE_ENV || 'development'}`);
+app.listen(PORT, HOST, async () => {
+  console.log(`[Server] QuizSolver v2.0 | ${HOST}:${PORT} | env: ${process.env.NODE_ENV || 'development'}`);
   await seedAdmin();
   startAdminServer();
 });

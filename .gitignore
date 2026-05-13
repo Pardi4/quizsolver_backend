@@ -2,5 +2,7 @@ node_modules/
 .env
 *.log
 npm-debug.log*
-.env.example
 .gitignore
+.env.example
+.env.vps.example
+DEPLOY_UBUNTU_VPS.md
