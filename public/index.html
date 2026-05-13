@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuizSolver - AI Quiz Assistant | Testportal Quiz Solver</title>
+  <meta name="description" content="QuizSolver is an AI-powered browser extension for quiz practice, answer explanations, and supported quiz platforms including Testportal, Google Forms, Microsoft Forms, Moodle, Canvas, Blackboard, Quizlet, Socrative, Kahoot, and Quizizz.">
+  <meta name="keywords" content="testportal quiz solver, Testportal solver, quiz solver, AI quiz solver, quiz solver extension, Google Forms solver, Microsoft Forms solver, Moodle quiz solver, Canvas quiz helper, online test solver, answer explanation AI, quiz answer assistant, getquizsolver">
+  <meta name="author" content="QuizSolver">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#6c3dff">
+  <link rel="canonical" href="https://getquizsolver.com/">
+  <link rel="alternate" hreflang="en" href="https://getquizsolver.com/">
+  <link rel="alternate" hreflang="pl" href="https://getquizsolver.com/?lang=pl">
+  <link rel="alternate" hreflang="x-default" href="https://getquizsolver.com/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="QuizSolver">
+  <meta property="og:url" content="https://getquizsolver.com/">
+  <meta property="og:title" content="QuizSolver - AI Quiz Assistant">
+  <meta property="og:description" content="AI-powered quiz assistant with answer explanations, browser extension support, and compatibility with Testportal, Google Forms, Microsoft Forms, Moodle, Canvas, and more.">
+  <meta property="og:image" content="https://getquizsolver.com/og-image.svg">
+  <meta property="og:image:alt" content="QuizSolver AI quiz assistant preview">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="pl_PL">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="QuizSolver - AI Quiz Assistant">
+  <meta name="twitter:description" content="AI quiz helper for Testportal, Google Forms, Microsoft Forms, Moodle, Canvas, and more.">
+  <meta name="twitter:image" content="https://getquizsolver.com/og-image.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/site.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://getquizsolver.com/#organization",
+        "name": "QuizSolver",
+        "url": "https://getquizsolver.com/",
+        "logo": "https://getquizsolver.com/og-image.svg",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "support@getquizsolver.com",
+          "contactType": "customer support"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://getquizsolver.com/#software",
+        "name": "QuizSolver",
+        "applicationCategory": "BrowserApplication",
+        "operatingSystem": "Chrome, Chromium",
+        "url": "https://getquizsolver.com/",
+        "description": "AI-powered browser extension for quiz practice, answer suggestions, and concise answer explanations.",
+        "creator": { "@id": "https://getquizsolver.com/#organization" },
+        "offers": [
+          { "@type": "Offer", "name": "Starter", "price": "1.99", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Popular", "price": "4.99", "priceCurrency": "USD" },
+          { "@type": "Offer", "name": "Pro", "price": "9.99", "priceCurrency": "USD" }
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://getquizsolver.com/#website",
+        "name": "QuizSolver",
+        "url": "https://getquizsolver.com/",
+        "publisher": { "@id": "https://getquizsolver.com/#organization" },
+        "inLanguage": ["en", "pl"]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div id="particles-bg" aria-hidden="true"></div>
+
+  <nav class="navbar" id="navbar" aria-label="Primary navigation">
+    <div class="nav-container">
+      <a href="/" class="nav-logo" aria-label="QuizSolver home">
+        <span class="logo-icon" aria-hidden="true">🧠</span>
+        <span class="logo-text">QuizSolver</span>
+      </a>
+      <div class="nav-links" id="nav-links">
+        <a href="#features" class="nav-link" data-i18n="nav_features">Features</a>
+        <a href="#platforms" class="nav-link" data-i18n="nav_platforms">Platforms</a>
+        <a href="#pricing" class="nav-link" data-i18n="nav_pricing">Pricing</a>
+        <a href="#install-mobile" class="nav-link" data-i18n="nav_mobile">Mobile</a>
+        <a href="/quiz" class="nav-link" data-i18n="nav_study">Study Notes</a>
+        <a href="#leaderboard" class="nav-link" data-i18n="nav_leaderboard">Leaderboard</a>
+      </div>
+      <div class="nav-actions">
+        <div class="nav-lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" class="lang-btn" data-lang="pl" aria-pressed="false">PL</button>
+        </div>
+        <div id="nav-guest">
+          <button class="btn-ghost" id="nav-login-btn" data-i18n="nav_login">Log in</button>
+          <button class="btn-primary btn-sm" id="nav-register-btn" data-i18n="nav_signup">Sign up</button>
+        </div>
+        <div id="nav-user" class="nav-user hidden">
+          <div class="nav-credits" aria-label="Credits">
+            <span class="credits-icon" aria-hidden="true">💎</span>
+            <span id="nav-credits-count">0</span>
+          </div>
+          <div class="nav-avatar-wrap" id="nav-avatar-wrap">
+            <div class="nav-avatar" id="nav-avatar">U</div>
+            <div class="nav-dropdown" id="nav-dropdown">
+              <div class="dropdown-header">
+                <span id="dropdown-name">User</span>
+                <span id="dropdown-email" class="dropdown-email">user@email.com</span>
+              </div>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item" id="dropdown-dashboard-btn" data-i18n="dropdown_dashboard">Dashboard</button>
+              <button class="dropdown-item" id="dropdown-buy-btn" data-i18n="dropdown_buy">Buy Credits</button>
+              <button class="dropdown-item" id="dropdown-history-btn" data-i18n="dropdown_history">History</button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item danger" id="dropdown-logout-btn" data-i18n="dropdown_logout">Log out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="nav-hamburger" id="nav-hamburger" data-i18n-aria-label="nav_toggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+      <div class="hero-content">
+        <div class="hero-badge" data-i18n="hero_badge">AI-powered quiz assistance</div>
+        <h1 class="hero-title" id="hero-title">
+          <span data-i18n="hero_title_line1">QuizSolver</span><br>
+          <span class="gradient-text" data-i18n="hero_title_line2">AI quiz assistant</span>
+        </h1>
+        <p class="hero-subtitle" data-i18n="hero_subtitle">
+          Practice faster with an AI browser extension that detects quiz questions, suggests answers, and explains the reasoning in seconds.
+        </p>
+        <div class="hero-buttons">
+          <a href="#pricing" class="btn-primary btn-lg" id="hero-get-started">
+            <span data-i18n="hero_cta">Get Started Free</span>
+            <span class="btn-arrow" aria-hidden="true">→</span>
+          </a>
+          <a href="#features" class="btn-outline btn-lg">
+            <span data-i18n="hero_secondary">See How It Works</span>
+          </a>
+        </div>
+        <div class="hero-stats" aria-label="Product statistics">
+          <div class="stat-item">
+            <span class="stat-number" id="hero-stat-users">1k+</span>
+            <span class="stat-label" data-i18n="stat_users">Active Users</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number" id="hero-stat-questions">50k+</span>
+            <span class="stat-label" data-i18n="stat_questions">Questions Solved</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">99%</span>
+            <span class="stat-label" data-i18n="stat_accuracy">Accuracy</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-visual" aria-label="QuizSolver extension preview">
+        <img class="hero-preview-image" src="/og-image.svg" alt="QuizSolver extension preview solving a multiple choice quiz">
+        <div class="hero-card glass-card">
+          <div class="mock-question">
+            <div class="mock-badge" data-i18n="mock_badge">Question 3/10</div>
+            <p class="mock-text" data-i18n="mock_question">What is the capital of France?</p>
+            <div class="mock-options">
+              <div class="mock-option" data-i18n="mock_option_1">Berlin</div>
+              <div class="mock-option" data-i18n="mock_option_2">Madrid</div>
+              <div class="mock-option correct"><span data-i18n="mock_option_3">Paris</span> <span class="check">✓</span></div>
+              <div class="mock-option" data-i18n="mock_option_4">Rome</div>
+            </div>
+            <div class="mock-status">
+              <span class="status-dot"></span>
+              <span data-i18n="mock_status">Solved in 0.8s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features" aria-labelledby="features-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="features_badge">Features</span>
+          <h2 class="section-title" id="features-title" data-i18n="features_title">Everything You Need</h2>
+          <p class="section-subtitle" data-i18n="features_subtitle">Tools for faster practice, review, and answer checking.</p>
+        </div>
+        <div class="features-grid">
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">🤖</div>
+            <h3 data-i18n="feature_ai_title">AI-Powered Answers</h3>
+            <p data-i18n="feature_ai_text">The model analyzes question text, options, and supported images to suggest concise answers.</p>
+          </article>
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">🖼️</div>
+            <h3 data-i18n="feature_image_title">Image Recognition</h3>
+            <p data-i18n="feature_image_text">Visual questions can be sent with context, so diagrams and screenshots are easier to review.</p>
+          </article>
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">⚡</div>
+            <h3 data-i18n="feature_cache_title">Smart Caching</h3>
+            <p data-i18n="feature_cache_text">Repeated questions are matched from cache for faster responses and lower credit use.</p>
+          </article>
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">☑️</div>
+            <h3 data-i18n="feature_types_title">All Question Types</h3>
+            <p data-i18n="feature_types_text">Single choice, multiple choice, and short text answers are handled in one workflow.</p>
+          </article>
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">👁️</div>
+            <h3 data-i18n="feature_hint_title">Hint Mode</h3>
+            <p data-i18n="feature_hint_text">Highlight the suggested answer instead of clicking it, useful for learning and checking.</p>
+          </article>
+          <article class="feature-card glass-card">
+            <div class="feature-icon" aria-hidden="true">📖</div>
+            <h3 data-i18n="feature_explain_title">Explanation Mode</h3>
+            <p data-i18n="feature_explain_text">Ask for a short explanation after solving to understand why an answer fits.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="platforms" id="platforms" aria-labelledby="platforms-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="platforms_badge">Compatibility</span>
+          <h2 class="section-title" id="platforms-title" data-i18n="platforms_title">Works on Major Quiz Platforms</h2>
+          <p class="section-subtitle" data-i18n="platforms_subtitle">Known platforms load automatically, and optional permissions let you enable trusted pages one by one.</p>
+        </div>
+        <div class="platforms-grid" aria-label="Supported platforms">
+          <div class="platform-card glass-card"><span aria-hidden="true">📝</span> Google Forms</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">📋</span> Microsoft Forms</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🏫</span> Testportal</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🎓</span> Moodle</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">📚</span> Canvas</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🖥️</span> Blackboard</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🧩</span> Quizlet</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">💡</span> Socrative</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🏆</span> Kahoot</div>
+          <div class="platform-card glass-card"><span aria-hidden="true">🌐</span> Quizizz</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pricing" id="pricing" aria-labelledby="pricing-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="pricing_badge">Pricing</span>
+          <h2 class="section-title" id="pricing-title" data-i18n="pricing_title">Simple, Transparent Pricing</h2>
+          <p class="section-subtitle" data-i18n="pricing_subtitle">Start free with 10 credits/month. Buy more only when you need them.</p>
+        </div>
+        <div class="pricing-grid">
+          <article class="pricing-card glass-card" data-pack="starter">
+            <div class="pricing-header">
+              <h3>Starter</h3>
+              <div class="pricing-amount"><span class="price-dollar">$</span>1.99</div>
+              <p class="pricing-credits" data-i18n="starter_credits">100 credits</p>
+            </div>
+            <ul class="pricing-features">
+              <li data-i18n="starter_feature_1">100 quiz questions</li>
+              <li data-i18n="pricing_feature_types">All question types</li>
+              <li data-i18n="pricing_feature_image">Image recognition</li>
+              <li data-i18n="pricing_feature_cache">Smart caching</li>
+            </ul>
+            <button class="btn-primary btn-block buy-pack-btn" data-pack="starter" id="buy-starter" data-i18n="buy_starter">Buy Starter</button>
+          </article>
+          <article class="pricing-card glass-card featured" data-pack="popular">
+            <div class="pricing-badge" data-i18n="badge_popular">Most Popular</div>
+            <div class="pricing-header">
+              <h3>Popular</h3>
+              <div class="pricing-amount"><span class="price-dollar">$</span>4.99</div>
+              <p class="pricing-credits" data-i18n="popular_credits">500 credits</p>
+            </div>
+            <ul class="pricing-features">
+              <li data-i18n="popular_feature_1">500 quiz questions</li>
+              <li data-i18n="pricing_feature_types">All question types</li>
+              <li data-i18n="pricing_feature_image">Image recognition</li>
+              <li data-i18n="pricing_feature_cache">Smart caching</li>
+              <li data-i18n="pricing_feature_priority">Priority support</li>
+            </ul>
+            <button class="btn-primary btn-block buy-pack-btn" data-pack="popular" id="buy-popular" data-i18n="buy_popular">Buy Popular</button>
+          </article>
+          <article class="pricing-card glass-card" data-pack="pro">
+            <div class="pricing-badge best" data-i18n="badge_best">Best Value</div>
+            <div class="pricing-header">
+              <h3>Pro</h3>
+              <div class="pricing-amount"><span class="price-dollar">$</span>9.99</div>
+              <p class="pricing-credits" data-i18n="pro_credits">2000 credits</p>
+            </div>
+            <ul class="pricing-features">
+              <li data-i18n="pro_feature_1">2000 quiz questions</li>
+              <li data-i18n="pricing_feature_types">All question types</li>
+              <li data-i18n="pricing_feature_image">Image recognition</li>
+              <li data-i18n="pricing_feature_cache">Smart caching</li>
+              <li data-i18n="pricing_feature_priority">Priority support</li>
+              <li data-i18n="pricing_feature_explain">Explanation mode</li>
+            </ul>
+            <button class="btn-primary btn-block buy-pack-btn" data-pack="pro" id="buy-pro" data-i18n="buy_pro">Buy Pro</button>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="mobile-section" id="install-mobile" aria-labelledby="mobile-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="mobile_badge">Mobile</span>
+          <h2 class="section-title" id="mobile-title" data-i18n="mobile_title">Use on Your Phone</h2>
+          <p class="section-subtitle" data-i18n="mobile_subtitle">Install the extension on mobile browsers that support Chromium extensions.</p>
+        </div>
+        <div class="tutorial-steps glass-card">
+          <article class="tutorial-step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h4 data-i18n="mobile_step1_title">Download a compatible browser</h4>
+              <p><span data-i18n="mobile_step1_text_a">Install</span> <a href="https://play.google.com/store/apps/details?id=com.kiwibrowser.browser" target="_blank" rel="noopener">Kiwi Browser</a> <span data-i18n="mobile_step1_text_b">on Android or</span> <a href="https://apps.apple.com/app/orion-browser-by-kagi/id1484498200" target="_blank" rel="noopener">Orion Browser</a> <span data-i18n="mobile_step1_text_c">on iOS.</span></p>
+            </div>
+          </article>
+          <article class="tutorial-step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h4 data-i18n="mobile_step2_title">Enable Developer Mode</h4>
+              <p data-i18n="mobile_step2_text">Open the browser extension settings and turn Developer mode on.</p>
+            </div>
+          </article>
+          <article class="tutorial-step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h4 data-i18n="mobile_step3_title">Load the Extension</h4>
+              <p data-i18n="mobile_step3_text">Download the extension package, extract it, and load it as an unpacked extension.</p>
+            </div>
+          </article>
+          <article class="tutorial-step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <h4 data-i18n="mobile_step4_title">Start Practicing</h4>
+              <p data-i18n="mobile_step4_text">Log in with your QuizSolver account, open a quiz page, and choose your preferred mode.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="leaderboard-section" id="leaderboard" aria-labelledby="leaderboard-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="leaderboard_badge">Leaderboard</span>
+          <h2 class="section-title" id="leaderboard-title" data-i18n="leaderboard_title">Top Solvers</h2>
+          <p class="section-subtitle" data-i18n="leaderboard_subtitle">The most active QuizSolver users this month.</p>
+        </div>
+        <div class="leaderboard-table glass-card">
+          <div class="leaderboard-header">
+            <span>#</span>
+            <span data-i18n="leaderboard_user">User</span>
+            <span data-i18n="leaderboard_questions">Questions</span>
+            <span data-i18n="leaderboard_streak">Streak</span>
+          </div>
+          <div id="leaderboard-rows">
+            <div class="leaderboard-loading" data-i18n="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard-section hidden" id="dashboard" aria-labelledby="dashboard-title">
+      <div class="section-container">
+        <div class="section-header">
+          <span class="section-badge" data-i18n="dashboard_badge">Dashboard</span>
+          <h2 class="section-title" id="dashboard-title" data-i18n="dashboard_title">Your Account</h2>
+        </div>
+        <div class="dashboard-grid">
+          <article class="dash-card glass-card">
+            <div class="dash-icon" aria-hidden="true">💎</div>
+            <div class="dash-value" id="dash-credits">0</div>
+            <div class="dash-label" data-i18n="dashboard_credits">Credits</div>
+          </article>
+          <article class="dash-card glass-card">
+            <div class="dash-icon" aria-hidden="true">📝</div>
+            <div class="dash-value" id="dash-questions">0</div>
+            <div class="dash-label" data-i18n="dashboard_questions">Questions Solved</div>
+          </article>
+          <article class="dash-card glass-card">
+            <div class="dash-icon" aria-hidden="true">🔥</div>
+            <div class="dash-value" id="dash-streak">0</div>
+            <div class="dash-label" data-i18n="dashboard_streak">Day Streak</div>
+          </article>
+          <article class="dash-card glass-card">
+            <div class="dash-icon" aria-hidden="true">🔗</div>
+            <div class="dash-value" id="dash-referral">---</div>
+            <div class="dash-label" data-i18n="dashboard_referral">Referral Code</div>
+            <button class="btn-sm btn-ghost" id="copy-referral-btn" data-i18n="dashboard_copy">Copy Link</button>
+          </article>
+        </div>
+        <div class="dash-history glass-card">
+          <h3 data-i18n="dashboard_history">Purchase History</h3>
+          <div id="dash-history-list">
+            <p class="dash-empty" data-i18n="dashboard_no_purchases">No purchases yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="section-container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <span class="logo-icon" aria-hidden="true">🧠</span>
+          <span class="logo-text">QuizSolver</span>
+          <p class="footer-desc" data-i18n="footer_desc">AI-powered quiz practice and answer explanations.</p>
+        </div>
+        <div class="footer-links">
+          <h4 data-i18n="footer_product">Product</h4>
+          <a href="#features" data-i18n="nav_features">Features</a>
+          <a href="#pricing" data-i18n="nav_pricing">Pricing</a>
+          <a href="/quiz" data-i18n="nav_study">Study Notes</a>
+          <a href="#install-mobile" data-i18n="footer_mobile_install">Mobile Install</a>
+        </div>
+        <div class="footer-links">
+          <h4 data-i18n="footer_legal">Legal</h4>
+          <a href="/privacy" data-i18n="footer_privacy">Privacy Policy</a>
+        </div>
+        <div class="footer-links">
+          <h4 data-i18n="footer_support">Support</h4>
+          <a href="mailto:support@getquizsolver.com" data-i18n="footer_contact">Contact Us</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p data-i18n="footer_rights">&copy; 2026 QuizSolver. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-overlay hidden" id="auth-modal-overlay">
+    <div class="modal glass-card" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <button class="modal-close" id="modal-close-btn" data-i18n-aria-label="modal_close" aria-label="Close">&times;</button>
+
+      <div id="login-form">
+        <h2 class="modal-title" id="auth-modal-title" data-i18n="login_title">Welcome Back</h2>
+        <p class="modal-subtitle" data-i18n="login_subtitle">Sign in to your account</p>
+        <div class="form-group">
+          <input type="email" id="modal-login-email" data-i18n-placeholder="email_placeholder" placeholder="Email" class="form-input" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <input type="password" id="modal-login-password" data-i18n-placeholder="password_placeholder" placeholder="Password" class="form-input" autocomplete="current-password">
+        </div>
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="modal-remember-me" checked> <span data-i18n="remember_me">Remember me</span>
+          </label>
+        </div>
+        <div class="form-error hidden" id="modal-login-error"></div>
+        <button class="btn-primary btn-block" id="modal-login-btn">
+          <span class="btn-text" data-i18n="login_button">Sign In</span>
+          <span class="btn-loader hidden"></span>
+        </button>
+        <p class="form-switch"><span data-i18n="login_switch_text">Don't have an account?</span> <a href="#" id="show-register-form" data-i18n="login_switch_link">Sign up</a></p>
+      </div>
+
+      <div id="register-form" class="hidden">
+        <h2 class="modal-title" data-i18n="register_title">Create Account</h2>
+        <p class="modal-subtitle" data-i18n="register_subtitle">Start practicing for free</p>
+        <div class="form-group">
+          <input type="text" id="modal-register-name" data-i18n-placeholder="display_name_placeholder" placeholder="Display name" class="form-input" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <input type="email" id="modal-register-email" data-i18n-placeholder="email_placeholder" placeholder="Email" class="form-input" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <input type="password" id="modal-register-password" data-i18n-placeholder="register_password_placeholder" placeholder="Password (min 8 chars)" class="form-input" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <input type="password" id="modal-register-confirm" data-i18n-placeholder="confirm_password_placeholder" placeholder="Confirm password" class="form-input" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <input type="text" id="modal-register-referral" data-i18n-placeholder="referral_placeholder" placeholder="Referral code (optional)" class="form-input">
+        </div>
+        <div class="form-error hidden" id="modal-register-error"></div>
+        <button class="btn-primary btn-block" id="modal-register-btn">
+          <span class="btn-text" data-i18n="register_button">Create Account</span>
+          <span class="btn-loader hidden"></span>
+        </button>
+        <p class="form-switch"><span data-i18n="register_switch_text">Already have an account?</span> <a href="#" id="show-login-form" data-i18n="register_switch_link">Sign in</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast">
+    <span id="toast-message"></span>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

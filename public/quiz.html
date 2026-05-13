@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Notes & Practice Quiz | QuizSolver</title>
+  <meta name="description" content="Review your saved QuizSolver study notes and create practice quizzes from questions in your history.">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#6c3dff">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+  <div id="particles-bg" aria-hidden="true"></div>
+
+  <nav class="navbar" aria-label="Study navigation">
+    <div class="nav-container">
+      <a href="/" class="nav-logo">
+        <span class="logo-icon" aria-hidden="true">🧠</span>
+        <span class="logo-text">QuizSolver</span>
+      </a>
+      <div class="nav-links">
+        <a href="/" class="nav-link" data-i18n="home">Home</a>
+        <a href="/quiz" class="nav-link" data-i18n="studyNotes">Study Notes</a>
+        <a href="/privacy" class="nav-link" data-i18n="privacy">Privacy</a>
+      </div>
+      <div class="nav-actions">
+        <div class="nav-lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" class="lang-btn" data-lang="pl" aria-pressed="false">PL</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="quiz-page">
+    <header class="quiz-hero">
+      <span class="section-badge" data-i18n="badge">Study Notes</span>
+      <h1 data-i18n="title">Build a practice quiz from your saved history</h1>
+      <p data-i18n="subtitle">Choose questions from answers and explanations saved by QuizSolver, then practice them in a clean quiz view.</p>
+    </header>
+
+    <section class="quiz-auth-card glass-card hidden" id="auth-card">
+      <h2 data-i18n="loginTitle">Sign in to load your notes</h2>
+      <p data-i18n="loginSubtitle">Use the same account as the extension or landing page.</p>
+      <div class="quiz-auth-grid">
+        <input class="form-input" id="quiz-email" type="email" placeholder="Email" autocomplete="email">
+        <input class="form-input" id="quiz-password" type="password" placeholder="Password" autocomplete="current-password">
+        <button class="btn-primary" id="quiz-login-btn" data-i18n="loginButton">Sign in</button>
+      </div>
+      <div class="form-error hidden" id="quiz-login-error"></div>
+    </section>
+
+    <section class="quiz-shell hidden" id="notes-shell">
+      <div class="quiz-toolbar glass-card">
+        <div>
+          <h2 data-i18n="historyTitle">Your question history</h2>
+          <p><span id="notes-count">0</span> <span data-i18n="historyCount">saved questions</span></p>
+        </div>
+        <div class="quiz-toolbar-actions">
+          <input class="form-input" id="notes-search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Search notes">
+          <select class="form-input" id="notes-filter">
+            <option value="" data-i18n="filterAll">All</option>
+            <option value="favorite" data-i18n="filterFavorite">Favorites</option>
+            <option value="new" data-i18n="filterNew">New</option>
+            <option value="learning" data-i18n="filterLearning">Learning</option>
+            <option value="mastered" data-i18n="filterMastered">Mastered</option>
+          </select>
+          <button class="btn-outline" id="select-visible-btn" data-i18n="selectVisible">Select visible</button>
+          <button class="btn-primary" id="start-practice-btn" data-i18n="startPractice">Start practice</button>
+        </div>
+      </div>
+
+      <div class="quiz-empty glass-card hidden" id="notes-empty">
+        <h3 data-i18n="emptyTitle">No notes yet</h3>
+        <p data-i18n="emptyText">Solve questions with Study Notes enabled, then come back here to practice from your history.</p>
+      </div>
+
+      <div class="notes-grid" id="notes-grid"></div>
+    </section>
+
+    <section class="practice-shell glass-card hidden" id="practice-shell">
+      <div class="practice-header">
+        <button class="btn-outline btn-sm" id="back-to-notes-btn" data-i18n="backToNotes">Back to notes</button>
+        <div class="practice-progress">
+          <span id="practice-index">1</span>/<span id="practice-total">1</span>
+        </div>
+      </div>
+
+      <article class="practice-card" id="practice-card">
+        <div class="practice-meta" id="practice-meta"></div>
+        <h2 id="practice-question"></h2>
+        <div class="practice-options" id="practice-options"></div>
+        <div class="practice-feedback hidden" id="practice-feedback"></div>
+        <div class="practice-actions">
+          <button class="btn-primary" id="check-answer-btn" data-i18n="checkAnswer">Check answer</button>
+          <button class="btn-outline hidden" id="next-question-btn" data-i18n="nextQuestion">Next question</button>
+        </div>
+      </article>
+
+      <div class="practice-result hidden" id="practice-result">
+        <h2 data-i18n="resultTitle">Practice complete</h2>
+        <p><span id="practice-score">0</span>/<span id="practice-score-total">0</span> <span data-i18n="correctAnswers">correct answers</span></p>
+        <button class="btn-primary" id="restart-practice-btn" data-i18n="restartPractice">Practice again</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast hidden" id="toast">
+    <span id="toast-message"></span>
+  </div>
+
+  <script src="/quiz-app.js"></script>
+</body>
+</html>
