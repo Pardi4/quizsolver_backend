@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-const MODEL = 'gpt-4.4-nano';
+const MODEL = 'gpt-5.4-nano';
 const AI_TIMEOUT = 30000;
 
 class AIError extends Error {
