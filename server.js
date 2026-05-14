@@ -64,9 +64,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
 
     const extId = process.env.EXTENSION_ID;
-    if (extId && origin === `chrome-extension://`) {
-      return callback(null, true);
-    }
+    if (origin.startsWith('chrome-extension://')) return callback(null, true);
 
     if (!IS_PRODUCTION) {
       if (origin.startsWith('chrome-extension://')) return callback(null, true);
