@@ -1,0 +1,533 @@
+{
+  "locale": "en",
+  "htmlLang": "en",
+  "ogLocale": "en_US",
+  "nav": {
+    "how": "How it works",
+    "features": "Features",
+    "platforms": "Platforms",
+    "pricing": "Pricing",
+    "study": "Study Notes",
+    "testportal": "Testportal",
+    "kahoot": "Kahoot",
+    "login": "Log in",
+    "signup": "Sign up",
+    "toggle": "Toggle menu"
+  },
+  "common": {
+    "brand": "QuizSolver",
+    "home": "Home",
+    "getStarted": "Get Started Free",
+    "seeHow": "See how it works",
+    "installExtension": "Install extension",
+    "learnMore": "Learn more",
+    "openStudyNotes": "Open Study Notes",
+    "buyCredits": "Buy Credits",
+    "dashboard": "Dashboard",
+    "history": "History",
+    "logout": "Log out",
+    "email": "Email",
+    "password": "Password",
+    "displayName": "Display name",
+    "confirmPassword": "Confirm password",
+    "referralCode": "Referral code",
+    "rememberMe": "Remember me",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "close": "Close",
+    "loading": "Loading...",
+    "questions": "Questions",
+    "streak": "Streak",
+    "credits": "Credits"
+  },
+  "footer": {
+    "description": "AI-powered quiz practice, answer explanations, and study notes for supported quiz platforms.",
+    "product": "Product",
+    "seoPages": "Platform guides",
+    "legal": "Legal",
+    "support": "Support",
+    "privacy": "Privacy Policy",
+    "contact": "Contact Us",
+    "rights": "2026 QuizSolver. All rights reserved."
+  },
+  "auth": {
+    "loginTitle": "Welcome back",
+    "loginSubtitle": "Sign in to manage credits, practice notes, and quiz history.",
+    "registerTitle": "Create your QuizSolver account",
+    "registerSubtitle": "Start with free monthly credits and unlock the browser extension workflow.",
+    "showRegister": "Do not have an account?",
+    "showRegisterLink": "Sign up",
+    "showLogin": "Already have an account?",
+    "showLoginLink": "Log in",
+    "passwordHelp": "Password must be at least 8 characters."
+  },
+  "seoHub": {
+    "title": "QuizSolver platform guides",
+    "subtitle": "Explore dedicated pages for the quiz platforms and long-tail searches people use before installing an AI quiz solver.",
+    "faqBadge": "FAQ",
+    "faqTitle": "QuizSolver FAQ"
+  },
+  "home": {
+    "meta": {
+      "title": "QuizSolver - AI Quiz Solver Extension for Testportal, Moodle and Canvas",
+      "description": "QuizSolver is an AI quiz solver browser extension for practice, answer explanations, study notes, and supported platforms including Testportal, Moodle, Canvas, Google Forms, Kahoot and Quizizz.",
+      "keywords": "quiz solver, quiz solver ai, ai quiz solver, testportal quiz solver, moodle quiz solver, canvas quiz solver, kahoot ai bot, quiz answer assistant, quiz solver extension"
+    },
+    "hero": {
+      "badge": "AI quiz solver browser extension",
+      "title": "Solve, understand, and practice quiz questions faster",
+      "subtitle": "QuizSolver detects questions on supported quiz platforms, suggests an answer, explains the reasoning, and saves study notes so you can practice again later.",
+      "primaryCta": "Get Started Free",
+      "secondaryCta": "How it works",
+      "proof": ["Works on Testportal, Moodle, Canvas and more", "Answer explanations after solving", "Practice Mode from saved history"],
+      "mockBadge": "Detected question",
+      "mockQuestion": "Which answer best completes this quiz?",
+      "mockOptionA": "Guess manually",
+      "mockOptionB": "Ask QuizSolver",
+      "mockOptionC": "Review explanation",
+      "mockStatus": "Answer and explanation ready"
+    },
+    "how": {
+      "badge": "3 simple steps",
+      "title": "How QuizSolver works",
+      "subtitle": "No complicated setup. Install the extension, open a supported quiz page, and choose how much help you want.",
+      "steps": [
+        {
+          "title": "Install the extension",
+          "text": "Create an account, add QuizSolver to your browser, and sign in once."
+        },
+        {
+          "title": "Open a quiz page",
+          "text": "QuizSolver detects visible questions on platforms like Testportal, Moodle, Canvas, Google Forms, Kahoot and Quizizz."
+        },
+        {
+          "title": "Solve, explain, or practice",
+          "text": "Get an answer suggestion, ask for a short explanation, and turn saved history into a practice quiz."
+        }
+      ]
+    },
+    "features": {
+      "badge": "Features",
+      "title": "Built for learning workflows",
+      "subtitle": "The extension is designed to help users understand questions quickly and return to weak topics later.",
+      "items": [
+        {
+          "title": "AI answer suggestions",
+          "text": "Analyze question text, answer choices, and supported images in one clear workflow."
+        },
+        {
+          "title": "Explain Answer",
+          "text": "After solving, generate a concise explanation so the answer is easier to remember."
+        },
+        {
+          "title": "Study Notes history",
+          "text": "Save questions, answers, explanations, and status labels for later review."
+        },
+        {
+          "title": "Practice Mode",
+          "text": "Select saved questions and generate a clean practice quiz at getquizsolver.com/quiz."
+        },
+        {
+          "title": "Smart cache",
+          "text": "Repeated questions can be reused from cache to reduce cost and wait time."
+        },
+        {
+          "title": "Permission control",
+          "text": "Known platforms work directly, while optional permissions let users allow trusted pages one by one."
+        }
+      ]
+    },
+    "platforms": {
+      "badge": "Supported platforms",
+      "title": "Works across popular quiz and LMS websites",
+      "subtitle": "QuizSolver is built around known platform patterns and a safe optional-permission flow for trusted pages.",
+      "items": ["Testportal", "Moodle", "Canvas", "Google Forms", "Microsoft Forms", "Blackboard", "Quizlet", "Socrative", "Kahoot", "Quizizz"]
+    },
+    "pricing": {
+      "badge": "Pricing",
+      "title": "Simple credits, no confusing plans",
+      "subtitle": "Start free with monthly credits, then buy more only when you need them.",
+      "packs": [
+        {
+          "id": "starter",
+          "name": "Starter",
+          "price": "$1.99",
+          "credits": "100 credits",
+          "features": ["100 quiz questions", "All question types", "Image recognition", "Smart cache"]
+        },
+        {
+          "id": "popular",
+          "name": "Popular",
+          "price": "$4.99",
+          "credits": "500 credits",
+          "badge": "Most Popular",
+          "features": ["500 quiz questions", "All question types", "Image recognition", "Smart cache", "Priority support"]
+        },
+        {
+          "id": "pro",
+          "name": "Pro",
+          "price": "$9.99",
+          "credits": "2000 credits",
+          "badge": "Best Value",
+          "features": ["2000 quiz questions", "All question types", "Image recognition", "Smart cache", "Priority support", "Explanation mode"]
+        }
+      ]
+    },
+    "mobile": {
+      "badge": "Review",
+      "title": "Turn solved questions into revision",
+      "subtitle": "Study Notes and Practice Mode make QuizSolver more than a one-time answer tool.",
+      "steps": [
+        {
+          "title": "Save questions automatically",
+          "text": "Enable Study Notes in extension settings to keep useful questions in your account history."
+        },
+        {
+          "title": "Mark your confidence",
+          "text": "Label notes as new, learning, mastered, or favorite so revision stays organized."
+        },
+        {
+          "title": "Build a practice quiz",
+          "text": "Pick questions from history and practice them in a clean quiz view."
+        }
+      ]
+    },
+    "leaderboard": {
+      "badge": "Community",
+      "title": "Top Solvers",
+      "subtitle": "The most active QuizSolver users this month.",
+      "user": "User",
+      "empty": "No leaderboard data yet."
+    },
+    "dashboard": {
+      "badge": "Dashboard",
+      "title": "Your Account",
+      "questionsSolved": "Questions Solved",
+      "dayStreak": "Day Streak",
+      "referral": "Referral Code",
+      "copy": "Copy Link",
+      "purchaseHistory": "Purchase History",
+      "noPurchases": "No purchases yet."
+    },
+    "faq": [
+      {
+        "question": "What is QuizSolver?",
+        "answer": "QuizSolver is an AI quiz solver browser extension built for practice, answer explanations, Study Notes, and revision on supported quiz platforms."
+      },
+      {
+        "question": "Is English the main language of getquizsolver.com?",
+        "answer": "Yes. English is the default language on the main URLs. Polish is available as a secondary version under /pl/."
+      },
+      {
+        "question": "Which quiz platforms are supported?",
+        "answer": "QuizSolver has dedicated workflows and SEO pages for Testportal, Moodle, Canvas, Google Forms, Microsoft Forms, Kahoot, Quizizz, and general AI quiz solver searches."
+      },
+      {
+        "question": "Does QuizSolver explain answers?",
+        "answer": "Yes. Users can request a short explanation after solving and save useful questions into Study Notes for later practice."
+      }
+    ]
+  },
+  "platformPages": {
+    "quizSolverAi": {
+      "platformName": "Quiz Solver AI",
+      "shortName": "AI Quiz Solver",
+      "linkTitle": "AI quiz solver extension",
+      "meta": {
+        "title": "Quiz Solver AI - Browser Extension for Answers, Explanations and Study Notes",
+        "description": "QuizSolver is a quiz solver AI browser extension for answer suggestions, explanations, Study Notes, Practice Mode, and supported quiz platforms.",
+        "keywords": "quiz solver ai, ai quiz solver, quiz solver, quiz answer ai, quiz solver extension, ai answer assistant"
+      },
+      "badge": "AI quiz solver",
+      "title": "Quiz solver AI for answers, explanations, and practice",
+      "subtitle": "QuizSolver combines answer suggestions, concise reasoning, saved history, and Practice Mode in one browser extension workflow.",
+      "primaryCta": "Start with QuizSolver",
+      "secondaryCta": "View supported platforms",
+      "introTitle": "The main English page for quiz solver AI searches",
+      "intro": "This page targets broad searches like quiz solver, quiz solver AI, and AI quiz solver while linking users into specific platform guides.",
+      "stepsTitle": "How to use the AI quiz solver workflow",
+      "steps": [
+        "Install the QuizSolver browser extension and sign in.",
+        "Open a supported quiz page or a trusted page you have allowed.",
+        "Use answer suggestions, explanations, Study Notes, and Practice Mode to review the material."
+      ],
+      "featureTitle": "Core AI quiz solver features",
+      "features": ["AI answer suggestions", "Answer explanations", "Study Notes history", "Practice Mode", "Smart cache", "Optional site permissions"],
+      "keywordSections": [
+        {
+          "title": "Quiz solver AI for long-tail searches",
+          "text": "The page is written around natural keyword clusters such as quiz solver AI, AI quiz solver extension, quiz answer assistant, and answer explanation AI."
+        },
+        {
+          "title": "Built as a study workflow",
+          "text": "Instead of a one-off answer screen, QuizSolver connects solving, explanation, saved notes, and practice quizzes into one repeatable learning loop."
+        }
+      ],
+      "faq": [
+        {
+          "question": "What does a quiz solver AI do?",
+          "answer": "It reviews visible quiz content, suggests an answer, and can explain why that answer fits when the workflow is allowed."
+        },
+        {
+          "question": "Can QuizSolver save questions for later?",
+          "answer": "Yes. Study Notes can save questions, answers, explanations, and learning status for later Practice Mode."
+        }
+      ],
+      "note": "Use QuizSolver for learning, revision, and permitted practice workflows."
+    },
+    "testportal": {
+      "platformName": "Testportal",
+      "shortName": "Testportal",
+      "linkTitle": "Testportal quiz solver guide",
+      "meta": {
+        "title": "Testportal Quiz Solver AI - Practice, Answers and Explanations",
+        "description": "Use QuizSolver as a Testportal quiz solver AI assistant for practice sessions, answer explanations, study notes, and repeated question review.",
+        "keywords": "testportal quiz solver, testportal solver, testportal ai solver, testportal answer assistant, quiz solver ai"
+      },
+      "badge": "Testportal workflow",
+      "title": "Testportal quiz solver for faster practice and explanations",
+      "subtitle": "QuizSolver helps users review Testportal-style questions by detecting visible prompts, suggesting answers, and saving explanations into Study Notes.",
+      "primaryCta": "Start with QuizSolver",
+      "secondaryCta": "View all platforms",
+      "introTitle": "A focused template for Testportal users",
+      "intro": "This page is structured as the SEO landing template for every supported platform: clear problem, supported workflow, practical steps, features, and a call to action.",
+      "stepsTitle": "How to use QuizSolver with Testportal",
+      "steps": [
+        "Install the QuizSolver extension and sign in.",
+        "Open a Testportal quiz or practice page where you are allowed to use study tools.",
+        "Use answer suggestions, explanations, and saved notes to review the material."
+      ],
+      "featureTitle": "Why it fits Testportal-style quizzes",
+      "features": ["Single-choice and multi-choice support", "Answer explanations after solving", "Study Notes history", "Practice Mode from saved questions", "Smart cache for repeated prompts", "Optional permission control"],
+      "keywordSections": [
+        {
+          "title": "Testportal quiz solver keyword coverage",
+          "text": "This page targets searches like testportal quiz solver, Testportal solver, Testportal AI solver, and Testportal answer assistant with a dedicated URL and internal links."
+        },
+        {
+          "title": "Study-first Testportal workflow",
+          "text": "The content focuses on permitted practice, answer explanations, revision notes, and repeated question review instead of hiding the product behind vague marketing copy."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Does QuizSolver work as a Testportal quiz solver?",
+          "answer": "QuizSolver supports Testportal-style quiz review workflows, including answer suggestions, explanations, and saved Study Notes where use is allowed."
+        },
+        {
+          "question": "Can Testportal questions be used in Practice Mode?",
+          "answer": "Saved questions can be selected from Study Notes and turned into a practice quiz on getquizsolver.com/quiz."
+        }
+      ],
+      "note": "Use QuizSolver responsibly for learning, revision, and permitted practice workflows."
+    },
+    "moodle": {
+      "platformName": "Moodle",
+      "shortName": "Moodle",
+      "linkTitle": "Moodle quiz solver guide",
+      "meta": {
+        "title": "Moodle Quiz Solver AI - Practice Assistant with Explanations",
+        "description": "Use QuizSolver as a Moodle quiz solver AI assistant for practice, answer explanations, saved notes, and revision from question history.",
+        "keywords": "moodle quiz solver, moodle quiz solver ai, moodle answer assistant, quiz solver ai, moodle practice quiz"
+      },
+      "badge": "Moodle workflow",
+      "title": "Moodle quiz solver AI for study and revision",
+      "subtitle": "QuizSolver helps users review Moodle-style quiz questions with answer suggestions, concise explanations, and saved Study Notes.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "View all platforms",
+      "introTitle": "SEO page for Moodle quiz solver searches",
+      "intro": "This template gives Moodle its own keyword-focused page, internal links, FAQ schema, and platform-specific copy.",
+      "stepsTitle": "How to use QuizSolver with Moodle",
+      "steps": ["Install QuizSolver and sign in.", "Open a Moodle quiz or permitted practice page.", "Review answers, explanations, and saved notes in your account."],
+      "featureTitle": "Moodle-focused features",
+      "features": ["Question detection", "Single and multiple choice support", "Short explanations", "Study Notes", "Practice Mode", "Smart cache"],
+      "keywordSections": [
+        {
+          "title": "Moodle quiz solver long-tail content",
+          "text": "The page targets Moodle quiz solver, Moodle answer assistant, Moodle AI quiz solver, and Moodle practice quiz searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver help with Moodle quiz practice?",
+          "answer": "Yes. It is designed for permitted practice workflows, explanations, and revision notes on supported quiz pages."
+        }
+      ],
+      "note": "Use QuizSolver only for allowed study and practice workflows."
+    },
+    "canvas": {
+      "platformName": "Canvas",
+      "shortName": "Canvas",
+      "linkTitle": "Canvas quiz solver guide",
+      "meta": {
+        "title": "Canvas Quiz Solver AI - Answer Explanations and Study Notes",
+        "description": "QuizSolver provides a Canvas quiz solver AI workflow for practice questions, answer explanations, saved Study Notes, and repeated review.",
+        "keywords": "canvas quiz solver, canvas quiz solver ai, canvas answer assistant, quiz solver ai, canvas quiz helper"
+      },
+      "badge": "Canvas workflow",
+      "title": "Canvas quiz solver AI for practice workflows",
+      "subtitle": "Use QuizSolver to review Canvas-style quiz questions, understand answer reasoning, and build a personal study history.",
+      "primaryCta": "Start practicing",
+      "secondaryCta": "View supported platforms",
+      "introTitle": "Dedicated Canvas SEO landing page",
+      "intro": "This page expands the site footprint for Canvas-related searches while keeping the product positioned around learning and revision.",
+      "stepsTitle": "How to use QuizSolver with Canvas",
+      "steps": ["Install the extension.", "Open a supported Canvas quiz or practice page.", "Use explanations and Study Notes to review weak topics."],
+      "featureTitle": "Canvas quiz review features",
+      "features": ["Answer suggestions", "Explanation mode", "Study history", "Practice quizzes", "Optional permissions", "Smart cache"],
+      "keywordSections": [
+        {
+          "title": "Canvas quiz helper keyword cluster",
+          "text": "The page covers Canvas quiz solver, Canvas quiz helper, Canvas answer assistant, and AI quiz solver queries with a clean canonical URL."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Does QuizSolver support Canvas-style quizzes?",
+          "answer": "QuizSolver is built to support common quiz layouts and can be enabled on trusted pages through permissions."
+        }
+      ],
+      "note": "Use QuizSolver for revision, study, and permitted practice."
+    },
+    "googleForms": {
+      "platformName": "Google Forms",
+      "shortName": "Google Forms",
+      "linkTitle": "Google Forms quiz solver guide",
+      "meta": {
+        "title": "Google Forms Quiz Solver AI - Practice Assistant and Explanations",
+        "description": "Use QuizSolver as a Google Forms quiz solver AI assistant for practice, answer explanations, saved notes, and review workflows.",
+        "keywords": "google forms quiz solver, google forms solver, google forms answer assistant, quiz solver ai, google forms quiz helper"
+      },
+      "badge": "Google Forms workflow",
+      "title": "Google Forms quiz solver AI for review sessions",
+      "subtitle": "QuizSolver helps users work through Google Forms-style quiz questions, request explanations, and save useful questions for later.",
+      "primaryCta": "Use QuizSolver",
+      "secondaryCta": "See platform support",
+      "introTitle": "Keyword-focused Google Forms page",
+      "intro": "This page gives Google Forms searches a dedicated destination instead of forcing every query to compete through the homepage.",
+      "stepsTitle": "How to use QuizSolver with Google Forms",
+      "steps": ["Install QuizSolver.", "Open a Google Forms quiz page where study tools are allowed.", "Review suggestions, explanations, and saved notes."],
+      "featureTitle": "Google Forms review features",
+      "features": ["Question parsing", "Answer suggestions", "Explanations", "Study Notes", "Practice Mode", "Permission control"],
+      "keywordSections": [
+        {
+          "title": "Google Forms quiz solver SEO",
+          "text": "The copy targets Google Forms quiz solver, Google Forms solver, Google Forms answer assistant, and quiz solver extension searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver review Google Forms quiz questions?",
+          "answer": "QuizSolver is designed to detect supported quiz content and help with allowed practice, explanations, and revision workflows."
+        }
+      ],
+      "note": "Use QuizSolver where study assistance is allowed."
+    },
+    "microsoftForms": {
+      "platformName": "Microsoft Forms",
+      "shortName": "Microsoft Forms",
+      "linkTitle": "Microsoft Forms quiz solver guide",
+      "meta": {
+        "title": "Microsoft Forms Quiz Solver AI - Answer Assistant for Practice",
+        "description": "QuizSolver supports Microsoft Forms quiz practice with AI answer suggestions, explanations, Study Notes, and clean revision workflows.",
+        "keywords": "microsoft forms quiz solver, microsoft forms solver, forms quiz answer assistant, quiz solver ai, microsoft forms quiz helper"
+      },
+      "badge": "Microsoft Forms workflow",
+      "title": "Microsoft Forms quiz solver AI for study workflows",
+      "subtitle": "Review Microsoft Forms-style quiz prompts with AI suggestions, short explanations, and saved question history.",
+      "primaryCta": "Try the extension",
+      "secondaryCta": "View platform support",
+      "introTitle": "Microsoft Forms SEO landing page",
+      "intro": "This platform page adds a focused search target for Microsoft Forms quiz solver and answer assistant queries.",
+      "stepsTitle": "How to use QuizSolver with Microsoft Forms",
+      "steps": ["Install and sign in to QuizSolver.", "Open a supported Microsoft Forms quiz page.", "Use explanations and Study Notes to review answers."],
+      "featureTitle": "Microsoft Forms practice features",
+      "features": ["Supported forms workflow", "AI suggestions", "Answer explanations", "Study history", "Practice Mode", "Smart cache"],
+      "keywordSections": [
+        {
+          "title": "Microsoft Forms quiz solver keywords",
+          "text": "The page targets Microsoft Forms quiz solver, Microsoft Forms answer assistant, forms quiz helper, and AI quiz solver searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Does QuizSolver support Microsoft Forms quizzes?",
+          "answer": "QuizSolver supports common quiz layouts and can be used for permitted practice, answer explanations, and revision."
+        }
+      ],
+      "note": "Use QuizSolver responsibly and only where assistance is permitted."
+    },
+    "kahoot": {
+      "platformName": "Kahoot",
+      "shortName": "Kahoot",
+      "linkTitle": "Kahoot AI bot practice guide",
+      "meta": {
+        "title": "Kahoot AI Bot for Practice - QuizSolver Answer Assistant",
+        "description": "QuizSolver provides a Kahoot AI bot style practice assistant for reviewing quiz questions, understanding answers, and building study notes after sessions.",
+        "keywords": "kahoot ai bot, kahoot quiz solver, kahoot answer assistant, quiz solver ai, ai quiz bot"
+      },
+      "badge": "Kahoot practice workflow",
+      "title": "Kahoot AI bot style assistant for quiz practice",
+      "subtitle": "Use QuizSolver to review Kahoot-style questions, understand why an answer is correct, and turn useful questions into practice notes.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "See platform support",
+      "introTitle": "A reusable page template for supported quiz platforms",
+      "intro": "This page follows the same template we can reuse for every platform: keyword-focused hero, platform-specific workflow, features, trust note, and internal links.",
+      "stepsTitle": "How the Kahoot practice workflow works",
+      "steps": [
+        "Install QuizSolver and sign in to your account.",
+        "Use supported pages or saved question history to review Kahoot-style prompts.",
+        "Generate explanations and practice again from Study Notes."
+      ],
+      "featureTitle": "Useful for Kahoot-style revision",
+      "features": ["Fast answer review", "Short explanations", "Practice Mode", "Question history", "Simple browser workflow", "Clean bilingual interface"],
+      "keywordSections": [
+        {
+          "title": "Kahoot AI bot keyword coverage",
+          "text": "The page targets Kahoot AI bot, Kahoot quiz solver, Kahoot answer assistant, and AI quiz bot searches with a dedicated canonical URL."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Is QuizSolver a Kahoot AI bot?",
+          "answer": "QuizSolver provides a Kahoot AI bot style study workflow for reviewing questions, explanations, and saved notes where use is allowed."
+        }
+      ],
+      "note": "QuizSolver is intended for study, revision, and permitted practice. Do not use it where outside assistance is prohibited."
+    },
+    "quizizz": {
+      "platformName": "Quizizz",
+      "shortName": "Quizizz",
+      "linkTitle": "Quizizz solver guide",
+      "meta": {
+        "title": "Quizizz Solver AI - Practice Assistant with Study Notes",
+        "description": "QuizSolver offers a Quizizz solver AI workflow for review, answer explanations, saved Study Notes, and practice quizzes from history.",
+        "keywords": "quizizz solver, quizizz quiz solver, quizizz answer assistant, quiz solver ai, quizizz ai solver"
+      },
+      "badge": "Quizizz workflow",
+      "title": "Quizizz solver AI for practice and explanations",
+      "subtitle": "Use QuizSolver to review Quizizz-style questions, understand answer choices, and build reusable Study Notes.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "See platform support",
+      "introTitle": "Quizizz SEO landing page",
+      "intro": "This page gives Quizizz-related search traffic a focused landing page with platform-specific wording, FAQ schema, and internal links.",
+      "stepsTitle": "How to use QuizSolver with Quizizz",
+      "steps": ["Install QuizSolver and sign in.", "Open supported Quizizz-style questions or saved history.", "Use explanations and Practice Mode to repeat weak areas."],
+      "featureTitle": "Quizizz revision features",
+      "features": ["Fast review", "Explanations", "Saved notes", "Practice Mode", "History filters", "Smart cache"],
+      "keywordSections": [
+        {
+          "title": "Quizizz solver long-tail SEO",
+          "text": "The page targets Quizizz solver, Quizizz AI solver, Quizizz answer assistant, and quiz solver AI search intent."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver help review Quizizz-style questions?",
+          "answer": "Yes, for allowed practice and revision workflows, QuizSolver can help review questions, explanations, and saved notes."
+        }
+      ],
+      "note": "QuizSolver is for learning, revision, and permitted practice use."
+    }
+  }
+}

@@ -3,9 +3,16 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
 const connectDB = require('./config/db');
 const { generalLimiter, adminLimiter } = require('./middleware/rateLimiter');
+const {
+  getMarketingRoutes,
+  getRobotsTxt,
+  getSitemapXml,
+  renderMarketingPage
+} = require('./marketing/render');
 
 const authRoutes = require('./routes/auth');
 const quizRoutes = require('./routes/quiz');
@@ -26,13 +33,18 @@ app.set('trust proxy', 1);
 
 connectDB();
 
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
       frameAncestors: ["'none'"],
@@ -78,7 +90,61 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 app.use('/api/', generalLimiter);
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(getRobotsTxt());
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml').send(getSitemapXml());
+});
+
+app.get('/index.html', (req, res) => {
+  res.redirect(301, '/');
+});
+
+app.get('/pl', (req, res) => {
+  res.redirect(301, '/pl/');
+});
+
+app.get('/ai-quiz-solver', (req, res) => {
+  res.redirect(301, '/quiz-solver-ai');
+});
+
+app.get('/pl/ai-quiz-solver', (req, res) => {
+  res.redirect(301, '/pl/quiz-solver-ai');
+});
+
+app.get('/pricing', (req, res) => {
+  res.redirect(301, '/#pricing');
+});
+
+app.get('/download', (req, res) => {
+  res.redirect(301, '/#pricing');
+});
+
+app.get('/pl/pricing', (req, res) => {
+  res.redirect(301, '/pl/#pricing');
+});
+
+app.get('/pl/download', (req, res) => {
+  res.redirect(301, '/pl/#pricing');
+});
+
+getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
+  app.get(routePath, (req, res) => {
+    if (req.query.lang === 'pl') {
+      return res.redirect(301, locale === 'pl' ? routePath : `/pl${routePath === '/' ? '/' : routePath}`);
+    }
+    res.set('Content-Language', locale);
+    res.type('html').send(renderMarketingPage({
+      pageKey,
+      locale,
+      nonce: res.locals.cspNonce
+    }));
+  });
+});
+
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
@@ -110,20 +176,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/pricing', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/download', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
+app.get('/pl/privacy', (req, res) => {
+  res.redirect(301, '/privacy');
 });
 
 app.get('/privacy.html', (req, res) => {
@@ -136,6 +194,10 @@ app.get('/quiz', (req, res) => {
 
 app.get('/quiz.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
+});
+
+app.get('/pl/quiz', (req, res) => {
+  res.redirect(302, '/quiz');
 });
 
 app.get('/success', (req, res) => {
