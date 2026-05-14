@@ -19,7 +19,7 @@
     "home": "Strona główna",
     "getStarted": "Zacznij za darmo",
     "seeHow": "Zobacz jak działa",
-    "installExtension": "Zainstaluj rozszerzenie",
+    "installExtension": "Chrome Web Store",
     "learnMore": "Dowiedz się więcej",
     "openStudyNotes": "Otwórz Notatki",
     "buyCredits": "Kup kredyty",
@@ -67,6 +67,11 @@
     "faqBadge": "FAQ",
     "faqTitle": "FAQ QuizSolver"
   },
+  "installCta": {
+    "title": "Zainstaluj QuizSolver z Chrome Web Store",
+    "subtitle": "Dodaj rozszerzenie, zaloguj się i używaj sugestii odpowiedzi, wyjaśnień, Study Notes oraz Practice Mode na wspieranych platformach.",
+    "button": "Otwórz Chrome Web Store"
+  },
   "home": {
     "meta": {
       "title": "QuizSolver - AI quiz solver dla Testportal, Moodle i Canvas",
@@ -77,7 +82,7 @@
       "badge": "Rozszerzenie AI quiz solver",
       "title": "Rozwiązuj, rozumiej i ćwicz pytania quizowe szybciej",
       "subtitle": "QuizSolver wykrywa pytania na wspieranych platformach, sugeruje odpowiedź, wyjaśnia tok rozumowania i zapisuje notatki, żeby można było wrócić do nauki później.",
-      "primaryCta": "Zacznij za darmo",
+      "primaryCta": "Zainstaluj z Chrome Web Store",
       "secondaryCta": "Jak to działa",
       "proof": ["Działa z Testportal, Moodle, Canvas i innymi", "Wyjaśnienia odpowiedzi po rozwiązaniu", "Practice Mode z zapisanej historii"],
       "mockBadge": "Wykryte pytanie",

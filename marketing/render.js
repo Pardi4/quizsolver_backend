@@ -3,6 +3,7 @@ const pl = require('../i18n/pl.json');
 
 const SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
 const ASSET_VERSION = '2026-05-14';
+const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
 
 const TRANSLATIONS = { en, pl };
 
@@ -184,9 +185,19 @@ function buildJsonLd({ pageKey, locale, data, meta, canonical }) {
       applicationCategory: 'BrowserApplication',
       operatingSystem: 'Chrome, Chromium',
       url: homeUrl,
+      downloadUrl: CHROME_WEB_STORE_URL,
+      installUrl: CHROME_WEB_STORE_URL,
+      sameAs: [CHROME_WEB_STORE_URL],
       inLanguage: ['en', 'pl'],
       description: meta.description,
       creator: { '@id': `${homeUrl}#organization` },
+      featureList: [
+        'AI quiz answer suggestions',
+        'Answer explanations',
+        'Study Notes history',
+        'Practice Mode',
+        'Supported quiz platform workflows'
+      ],
       offers: [
         { '@type': 'Offer', name: 'Starter', price: '1.99', priceCurrency: 'USD' },
         { '@type': 'Offer', name: 'Popular', price: '4.99', priceCurrency: 'USD' },
@@ -278,13 +289,10 @@ function renderNav(pageKey, locale) {
   const home = pathFor('home', locale);
   const navLinks = [
     { href: `${home}#how-it-works`, label: c.nav.how },
-    { href: `${home}#features`, label: c.nav.features },
     { href: `${home}#platforms`, label: c.nav.platforms },
     { href: `${home}#pricing`, label: c.nav.pricing },
     { href: '/quiz', label: c.nav.study },
-    { href: pathFor('quizSolverAi', locale), label: platformLabel('quizSolverAi', locale), page: 'quizSolverAi' },
-    { href: pathFor('testportal', locale), label: platformLabel('testportal', locale), page: 'testportal' },
-    { href: pathFor('moodle', locale), label: platformLabel('moodle', locale), page: 'moodle' }
+    { href: `${home}#platform-guides`, label: c.footer.seoPages }
   ];
 
   const links = navLinks.map(link => {
@@ -301,13 +309,13 @@ function renderNav(pageKey, locale) {
       </a>
       <div class="nav-links" id="nav-links">${links}</div>
       <div class="nav-actions">
+        <a class="btn-primary btn-sm nav-install" href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener">${escapeHtml(c.common.installExtension)}</a>
         <div class="nav-lang-switch" role="group" aria-label="Language">
           <a class="lang-btn ${locale === 'en' ? 'active' : ''}" href="${pathFor(pageKey, 'en')}" hreflang="en" aria-pressed="${locale === 'en'}">EN</a>
           <a class="lang-btn ${locale === 'pl' ? 'active' : ''}" href="${pathFor(pageKey, 'pl')}" hreflang="pl" aria-pressed="${locale === 'pl'}">PL</a>
         </div>
         <div id="nav-guest">
           <button class="btn-ghost" id="nav-login-btn">${escapeHtml(c.nav.login)}</button>
-          <button class="btn-primary btn-sm" id="nav-register-btn">${escapeHtml(c.nav.signup)}</button>
         </div>
         <div id="nav-user" class="nav-user hidden">
           <div class="nav-credits" aria-label="${escapeAttr(c.common.credits)}">
@@ -350,7 +358,7 @@ function renderHome(locale) {
         <h1 class="hero-title" id="hero-title">${escapeHtml(h.hero.title)}</h1>
         <p class="hero-subtitle">${escapeHtml(h.hero.subtitle)}</p>
         <div class="hero-buttons">
-          <a href="#pricing" class="btn-primary btn-lg">
+          <a href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener" class="btn-primary btn-lg btn-store">
             <span>${escapeHtml(h.hero.primaryCta)}</span>
             <span class="btn-arrow" aria-hidden="true">-&gt;</span>
           </a>
@@ -362,6 +370,8 @@ function renderHome(locale) {
       </div>
       <div class="hero-visual" aria-label="QuizSolver extension preview">
         <img class="hero-preview-image" src="/og-image.svg" alt="QuizSolver AI quiz solver extension preview">
+        <div class="hero-orbit hero-orbit-one" aria-hidden="true">AI</div>
+        <div class="hero-orbit hero-orbit-two" aria-hidden="true">0.8s</div>
         <div class="hero-card glass-card">
           <div class="mock-question">
             <div class="mock-badge">${escapeHtml(h.hero.mockBadge)}</div>
@@ -384,8 +394,9 @@ function renderHome(locale) {
     ${renderFeatures(locale)}
     ${renderPlatforms(locale)}
     ${renderPricing(locale)}
+    ${renderInstallCta(locale)}
     ${renderStudyWorkflow(locale)}
-    ${renderRelatedPages(locale)}
+    ${renderRelatedPages(locale, '', true)}
     ${renderFaq(locale, h.faq)}
     ${renderLeaderboard(locale)}
     ${renderDashboard(locale)}
@@ -490,6 +501,26 @@ function renderPricing(locale) {
   </section>`;
 }
 
+function renderInstallCta(locale) {
+  const c = content(locale);
+  return `
+  <section class="install-cta" aria-labelledby="install-title">
+    <div class="section-container">
+      <div class="install-panel glass-card">
+        <div>
+          <span class="section-badge">${escapeHtml(c.common.installExtension)}</span>
+          <h2 id="install-title">${escapeHtml(c.installCta.title)}</h2>
+          <p>${escapeHtml(c.installCta.subtitle)}</p>
+        </div>
+        <a class="btn-primary btn-lg btn-store" href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener">
+          <span>${escapeHtml(c.installCta.button)}</span>
+          <span class="btn-arrow" aria-hidden="true">-&gt;</span>
+        </a>
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderStudyWorkflow(locale) {
   const s = content(locale).home.mobile;
   return `
@@ -514,11 +545,11 @@ function renderStudyWorkflow(locale) {
   </section>`;
 }
 
-function renderRelatedPages(locale, currentPageKey = '') {
+function renderRelatedPages(locale, currentPageKey = '', compact = false) {
   const c = content(locale);
   const entries = platformEntries(locale).filter(entry => entry.pageKey !== currentPageKey);
   return `
-  <section class="related-seo" id="platform-guides" aria-labelledby="related-title">
+  <section class="related-seo ${compact ? 'related-seo-compact' : ''}" id="platform-guides" aria-labelledby="related-title">
     <div class="section-container">
       <div class="section-header">
         <span class="section-badge">${escapeHtml(c.footer.seoPages)}</span>
@@ -716,6 +747,7 @@ function renderFooter(locale) {
           <a href="${home}#how-it-works">${escapeHtml(c.nav.how)}</a>
           <a href="${home}#features">${escapeHtml(c.nav.features)}</a>
           <a href="${home}#pricing">${escapeHtml(c.nav.pricing)}</a>
+          <a href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener">${escapeHtml(c.common.installExtension)}</a>
           <a href="/quiz">${escapeHtml(c.nav.study)}</a>
         </div>
         <div class="footer-links">

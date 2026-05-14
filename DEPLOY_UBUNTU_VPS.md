@@ -38,7 +38,7 @@ Na serwerze:
 ```bash
 mkdir -p /var/www/quizsolver
 cd /var/www/quizsolver
-git clone YOUR_BACKEND_REPOSITORY_URL .
+git clone https://github.com/Pardi4/quizsolver_backend.git .
 npm ci --omit=dev
 ```
 
