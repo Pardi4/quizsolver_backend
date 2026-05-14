@@ -3,17 +3,9 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const crypto = require('crypto');
 const path = require('path');
 const connectDB = require('./config/db');
 const { generalLimiter, adminLimiter } = require('./middleware/rateLimiter');
-const {
-  getMarketingRoutes,
-  getRobotsTxt,
-  getSitemapXml,
-  renderDashboardPage,
-  renderMarketingPage
-} = require('./marketing/render');
 
 const authRoutes = require('./routes/auth');
 const quizRoutes = require('./routes/quiz');
@@ -24,21 +16,13 @@ const webhookRoutes = require('./routes/webhook');
 const User = require('./models/User');
 
 const app = express();
-const PORT = parseInt(process.env.PORT, 10) || 30583;
-const HOST = process.env.HOST || '127.0.0.1';
-const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
-const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
+const PORT = 30583;
+const ADMIN_PORT = 40583;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
 
 app.set('trust proxy', 1);
 
 connectDB();
-
-app.use((req, res, next) => {
-  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
-  next();
-});
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -46,7 +30,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+      scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
       frameAncestors: ["'none'"],
@@ -63,13 +47,11 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
 
-    const extId = process.env.EXTENSION_ID;
-    if (extId && origin === `chrome-extension://${extId}`) {
+    if (origin.startsWith('chrome-extension://')) {
       return callback(null, true);
     }
 
     if (!IS_PRODUCTION) {
-      if (origin.startsWith('chrome-extension://')) return callback(null, true);
       if (origin.includes('localhost') || origin.includes('127.0.0.1')) return callback(null, true);
     }
 
@@ -92,81 +74,7 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
 app.use('/api/', generalLimiter);
 
-app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(getRobotsTxt());
-});
-
-app.get('/sitemap.xml', (req, res) => {
-  res.type('application/xml').send(getSitemapXml());
-});
-
-app.get('/index.html', (req, res) => {
-  res.redirect(301, '/');
-});
-
-function sendMarketingPage(res, pageKey, locale) {
-  res.set('Content-Language', locale);
-  res.type('html').send(renderMarketingPage({
-    pageKey,
-    locale,
-    nonce: res.locals.cspNonce
-  }));
-}
-
-app.get(['/pl', '/pl/'], (req, res) => {
-  sendMarketingPage(res, 'home', 'pl');
-});
-
-app.get('/ai-quiz-solver', (req, res) => {
-  res.redirect(301, '/quiz-solver-ai');
-});
-
-app.get('/pl/ai-quiz-solver', (req, res) => {
-  res.redirect(301, '/pl/quiz-solver-ai');
-});
-
-app.get('/pricing', (req, res) => {
-  res.redirect(301, '/#pricing');
-});
-
-app.get('/download', (req, res) => {
-  res.redirect(302, CHROME_WEB_STORE_URL);
-});
-
-app.get('/pl/pricing', (req, res) => {
-  res.redirect(301, '/pl/#pricing');
-});
-
-app.get('/pl/download', (req, res) => {
-  res.redirect(302, CHROME_WEB_STORE_URL);
-});
-
-app.get(['/dashboard', '/dashboard/'], (req, res) => {
-  res.set('Content-Language', 'en');
-  res.type('html').send(renderDashboardPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/pl/dashboard', '/pl/dashboard/'], (req, res) => {
-  res.set('Content-Language', 'pl');
-  res.type('html').send(renderDashboardPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
-  app.get(routePath, (req, res) => {
-    if (req.query.lang === 'pl') {
-      return res.redirect(301, locale === 'pl' ? routePath : `/pl${routePath === '/' ? '/' : routePath}`);
-    }
-    sendMarketingPage(res, pageKey, locale);
-  });
-});
-
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
@@ -198,12 +106,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
-app.get('/privacy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/pl/privacy', (req, res) => {
-  res.redirect(301, '/privacy');
+app.get('/pricing', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/download', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
 
 app.get('/privacy.html', (req, res) => {
@@ -216,10 +132,6 @@ app.get('/quiz', (req, res) => {
 
 app.get('/quiz.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
-});
-
-app.get('/pl/quiz', (req, res) => {
-  res.redirect(302, '/quiz');
 });
 
 app.get('/success', (req, res) => {
@@ -237,10 +149,10 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  console.error('[Server ERROR]', err.message, err.stack);
   if (IS_PRODUCTION) {
     res.status(500).json({ error: 'Internal server error.' });
   } else {
-    console.error('[Server]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -279,9 +191,9 @@ function startAdminServer() {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (!IS_PRODUCTION) return callback(null, true);
-      if (origin === `http://127.0.0.1:${ADMIN_PORT}` || origin === `http://localhost:${ADMIN_PORT}`) {
-        return callback(null, true);
-      }
+
+      if (origin.startsWith('chrome-extension://')) return callback(null, true);
+
       const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
       if (allowed.includes(origin)) return callback(null, true);
       callback(new Error('CORS blocked'));
@@ -310,13 +222,13 @@ function startAdminServer() {
     res.status(404).json({ error: 'Not found.' });
   });
 
-  adminApp.listen(ADMIN_PORT, ADMIN_HOST, () => {
-    console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
+  adminApp.listen(ADMIN_PORT, '0.0.0.0', () => {
+    console.log(`[Server] Admin panel on port ${ADMIN_PORT}`);
   });
 }
 
-app.listen(PORT, HOST, async () => {
-  console.log(`[Server] QuizSolver v2.0 | ${HOST}:${PORT} | env: ${process.env.NODE_ENV || 'development'}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`[Server] QuizSolver v2.0 | port ${PORT} | env: ${process.env.NODE_ENV || 'development'}`);
   await seedAdmin();
   startAdminServer();
 });
