@@ -137,7 +137,7 @@ function getSystemMessage(type) {
     return 'You answer quiz questions. Return ONLY correct option numbers separated by commas. Example: 0,2,3. No words.';
   }
   if (type === 'text') {
-    return 'You answer quiz questions. Return ONLY the shortest correct answer. Max 2 sentences. No explanation.';
+    return 'You answer quiz questions. Return ONLY the final answer, as short as possible. No explanation, no markdown, no lead-in sentence. If the question asks what an acronym stands for, return only the expanded phrase. Example: Hypertext Transfer Protocol.';
   }
   return 'You answer quiz questions. Return ONLY the correct option number. Example: 2. No words.';
 }
@@ -149,7 +149,7 @@ function buildUserPrompt(text, options) {
 
 function getMaxTokens(type) {
   if (type === 'checkbox') return 20;
-  if (type === 'text') return 100;
+  if (type === 'text') return 40;
   return 5;
 }
 
@@ -183,7 +183,7 @@ function parseAnswer(raw, type, options) {
   if (type === 'text') {
     if (text.length === 0)
       throw new AIError('INVALID_RESPONSE', 'AI returned empty text answer.');
-    return text;
+    return shortenTextAnswer(text);
   }
 
   const match = text.match(/(\d+)/);
@@ -193,6 +193,36 @@ function parseAnswer(raw, type, options) {
   if (options && (idx < 0 || idx >= options.length))
     throw new AIError('INVALID_RESPONSE', `Index ${idx} out of range (${options.length} options).`);
   return idx;
+}
+
+function shortenTextAnswer(text) {
+  let value = text
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const acronymExpansion = value.match(/^\s*[A-Z0-9]{2,}\s+(?:stands\s+for|means|oznacza|to\s+skr[oó]t\s+od)\s+([^.!?]+)/i);
+  if (acronymExpansion) {
+    return acronymExpansion[1].replace(/^[:\-–—]\s*/, '').trim();
+  }
+
+  value = value
+    .replace(/^(?:the\s+answer\s+is|answer\s*:|odpowied[zź]\s*:)\s*/i, '')
+    .trim();
+
+  const firstLine = value.split(/\r?\n/)[0].trim();
+  const firstSentence = firstLine.match(/^(.{1,160}?[.!?])\s+/);
+  return (firstSentence ? firstSentence[1] : firstLine).replace(/[.!?]$/g, '').trim();
+}
+
+async function normalizeCachedAnswer(cachedDoc, answer, type) {
+  if (type !== 'text' || answer === null || answer === undefined) return answer;
+  const shortAnswer = shortenTextAnswer(String(answer));
+  if (cachedDoc && cachedDoc.answer !== shortAnswer) {
+    cachedDoc.answer = shortAnswer;
+    await cachedDoc.save();
+  }
+  return shortAnswer;
 }
 
 async function callAI(questionData) {
@@ -420,11 +450,12 @@ router.post('/solve', async (req, res) => {
     const cached = await CachedAnswer.findCached(questionData);
     if (cached !== null) {
       const cachedDoc = await CachedAnswer.findOne({ questionHash });
+      const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
       await saveStudyNote(user._id, cachedDoc, req.body);
       user.useCredits(1);
       user.updateStreak();
       await user.save();
-      return res.json({ success: true, answer: cached, cached: true, remaining: user.getRemaining(), studyNoteSaved: !!cachedDoc });
+      return res.json({ success: true, answer, cached: true, remaining: user.getRemaining(), studyNoteSaved: !!cachedDoc });
     }
 
     const answer = await callAI(questionData);
@@ -476,9 +507,10 @@ router.post('/solve-batch', async (req, res) => {
         const cached = await CachedAnswer.findCached(questionData);
         if (cached !== null) {
           const cachedDoc = await CachedAnswer.findOne({ questionHash });
+          const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
           await saveStudyNote(user._id, cachedDoc, req.body);
           user.useCredits(1);
-          results.push({ success: true, answer: cached, cached: true });
+          results.push({ success: true, answer, cached: true });
           continue;
         }
 

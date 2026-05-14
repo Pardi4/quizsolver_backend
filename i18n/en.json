@@ -121,33 +121,54 @@
       ]
     },
     "features": {
-      "badge": "Features",
-      "title": "Built for learning workflows",
-      "subtitle": "The extension is designed to help users understand questions quickly and return to weak topics later.",
+      "badge": "Our features",
+      "title": "Everything useful inside the extension",
+      "subtitle": "QuizSolver is more than one answer button. It helps you solve, understand, save, review, and practice from the same account.",
       "items": [
         {
+          "icon": "AI",
           "title": "AI answer suggestions",
-          "text": "Analyze question text, answer choices, and supported images in one clear workflow."
+          "text": "Detect questions and return clean answer suggestions without extra filler."
         },
         {
+          "icon": "?",
           "title": "Explain Answer",
-          "text": "After solving, generate a concise explanation so the answer is easier to remember."
+          "text": "Ask for a short explanation after solving when you want to understand the answer."
         },
         {
+          "icon": "N",
           "title": "Study Notes history",
-          "text": "Save questions, answers, explanations, and status labels for later review."
+          "text": "Save questions, answers, explanations, and learning status for later review."
         },
         {
+          "icon": "Q",
           "title": "Practice Mode",
-          "text": "Select saved questions and generate a clean practice quiz at getquizsolver.com/quiz."
+          "text": "Choose saved questions and turn them into a clean practice quiz at getquizsolver.com/quiz."
         },
         {
+          "icon": "C",
           "title": "Smart cache",
           "text": "Repeated questions can be reused from cache to reduce cost and wait time."
         },
         {
+          "icon": "OK",
           "title": "Permission control",
           "text": "Known platforms work directly, while optional permissions let users allow trusted pages one by one."
+        },
+        {
+          "icon": "PL",
+          "title": "English and Polish UI",
+          "text": "Use the website and extension in English or Polish with clear settings."
+        },
+        {
+          "icon": "$",
+          "title": "Admin test cost preview",
+          "text": "Admin tester mode can show detected questions and estimated credit cost before solving."
+        },
+        {
+          "icon": "IMG",
+          "title": "Image-aware questions",
+          "text": "Supported image questions can be sent through the same answer workflow."
         }
       ]
     },
@@ -159,31 +180,32 @@
     },
     "pricing": {
       "badge": "Credits",
-      "title": "Need more quiz credits later?",
-      "subtitle": "Install the extension first. Free monthly credits get you started, and extra credits are here only when you actually need more.",
+      "title": "Buy credits when you need them",
+      "subtitle": "No subscription-style plans here. Pick a one-time credit top-up, use it in the extension, and come back only when you need more.",
       "packs": [
         {
           "id": "starter",
-          "name": "Starter",
+          "name": "100 Credits",
           "price": "$1.99",
-          "credits": "100 credits",
-          "features": ["100 quiz questions", "All question types", "Image recognition", "Smart cache"]
+          "credits": "Small one-time top-up",
+          "button": "Buy 100 credits",
+          "features": ["One-time purchase", "Good for quick practice", "Works with answers and explanations"]
         },
         {
           "id": "popular",
-          "name": "Popular",
+          "name": "500 Credits",
           "price": "$4.99",
-          "credits": "500 credits",
-          "badge": "Most Popular",
-          "features": ["500 quiz questions", "All question types", "Image recognition", "Smart cache", "Priority support"]
+          "credits": "Best for regular use",
+          "button": "Buy 500 credits",
+          "features": ["One-time purchase", "Better value per credit", "Good for Study Notes and Practice Mode"]
         },
         {
           "id": "pro",
-          "name": "Pro",
+          "name": "2000 Credits",
           "price": "$9.99",
-          "credits": "2000 credits",
-          "badge": "Best Value",
-          "features": ["2000 quiz questions", "All question types", "Image recognition", "Smart cache", "Priority support", "Explanation mode"]
+          "credits": "Large one-time top-up",
+          "button": "Buy 2000 credits",
+          "features": ["One-time purchase", "Lowest cost per credit", "Best for heavy practice sessions"]
         }
       ]
     },
@@ -220,6 +242,14 @@
       "dayStreak": "Day Streak",
       "referral": "Referral Code",
       "copy": "Copy Link",
+      "referralTitle": "Referral program",
+      "referralSubtitle": "Share your link. When a referred user buys credits, you receive a credit bonus automatically.",
+      "referralLink": "Your referral link",
+      "referredUsers": "Signed-up users",
+      "referralPurchases": "Purchases with your code",
+      "referralCredits": "Bonus credits earned",
+      "referralHowTitle": "How it works",
+      "referralHow": "Copy your link, send it to a friend, and their account will be connected to your referral code during signup. Bonuses appear after completed credit purchases.",
       "purchaseHistory": "Purchase History",
       "noPurchases": "No purchases yet."
     },

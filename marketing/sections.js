@@ -59,6 +59,7 @@ function renderFeatures(locale) {
       <div class="features-grid">
         ${f.items.map(item => `
           <article class="feature-card glass-card">
+            ${item.icon ? `<div class="feature-icon">${escapeHtml(item.icon)}</div>` : ''}
             <h3>${escapeHtml(item.title)}</h3>
             <p>${escapeHtml(item.text)}</p>
           </article>`).join('')}
@@ -96,7 +97,7 @@ function renderPricing(locale) {
   const p = content(locale).home.pricing;
   const common = content(locale).common;
   return `
-  <section class="pricing" id="pricing" aria-labelledby="pricing-title">
+  <section class="pricing credit-shop" id="pricing" aria-labelledby="pricing-title">
     <div class="section-container">
       <div class="section-header">
         <span class="section-badge">${escapeHtml(p.badge)}</span>
@@ -105,17 +106,18 @@ function renderPricing(locale) {
       </div>
       <div class="pricing-grid">
         ${p.packs.map(pack => `
-          <article class="pricing-card glass-card ${pack.id === 'popular' ? 'featured' : ''}" data-pack="${escapeAttr(pack.id)}">
-            ${pack.badge ? `<div class="pricing-badge ${pack.id === 'pro' ? 'best' : ''}">${escapeHtml(pack.badge)}</div>` : ''}
-            <div class="pricing-header">
-              <h3>${escapeHtml(pack.name)}</h3>
+          <article class="pricing-card credit-pack glass-card ${pack.id === 'popular' ? 'featured' : ''}" data-pack="${escapeAttr(pack.id)}">
+            <div class="credit-pack-top">
+              <div>
+                <h3>${escapeHtml(pack.name)}</h3>
+                <p class="pricing-credits">${escapeHtml(pack.credits)}</p>
+              </div>
               <div class="pricing-amount">${escapeHtml(pack.price)}</div>
-              <p class="pricing-credits">${escapeHtml(pack.credits)}</p>
             </div>
             <ul class="pricing-features">
               ${pack.features.map(feature => `<li>${escapeHtml(feature)}</li>`).join('')}
             </ul>
-            <button class="btn-primary btn-block buy-pack-btn" data-pack="${escapeAttr(pack.id)}">${escapeHtml(common.buyCredits)}</button>
+            <button class="btn-primary btn-block buy-pack-btn" data-pack="${escapeAttr(pack.id)}">${escapeHtml(pack.button || common.buyCredits)}</button>
           </article>`).join('')}
       </div>
     </div>
@@ -199,12 +201,12 @@ function renderFaq(locale, faq = []) {
         <span class="section-badge">${escapeHtml(c.seoHub.faqBadge)}</span>
         <h2 class="section-title" id="faq-title">${escapeHtml(c.seoHub.faqTitle)}</h2>
       </div>
-      <div class="faq-grid">
+      <div class="faq-grid accordion-faq">
         ${faq.map(item => `
-          <article class="faq-item glass-card">
-            <h3>${escapeHtml(item.question)}</h3>
+          <details class="faq-item glass-card">
+            <summary><span>${escapeHtml(item.question)}</span><span class="faq-toggle" aria-hidden="true">+</span></summary>
             <p>${escapeHtml(item.answer)}</p>
-          </article>`).join('')}
+          </details>`).join('')}
       </div>
     </div>
   </section>`;
@@ -261,10 +263,40 @@ function renderDashboard(locale, options = {}) {
           <div class="dash-label">${escapeHtml(d.dayStreak)}</div>
         </article>
         <article class="dash-card glass-card">
-          <div class="dash-value" id="dash-referral">---</div>
-          <div class="dash-label">${escapeHtml(d.referral)}</div>
-          <button class="btn-sm btn-ghost" id="copy-referral-btn">${escapeHtml(d.copy)}</button>
+          <div class="dash-value" id="dash-referral-credits">0</div>
+          <div class="dash-label">${escapeHtml(d.referralCredits)}</div>
         </article>
+      </div>
+      <div class="dash-referral glass-card" id="referral-program">
+        <div class="dash-referral-copy">
+          <span class="section-badge">${escapeHtml(d.referralTitle)}</span>
+          <h3>${escapeHtml(d.referralSubtitle)}</h3>
+          <div class="referral-link-box">
+            <div>
+              <span>${escapeHtml(d.referralLink)}</span>
+              <strong id="dash-referral-link">---</strong>
+            </div>
+            <button class="btn-sm btn-ghost" id="copy-referral-btn">${escapeHtml(d.copy)}</button>
+          </div>
+        </div>
+        <div class="referral-stats">
+          <div>
+            <strong id="dash-referral-code">---</strong>
+            <span>${escapeHtml(d.referral)}</span>
+          </div>
+          <div>
+            <strong id="dash-referred-users">0</strong>
+            <span>${escapeHtml(d.referredUsers)}</span>
+          </div>
+          <div>
+            <strong id="dash-referral-purchases">0</strong>
+            <span>${escapeHtml(d.referralPurchases)}</span>
+          </div>
+        </div>
+        <div class="referral-how">
+          <h4>${escapeHtml(d.referralHowTitle)}</h4>
+          <p>${escapeHtml(d.referralHow)}</p>
+        </div>
       </div>
       <div class="dash-history glass-card" id="purchase-history">
         <h3>${escapeHtml(d.purchaseHistory)}</h3>

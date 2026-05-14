@@ -2,14 +2,15 @@ const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
+const User = require('../models/User');
 
 const router = express.Router();
 router.use(authMiddleware);
 
 const PACKS = {
-  starter: { id: 'starter', name: 'Starter', credits: 100, price: 1.99, planEnv: 'WHOP_PLAN_100' },
-  popular: { id: 'popular', name: 'Popular', credits: 500, price: 4.99, planEnv: 'WHOP_PLAN_500' },
-  pro:     { id: 'pro',     name: 'Pro',     credits: 2000, price: 9.99, planEnv: 'WHOP_PLAN_2000' }
+  starter: { id: 'starter', name: '100 Credits', credits: 100, price: 1.99, planEnv: 'WHOP_PLAN_100' },
+  popular: { id: 'popular', name: '500 Credits', credits: 500, price: 4.99, planEnv: 'WHOP_PLAN_500' },
+  pro:     { id: 'pro',     name: '2000 Credits', credits: 2000, price: 9.99, planEnv: 'WHOP_PLAN_2000' }
 };
 
 router.get('/packs', (req, res) => {
@@ -45,7 +46,7 @@ router.post('/buy', async (req, res) => {
     const { pack } = req.body;
 
     if (!pack || !PACKS[pack]) {
-      return res.status(400).json({ error: 'Invalid pack. Choose: starter, popular, or pro.' });
+      return res.status(400).json({ error: 'Invalid credit top-up.' });
     }
 
     const packInfo = PACKS[pack];
@@ -102,6 +103,43 @@ router.get('/history', async (req, res) => {
     res.json({ success: true, purchases });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching history.' });
+  }
+});
+
+router.get('/referrals', async (req, res) => {
+  try {
+    const [referredUsers, referralPurchases, referralBonusAgg] = await Promise.all([
+      User.countDocuments({ referredBy: req.user._id }),
+      Purchase.countDocuments({
+        userId: req.user._id,
+        pack: 'referral_bonus',
+        paymentProvider: 'referral'
+      }),
+      Purchase.aggregate([
+        {
+          $match: {
+            userId: req.user._id,
+            pack: 'referral_bonus',
+            paymentProvider: 'referral'
+          }
+        },
+        { $group: { _id: null, credits: { $sum: '$credits' } } }
+      ])
+    ]);
+
+    const siteUrl = (process.env.PUBLIC_SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    const referralCode = req.user.referralCode || '';
+
+    res.json({
+      success: true,
+      referralCode,
+      referralLink: referralCode ? `${siteUrl}/?ref=${encodeURIComponent(referralCode)}` : '',
+      referredUsers,
+      referralPurchases,
+      referralCredits: referralBonusAgg[0]?.credits || 0
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching referral stats.' });
   }
 });
 

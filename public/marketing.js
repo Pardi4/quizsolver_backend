@@ -7,6 +7,8 @@
   let authToken = localStorage.getItem('qs_token') || null;
   let currentUser = null;
   let dashboardHistoryLoaded = false;
+  let referralStatsLoaded = false;
+  let currentReferralLink = '';
 
   const messages = {
     en: {
@@ -177,6 +179,10 @@
         dashboardHistoryLoaded = true;
         loadHistory();
       }
+      if (!referralStatsLoaded) {
+        referralStatsLoaded = true;
+        loadReferralStats();
+      }
       if (window.location.hash) {
         setTimeout(() => {
           const target = $(window.location.hash);
@@ -185,6 +191,8 @@
       }
     } else {
       dashboardHistoryLoaded = false;
+      referralStatsLoaded = false;
+      currentReferralLink = '';
       loginCard.classList.remove('hidden');
       dashboard.classList.add('hidden');
     }
@@ -196,7 +204,21 @@
     if ($('#dash-credits')) $('#dash-credits').textContent = credits;
     if ($('#dash-questions')) $('#dash-questions').textContent = currentUser.stats?.totalQuestionsSolved || 0;
     if ($('#dash-streak')) $('#dash-streak').textContent = currentUser.streak?.current || 0;
-    if ($('#dash-referral')) $('#dash-referral').textContent = currentUser.referralCode || '---';
+    if ($('#dash-referral-code')) $('#dash-referral-code').textContent = currentUser.referralCode || '---';
+    currentReferralLink = currentUser.referralCode ? `${window.location.origin}?ref=${currentUser.referralCode}` : '';
+    if ($('#dash-referral-link')) $('#dash-referral-link').textContent = currentReferralLink || '---';
+  }
+
+  async function loadReferralStats() {
+    if (!authToken) return;
+    const res = await api('/api/credits/referrals');
+    if (!res.success) return;
+    currentReferralLink = res.referralLink || currentReferralLink;
+    if ($('#dash-referral-code')) $('#dash-referral-code').textContent = res.referralCode || currentUser?.referralCode || '---';
+    if ($('#dash-referral-link')) $('#dash-referral-link').textContent = currentReferralLink || '---';
+    if ($('#dash-referred-users')) $('#dash-referred-users').textContent = res.referredUsers || 0;
+    if ($('#dash-referral-purchases')) $('#dash-referral-purchases').textContent = res.referralPurchases || 0;
+    if ($('#dash-referral-credits')) $('#dash-referral-credits').textContent = res.referralCredits || 0;
   }
 
   async function loadHistory() {
@@ -265,6 +287,7 @@
       currentUser = res.user;
       localStorage.setItem('qs_token', res.token);
       dashboardHistoryLoaded = false;
+      referralStatsLoaded = false;
       setAuthUI();
       updateDashboard();
       closeModal();
@@ -299,6 +322,7 @@
       currentUser = res.user;
       localStorage.setItem('qs_token', res.token);
       dashboardHistoryLoaded = false;
+      referralStatsLoaded = false;
       setAuthUI();
       updateDashboard();
       closeModal();
@@ -313,6 +337,8 @@
     authToken = null;
     currentUser = null;
     dashboardHistoryLoaded = false;
+    referralStatsLoaded = false;
+    currentReferralLink = '';
     localStorage.removeItem('qs_token');
     setAuthUI();
     if (showMessage) showToast(t('loggedOut'));
@@ -389,7 +415,7 @@
   on('#nav-hamburger', 'click', () => $('#nav-links')?.classList.toggle('show'));
   on('#copy-referral-btn', 'click', () => {
     if (!currentUser?.referralCode) return;
-    const link = `${window.location.origin}?ref=${currentUser.referralCode}`;
+    const link = currentReferralLink || `${window.location.origin}?ref=${currentUser.referralCode}`;
     navigator.clipboard.writeText(link)
       .then(() => showToast(t('referralCopied')))
       .catch(() => showToast(t('copyFailed')));

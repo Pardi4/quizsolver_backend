@@ -93,7 +93,11 @@
       "subtitle": "QuizSolver wykrywa pytania na wspieranych platformach, sugeruje odpowiedź, wyjaśnia tok rozumowania i zapisuje notatki, żeby można było wrócić do nauki później.",
       "primaryCta": "Zainstaluj z Chrome Web Store",
       "secondaryCta": "Jak to działa",
-      "proof": ["Działa z Testportal, Moodle, Canvas i innymi", "Wyjaśnienia odpowiedzi po rozwiązaniu", "Practice Mode z zapisanej historii"],
+      "proof": [
+        "Działa z Testportal, Moodle, Canvas i innymi",
+        "Wyjaśnienia odpowiedzi po rozwiązaniu",
+        "Practice Mode z zapisanej historii"
+      ],
       "mockBadge": "Wykryte pytanie",
       "mockQuestion": "Która odpowiedź najlepiej pasuje do pytania?",
       "mockOptionA": "Zgaduj ręcznie",
@@ -121,33 +125,54 @@
       ]
     },
     "features": {
-      "badge": "Funkcje",
-      "title": "Zbudowany pod naukę i powtórki",
-      "subtitle": "Rozszerzenie pomaga szybko zrozumieć pytania i wracać później do słabszych tematów.",
+      "badge": "Nasze funkcje",
+      "title": "Wszystko, co przydaje si? w rozszerzeniu",
+      "subtitle": "QuizSolver to nie tylko jeden przycisk odpowiedzi. Pomaga rozwi?zywa?, rozumie?, zapisywa?, powtarza? i ?wiczy? z jednego konta.",
       "items": [
         {
+          "icon": "AI",
           "title": "Sugestie odpowiedzi AI",
-          "text": "Analiza treści pytania, opcji odpowiedzi i wspieranych obrazów w jednym prostym workflow."
+          "text": "Wykrywaj pytania i otrzymuj czyste sugestie odpowiedzi bez zb?dnego lania wody."
         },
         {
-          "title": "Wyjaśnij odpowiedź",
-          "text": "Po rozwiązaniu wygeneruj krótkie wyjaśnienie, dzięki któremu łatwiej zapamiętać materiał."
+          "icon": "?",
+          "title": "Wyja?nij odpowied?",
+          "text": "Po rozwi?zaniu popro? o kr?tkie wyja?nienie, kiedy chcesz zrozumie? odpowied?."
         },
         {
+          "icon": "N",
           "title": "Historia Study Notes",
-          "text": "Zapisuj pytania, odpowiedzi, wyjaśnienia i statusy do późniejszej powtórki."
+          "text": "Zapisuj pytania, odpowiedzi, wyja?nienia i status nauki do p??niejszej powt?rki."
         },
         {
+          "icon": "Q",
           "title": "Practice Mode",
-          "text": "Wybierz zapisane pytania i stwórz czysty quiz powtórkowy na getquizsolver.com/quiz."
+          "text": "Wybierz zapisane pytania i zamie? je w czysty quiz powt?rkowy na getquizsolver.com/quiz."
         },
         {
+          "icon": "C",
           "title": "Inteligentny cache",
-          "text": "Powtarzające się pytania mogą wracać z cache, co skraca czas i obniża koszt."
+          "text": "Powtarzaj?ce si? pytania mog? wraca? z cache, co skraca czas i obni?a koszt."
         },
         {
-          "title": "Kontrola uprawnień",
-          "text": "Znane platformy działają od razu, a zaufane strony można włączać pojedynczo."
+          "icon": "OK",
+          "title": "Kontrola uprawnie?",
+          "text": "Znane platformy dzia?aj? od razu, a zaufane strony mo?na w??cza? pojedynczo."
+        },
+        {
+          "icon": "PL",
+          "title": "Interfejs PL i EN",
+          "text": "Korzystaj ze strony i rozszerzenia po polsku albo po angielsku, z czytelnymi ustawieniami."
+        },
+        {
+          "icon": "$",
+          "title": "Estymacja kosztu dla admina",
+          "text": "Tryb testowy admina mo?e pokaza? wykryte pytania i szacowany koszt kredyt?w przed startem."
+        },
+        {
+          "icon": "IMG",
+          "title": "Pytania z obrazami",
+          "text": "Wspierane pytania obrazkowe mog? przechodzi? przez ten sam workflow odpowiedzi."
         }
       ]
     },
@@ -155,35 +180,59 @@
       "badge": "Obsługiwane platformy",
       "title": "Działa na popularnych stronach quizowych i LMS",
       "subtitle": "QuizSolver bazuje na znanych wzorcach platform i bezpiecznym przepływie opcjonalnych uprawnień.",
-      "items": ["Testportal", "Moodle", "Canvas", "Google Forms", "Microsoft Forms", "Blackboard", "Quizlet", "Socrative", "Kahoot", "Quizizz"]
+      "items": [
+        "Testportal",
+        "Moodle",
+        "Canvas",
+        "Google Forms",
+        "Microsoft Forms",
+        "Blackboard",
+        "Quizlet",
+        "Socrative",
+        "Kahoot",
+        "Quizizz"
+      ]
     },
     "pricing": {
-      "badge": "Cennik",
-      "title": "Proste kredyty bez mylących planów",
-      "subtitle": "Zacznij za darmo z miesięcznymi kredytami, a więcej dokupuj tylko wtedy, gdy potrzebujesz.",
+      "badge": "Kredyty",
+      "title": "Kup kredyty, kiedy ich potrzebujesz",
+      "subtitle": "Bez plan?w wygl?daj?cych jak subskrypcja. Wybierz jednorazowe do?adowanie kredyt?w i wr?? dopiero wtedy, gdy potrzebujesz wi?cej.",
       "packs": [
         {
           "id": "starter",
-          "name": "Starter",
+          "name": "100 kredyt?w",
           "price": "$1.99",
-          "credits": "100 kredytów",
-          "features": ["100 pytań quizowych", "Wszystkie typy pytań", "Rozpoznawanie obrazów", "Inteligentny cache"]
+          "credits": "Ma?e jednorazowe do?adowanie",
+          "button": "Kup 100 kredyt?w",
+          "features": [
+            "Jednorazowy zakup",
+            "Dobre do szybkich powt?rek",
+            "Dzia?a z odpowiedziami i wyja?nieniami"
+          ]
         },
         {
           "id": "popular",
-          "name": "Popular",
+          "name": "500 kredyt?w",
           "price": "$4.99",
-          "credits": "500 kredytów",
-          "badge": "Najpopularniejsze",
-          "features": ["500 pytań quizowych", "Wszystkie typy pytań", "Rozpoznawanie obrazów", "Inteligentny cache", "Priorytetowe wsparcie"]
+          "credits": "Najlepsze do regularnego u?ycia",
+          "button": "Kup 500 kredyt?w",
+          "features": [
+            "Jednorazowy zakup",
+            "Lepsza cena za kredyt",
+            "Dobre do Study Notes i Practice Mode"
+          ]
         },
         {
           "id": "pro",
-          "name": "Pro",
+          "name": "2000 kredyt?w",
           "price": "$9.99",
-          "credits": "2000 kredytów",
-          "badge": "Najlepsza wartość",
-          "features": ["2000 pytań quizowych", "Wszystkie typy pytań", "Rozpoznawanie obrazów", "Inteligentny cache", "Priorytetowe wsparcie", "Tryb wyjaśnień"]
+          "credits": "Du?e jednorazowe do?adowanie",
+          "button": "Kup 2000 kredyt?w",
+          "features": [
+            "Jednorazowy zakup",
+            "Najni?szy koszt za kredyt",
+            "Najlepsze do wi?kszych sesji ?wicze?"
+          ]
         }
       ]
     },
@@ -221,7 +270,15 @@
       "referral": "Kod polecenia",
       "copy": "Kopiuj link",
       "purchaseHistory": "Historia zakupów",
-      "noPurchases": "Brak zakupów."
+      "noPurchases": "Brak zakupów.",
+      "referralTitle": "Program polece?",
+      "referralSubtitle": "Udost?pnij link. Gdy polecony u?ytkownik kupi kredyty, bonus trafia na Twoje konto automatycznie.",
+      "referralLink": "Tw?j link polecaj?cy",
+      "referredUsers": "Zarejestrowani u?ytkownicy",
+      "referralPurchases": "Zakupy z Twojego kodu",
+      "referralCredits": "Zdobyte kredyty bonusowe",
+      "referralHowTitle": "Jak to dzia?a",
+      "referralHow": "Skopiuj link, wy?lij go znajomemu, a jego konto zostanie po??czone z Twoim kodem podczas rejestracji. Bonusy pojawi? si? po zako?czonych zakupach kredyt?w."
     },
     "faq": [
       {
@@ -266,7 +323,14 @@
         "Korzystaj z sugestii, wyjaśnień, Study Notes i Practice Mode do powtórek."
       ],
       "featureTitle": "Najważniejsze funkcje AI quiz solver",
-      "features": ["Sugestie odpowiedzi AI", "Wyjaśnienia odpowiedzi", "Historia Study Notes", "Practice Mode", "Inteligentny cache", "Opcjonalne uprawnienia stron"],
+      "features": [
+        "Sugestie odpowiedzi AI",
+        "Wyjaśnienia odpowiedzi",
+        "Historia Study Notes",
+        "Practice Mode",
+        "Inteligentny cache",
+        "Opcjonalne uprawnienia stron"
+      ],
       "keywordSections": [
         {
           "title": "Quiz solver AI pod long-tail SEO",
@@ -312,7 +376,14 @@
         "Używaj sugestii odpowiedzi, wyjaśnień i notatek, żeby powtarzać materiał."
       ],
       "featureTitle": "Dlaczego pasuje do quizów w stylu Testportal",
-      "features": ["Obsługa pytań jedno- i wielokrotnego wyboru", "Wyjaśnienia po rozwiązaniu", "Historia Study Notes", "Practice Mode z zapisanych pytań", "Cache powtarzających się treści", "Kontrola opcjonalnych uprawnień"],
+      "features": [
+        "Obsługa pytań jedno- i wielokrotnego wyboru",
+        "Wyjaśnienia po rozwiązaniu",
+        "Historia Study Notes",
+        "Practice Mode z zapisanych pytań",
+        "Cache powtarzających się treści",
+        "Kontrola opcjonalnych uprawnień"
+      ],
       "keywordSections": [
         {
           "title": "Pokrycie fraz Testportal quiz solver",
@@ -352,9 +423,20 @@
       "introTitle": "Strona SEO pod frazy Moodle quiz solver",
       "intro": "Ten szablon daje Moodle osobny adres, FAQ schema, linkowanie wewnętrzne i tekst dopasowany do platformy.",
       "stepsTitle": "Jak używać QuizSolver z Moodle",
-      "steps": ["Zainstaluj QuizSolver i zaloguj się.", "Otwórz quiz Moodle albo dozwoloną stronę ćwiczeniową.", "Przeglądaj odpowiedzi, wyjaśnienia i zapisane notatki."],
+      "steps": [
+        "Zainstaluj QuizSolver i zaloguj się.",
+        "Otwórz quiz Moodle albo dozwoloną stronę ćwiczeniową.",
+        "Przeglądaj odpowiedzi, wyjaśnienia i zapisane notatki."
+      ],
       "featureTitle": "Funkcje pod Moodle",
-      "features": ["Wykrywanie pytań", "Pytania jedno- i wielokrotnego wyboru", "Krótkie wyjaśnienia", "Study Notes", "Practice Mode", "Inteligentny cache"],
+      "features": [
+        "Wykrywanie pytań",
+        "Pytania jedno- i wielokrotnego wyboru",
+        "Krótkie wyjaśnienia",
+        "Study Notes",
+        "Practice Mode",
+        "Inteligentny cache"
+      ],
       "keywordSections": [
         {
           "title": "Long-tail SEO dla Moodle quiz solver",
@@ -386,9 +468,20 @@
       "introTitle": "Dedykowana strona SEO dla Canvas",
       "intro": "Ta strona rozszerza zasięg pod frazy związane z Canvas, zachowując pozycjonowanie produktu wokół nauki i powtórek.",
       "stepsTitle": "Jak używać QuizSolver z Canvas",
-      "steps": ["Zainstaluj rozszerzenie.", "Otwórz wspierany quiz Canvas albo stronę ćwiczeniową.", "Używaj wyjaśnień i Study Notes do powtórek słabszych tematów."],
+      "steps": [
+        "Zainstaluj rozszerzenie.",
+        "Otwórz wspierany quiz Canvas albo stronę ćwiczeniową.",
+        "Używaj wyjaśnień i Study Notes do powtórek słabszych tematów."
+      ],
       "featureTitle": "Funkcje powtórek Canvas",
-      "features": ["Sugestie odpowiedzi", "Tryb wyjaśnień", "Historia nauki", "Quizy powtórkowe", "Opcjonalne uprawnienia", "Inteligentny cache"],
+      "features": [
+        "Sugestie odpowiedzi",
+        "Tryb wyjaśnień",
+        "Historia nauki",
+        "Quizy powtórkowe",
+        "Opcjonalne uprawnienia",
+        "Inteligentny cache"
+      ],
       "keywordSections": [
         {
           "title": "Klaster Canvas quiz helper",
@@ -420,9 +513,20 @@
       "introTitle": "Strona pod Google Forms",
       "intro": "Ten adres daje zapytaniom Google Forms osobny landing page zamiast kierowania wszystkiego na stronę główną.",
       "stepsTitle": "Jak używać QuizSolver z Google Forms",
-      "steps": ["Zainstaluj QuizSolver.", "Otwórz quiz Google Forms, na którym narzędzia do nauki są dozwolone.", "Przeglądaj sugestie, wyjaśnienia i zapisane notatki."],
+      "steps": [
+        "Zainstaluj QuizSolver.",
+        "Otwórz quiz Google Forms, na którym narzędzia do nauki są dozwolone.",
+        "Przeglądaj sugestie, wyjaśnienia i zapisane notatki."
+      ],
       "featureTitle": "Funkcje powtórek Google Forms",
-      "features": ["Parsowanie pytań", "Sugestie odpowiedzi", "Wyjaśnienia", "Study Notes", "Practice Mode", "Kontrola uprawnień"],
+      "features": [
+        "Parsowanie pytań",
+        "Sugestie odpowiedzi",
+        "Wyjaśnienia",
+        "Study Notes",
+        "Practice Mode",
+        "Kontrola uprawnień"
+      ],
       "keywordSections": [
         {
           "title": "SEO Google Forms quiz solver",
@@ -454,9 +558,20 @@
       "introTitle": "Landing SEO dla Microsoft Forms",
       "intro": "Ta strona dodaje cel pod zapytania Microsoft Forms quiz solver i answer assistant.",
       "stepsTitle": "Jak używać QuizSolver z Microsoft Forms",
-      "steps": ["Zainstaluj QuizSolver i zaloguj się.", "Otwórz wspierany quiz Microsoft Forms.", "Używaj wyjaśnień i Study Notes do powtórek odpowiedzi."],
+      "steps": [
+        "Zainstaluj QuizSolver i zaloguj się.",
+        "Otwórz wspierany quiz Microsoft Forms.",
+        "Używaj wyjaśnień i Study Notes do powtórek odpowiedzi."
+      ],
       "featureTitle": "Funkcje ćwiczeń Microsoft Forms",
-      "features": ["Workflow formularzy", "Sugestie AI", "Wyjaśnienia odpowiedzi", "Historia nauki", "Practice Mode", "Inteligentny cache"],
+      "features": [
+        "Workflow formularzy",
+        "Sugestie AI",
+        "Wyjaśnienia odpowiedzi",
+        "Historia nauki",
+        "Practice Mode",
+        "Inteligentny cache"
+      ],
       "keywordSections": [
         {
           "title": "Frazy Microsoft Forms quiz solver",
@@ -494,7 +609,14 @@
         "Generuj wyjaśnienia i ćwicz ponownie ze Study Notes."
       ],
       "featureTitle": "Przydatne przy powtórkach w stylu Kahoot",
-      "features": ["Szybki przegląd odpowiedzi", "Krótkie wyjaśnienia", "Practice Mode", "Historia pytań", "Prosty workflow w przeglądarce", "Czysty interfejs EN/PL"],
+      "features": [
+        "Szybki przegląd odpowiedzi",
+        "Krótkie wyjaśnienia",
+        "Practice Mode",
+        "Historia pytań",
+        "Prosty workflow w przeglądarce",
+        "Czysty interfejs EN/PL"
+      ],
       "keywordSections": [
         {
           "title": "Pokrycie fraz Kahoot AI bot",
@@ -526,9 +648,20 @@
       "introTitle": "Landing SEO dla Quizizz",
       "intro": "Ta strona daje frazom związanym z Quizizz osobny landing page z tekstem platformowym, FAQ schema i linkami wewnętrznymi.",
       "stepsTitle": "Jak używać QuizSolver z Quizizz",
-      "steps": ["Zainstaluj QuizSolver i zaloguj się.", "Otwórz wspierane pytania w stylu Quizizz albo zapisaną historię.", "Używaj wyjaśnień i Practice Mode do powtórek słabszych tematów."],
+      "steps": [
+        "Zainstaluj QuizSolver i zaloguj się.",
+        "Otwórz wspierane pytania w stylu Quizizz albo zapisaną historię.",
+        "Używaj wyjaśnień i Practice Mode do powtórek słabszych tematów."
+      ],
       "featureTitle": "Funkcje powtórek Quizizz",
-      "features": ["Szybki przegląd", "Wyjaśnienia", "Zapisane notatki", "Practice Mode", "Filtry historii", "Inteligentny cache"],
+      "features": [
+        "Szybki przegląd",
+        "Wyjaśnienia",
+        "Zapisane notatki",
+        "Practice Mode",
+        "Filtry historii",
+        "Inteligentny cache"
+      ],
       "keywordSections": [
         {
           "title": "Long-tail SEO Quizizz solver",

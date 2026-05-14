@@ -30,6 +30,16 @@ const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
 const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
+const STATIC_OPTIONS = {
+  index: false,
+  etag: true,
+  maxAge: IS_PRODUCTION ? '30d' : 0,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+};
 
 app.set('trust proxy', 1);
 
@@ -91,10 +101,12 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use('/api/', generalLimiter);
 
 app.get('/robots.txt', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
   res.type('text/plain').send(getRobotsTxt());
 });
 
 app.get('/sitemap.xml', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
   res.type('application/xml').send(getSitemapXml());
 });
 
@@ -104,6 +116,7 @@ app.get('/index.html', (req, res) => {
 
 function sendMarketingPage(res, pageKey, locale) {
   res.set('Content-Language', locale);
+  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
   res.type('html').send(renderMarketingPage({
     pageKey,
     locale,
@@ -141,6 +154,7 @@ app.get('/pl/download', (req, res) => {
 
 app.get(['/dashboard', '/dashboard/'], (req, res) => {
   res.set('Content-Language', 'en');
+  res.set('Cache-Control', 'no-store');
   res.type('html').send(renderDashboardPage({
     locale: 'en',
     nonce: res.locals.cspNonce
@@ -149,6 +163,7 @@ app.get(['/dashboard', '/dashboard/'], (req, res) => {
 
 app.get(['/pl/dashboard', '/pl/dashboard/'], (req, res) => {
   res.set('Content-Language', 'pl');
+  res.set('Cache-Control', 'no-store');
   res.type('html').send(renderDashboardPage({
     locale: 'pl',
     nonce: res.locals.cspNonce
@@ -164,7 +179,7 @@ getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
   });
 });
 
-app.use(express.static(path.join(__dirname, 'public'), { index: false }));
+app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
@@ -289,7 +304,7 @@ function startAdminServer() {
 
   adminApp.use(adminLimiter);
 
-  adminApp.use(express.static(path.join(__dirname, 'public'), { index: false }));
+  adminApp.use(express.static(path.join(__dirname, 'public'), { index: false, etag: true, maxAge: 0 }));
 
   adminApp.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));

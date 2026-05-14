@@ -132,9 +132,9 @@ function buildJsonLd({ pageKey, locale, data, meta, canonical }) {
         'Supported quiz platform workflows'
       ],
       offers: [
-        { '@type': 'Offer', name: 'Starter', price: '1.99', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Popular', price: '4.99', priceCurrency: 'USD' },
-        { '@type': 'Offer', name: 'Pro', price: '9.99', priceCurrency: 'USD' }
+        { '@type': 'Offer', name: '100 credit top-up', price: '1.99', priceCurrency: 'USD' },
+        { '@type': 'Offer', name: '500 credit top-up', price: '4.99', priceCurrency: 'USD' },
+        { '@type': 'Offer', name: '2000 credit top-up', price: '9.99', priceCurrency: 'USD' }
       ]
     },
     {
