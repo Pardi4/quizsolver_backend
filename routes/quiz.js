@@ -216,7 +216,7 @@ async function callAI(questionData) {
   const body = {
     model: MODEL,
     temperature: 0,
-    max_tokens: getMaxTokens(type),
+    max_completion_tokens: getMaxTokens(type),
     messages: [
       { role: 'system', content: getSystemMessage(type) },
       { role: 'user', content: userContent }
@@ -277,7 +277,7 @@ async function callExplanationAI(text, options, answer, type, explanationLanguag
   const body = {
     model: MODEL,
     temperature: 0,
-    max_tokens: 80,
+    max_completion_tokens: 80,
     messages: [
       { role: 'system', content: `Explain briefly why this answer is correct. Max 2 sentences. Be concise. ${languageHint}` },
       { role: 'user', content: `Question: ${text}\nCorrect answer: ${answerText}` }
