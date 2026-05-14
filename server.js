@@ -104,8 +104,17 @@ app.get('/index.html', (req, res) => {
   res.redirect(301, '/');
 });
 
-app.get('/pl', (req, res) => {
-  res.redirect(301, '/pl/');
+function sendMarketingPage(res, pageKey, locale) {
+  res.set('Content-Language', locale);
+  res.type('html').send(renderMarketingPage({
+    pageKey,
+    locale,
+    nonce: res.locals.cspNonce
+  }));
+}
+
+app.get(['/pl', '/pl/'], (req, res) => {
+  sendMarketingPage(res, 'home', 'pl');
 });
 
 app.get('/ai-quiz-solver', (req, res) => {
@@ -132,7 +141,7 @@ app.get('/pl/download', (req, res) => {
   res.redirect(302, CHROME_WEB_STORE_URL);
 });
 
-app.get('/dashboard', (req, res) => {
+app.get(['/dashboard', '/dashboard/'], (req, res) => {
   res.set('Content-Language', 'en');
   res.type('html').send(renderDashboardPage({
     locale: 'en',
@@ -140,7 +149,7 @@ app.get('/dashboard', (req, res) => {
   }));
 });
 
-app.get('/pl/dashboard', (req, res) => {
+app.get(['/pl/dashboard', '/pl/dashboard/'], (req, res) => {
   res.set('Content-Language', 'pl');
   res.type('html').send(renderDashboardPage({
     locale: 'pl',
@@ -153,12 +162,7 @@ getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
     if (req.query.lang === 'pl') {
       return res.redirect(301, locale === 'pl' ? routePath : `/pl${routePath === '/' ? '/' : routePath}`);
     }
-    res.set('Content-Language', locale);
-    res.type('html').send(renderMarketingPage({
-      pageKey,
-      locale,
-      nonce: res.locals.cspNonce
-    }));
+    sendMarketingPage(res, pageKey, locale);
   });
 });
 

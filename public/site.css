@@ -260,6 +260,12 @@ img{max-width:100%;height:auto}
 .hero-proof li::before{content:'✓';position:absolute;left:0;top:0;color:var(--accent);font-weight:800}
 .how-it-works{padding:100px 0}
 .steps-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.quick-start{padding:0 0 48px;margin-top:-42px;position:relative;z-index:3}
+.quick-start-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.quick-start-card{display:flex;gap:16px;align-items:flex-start;padding:20px;min-height:132px;background:rgba(12,12,31,.7)}
+.quick-start-card span{width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-weight:800}
+.quick-start-card h2{font-size:1rem;line-height:1.25;margin-bottom:6px}
+.quick-start-card p{color:var(--text-muted);font-size:.84rem;line-height:1.55}
 .step-card{padding:28px;min-height:220px}
 .step-index{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:18px;background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-weight:800}
 .step-card h3{font-size:1.08rem;margin-bottom:10px}
@@ -319,7 +325,7 @@ img{max-width:100%;height:auto}
 .marketing-body .btn-store::after{content:'';position:absolute;inset:-40% auto -40% -80%;width:70%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);transform:skewX(-18deg);animation:store-sheen 4.2s ease-in-out infinite}
 .marketing-body .btn-store span{position:relative;z-index:1}
 
-.marketing-body .hero{min-height:calc(100vh - 16px);padding:132px 24px 76px;gap:80px}
+.marketing-body .hero{min-height:86vh;padding:132px 24px 76px;gap:80px}
 .marketing-body .hero-content{max-width:650px;animation:fade-up .7s ease both}
 .marketing-body .hero-badge{box-shadow:0 0 28px rgba(108,61,255,.18)}
 .marketing-body .hero-title{max-width:680px;font-size:3.6rem;line-height:1.04}
@@ -355,17 +361,6 @@ img{max-width:100%;height:auto}
 .install-panel h2{font-size:2rem;line-height:1.14;margin:6px 0 10px}
 .install-panel p{max-width:720px;color:var(--text-muted);font-size:.95rem;line-height:1.7}
 
-.dashboard-page-main{padding-top:90px}
-.dashboard-hero{padding:72px 0 28px}
-.dashboard-hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end}
-.dashboard-hero .hero-title{max-width:760px;font-size:clamp(2.2rem,5vw,4rem)}
-.dashboard-hero .hero-subtitle{max-width:720px;margin-bottom:0}
-.dashboard-auth-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px;padding:30px 34px;margin:10px auto 8px;max-width:980px;border-color:rgba(108,61,255,.22);background:linear-gradient(135deg,rgba(108,61,255,.08),rgba(255,255,255,.025))}
-.dashboard-auth-card h2{font-size:1.35rem;line-height:1.25;margin:6px 0 8px}
-.dashboard-auth-card p{color:var(--text-muted);font-size:.95rem;line-height:1.65;max-width:680px}
-.dashboard-page-body .dashboard-section{padding-top:46px}
-.dashboard-page-body .dash-history{scroll-margin-top:112px}
-
 .related-seo-compact{padding-top:46px}
 .related-seo-compact .related-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .related-seo-compact .related-card{min-height:112px}
@@ -397,9 +392,10 @@ img{max-width:100%;height:auto}
   .hero-orbit-two{left:3%;bottom:20px}
   .install-panel{grid-template-columns:1fr;padding:28px}
   .install-panel h2{font-size:1.55rem}
-  .dashboard-hero-grid,.dashboard-auth-card{grid-template-columns:1fr;align-items:start}
-  .dashboard-auth-card{padding:26px}
   .marketing-body .section-title{font-size:1.9rem}
+  .quick-start{margin-top:0;padding:20px 0 38px}
+  .quick-start-grid{grid-template-columns:1fr}
+  .quick-start-card{min-height:auto}
   .marketing-body .features,.marketing-body .platforms,.marketing-body .pricing,.marketing-body .mobile-section,.marketing-body .leaderboard-section,.marketing-body .dashboard-section,.marketing-body .how-it-works,.marketing-body .related-seo,.marketing-body .faq-section,.marketing-body .keyword-sections{padding:66px 0}
 }
 
