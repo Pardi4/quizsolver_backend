@@ -11,6 +11,7 @@ const {
   getMarketingRoutes,
   getRobotsTxt,
   getSitemapXml,
+  renderDashboardPage,
   renderMarketingPage
 } = require('./marketing/render');
 
@@ -28,6 +29,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
 const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
 
 app.set('trust proxy', 1);
 
@@ -119,7 +121,7 @@ app.get('/pricing', (req, res) => {
 });
 
 app.get('/download', (req, res) => {
-  res.redirect(301, '/#pricing');
+  res.redirect(302, CHROME_WEB_STORE_URL);
 });
 
 app.get('/pl/pricing', (req, res) => {
@@ -127,7 +129,23 @@ app.get('/pl/pricing', (req, res) => {
 });
 
 app.get('/pl/download', (req, res) => {
-  res.redirect(301, '/pl/#pricing');
+  res.redirect(302, CHROME_WEB_STORE_URL);
+});
+
+app.get('/dashboard', (req, res) => {
+  res.set('Content-Language', 'en');
+  res.type('html').send(renderDashboardPage({
+    locale: 'en',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get('/pl/dashboard', (req, res) => {
+  res.set('Content-Language', 'pl');
+  res.type('html').send(renderDashboardPage({
+    locale: 'pl',
+    nonce: res.locals.cspNonce
+  }));
 });
 
 getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {

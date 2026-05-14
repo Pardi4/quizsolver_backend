@@ -23,6 +23,10 @@ const PAGE_ROUTES = {
     en: '/',
     pl: '/pl/'
   },
+  dashboard: {
+    en: '/dashboard',
+    pl: '/pl/dashboard'
+  },
   quizSolverAi: {
     en: '/quiz-solver-ai',
     pl: '/pl/quiz-solver-ai'
@@ -159,6 +163,41 @@ function renderHead({ pageKey, locale, nonce }) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/site.css?v=${ASSET_VERSION}">
   <script type="application/ld+json" nonce="${escapeAttr(nonce || '')}">${safeJson(jsonLd)}</script>`;
+}
+
+function renderUtilityHead({ locale, nonce, title, description, canonicalPath, robots = 'noindex, nofollow' }) {
+  const canonical = abs(canonicalPath);
+  return `
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeAttr(description)}">
+  <meta name="author" content="QuizSolver">
+  <meta name="robots" content="${escapeAttr(robots)}">
+  <meta name="theme-color" content="#6c3dff">
+  <link rel="canonical" href="${canonical}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="QuizSolver">
+  <meta property="og:url" content="${canonical}">
+  <meta property="og:title" content="${escapeAttr(title)}">
+  <meta property="og:description" content="${escapeAttr(description)}">
+  <meta property="og:image" content="${abs('/og-image.svg')}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeAttr(title)}">
+  <meta name="twitter:description" content="${escapeAttr(description)}">
+  <meta name="twitter:image" content="${abs('/og-image.svg')}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/site.css?v=${ASSET_VERSION}">
+  <script type="application/ld+json" nonce="${escapeAttr(nonce || '')}">${safeJson({
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'QuizSolver Dashboard',
+    url: canonical,
+    isPartOf: { '@type': 'WebSite', name: 'QuizSolver', url: abs('/') },
+    inLanguage: locale
+  })}</script>`;
 }
 
 function buildJsonLd({ pageKey, locale, data, meta, canonical }) {
@@ -393,13 +432,12 @@ function renderHome(locale) {
     ${renderHowItWorks(locale)}
     ${renderFeatures(locale)}
     ${renderPlatforms(locale)}
-    ${renderPricing(locale)}
-    ${renderInstallCta(locale)}
     ${renderStudyWorkflow(locale)}
     ${renderRelatedPages(locale, '', true)}
+    ${renderInstallCta(locale)}
+    ${renderPricing(locale)}
     ${renderFaq(locale, h.faq)}
     ${renderLeaderboard(locale)}
-    ${renderDashboard(locale)}
   </main>`;
 }
 
@@ -615,11 +653,12 @@ function renderLeaderboard(locale) {
   </section>`;
 }
 
-function renderDashboard(locale) {
+function renderDashboard(locale, options = {}) {
   const d = content(locale).home.dashboard;
   const common = content(locale).common;
+  const hiddenClass = options.hidden === false ? '' : ' hidden';
   return `
-  <section class="dashboard-section hidden" id="dashboard" aria-labelledby="dashboard-title">
+  <section class="dashboard-section${hiddenClass}" id="dashboard" aria-labelledby="dashboard-title">
     <div class="section-container">
       <div class="section-header">
         <span class="section-badge">${escapeHtml(d.badge)}</span>
@@ -644,13 +683,26 @@ function renderDashboard(locale) {
           <button class="btn-sm btn-ghost" id="copy-referral-btn">${escapeHtml(d.copy)}</button>
         </article>
       </div>
-      <div class="dash-history glass-card">
+      <div class="dash-history glass-card" id="purchase-history">
         <h3>${escapeHtml(d.purchaseHistory)}</h3>
         <div id="dash-history-list">
           <p class="dash-empty">${escapeHtml(d.noPurchases)}</p>
         </div>
       </div>
     </div>
+  </section>`;
+}
+
+function renderDashboardLogin(locale) {
+  const c = content(locale);
+  return `
+  <section class="dashboard-auth-card glass-card" id="dashboard-login-card" aria-labelledby="dashboard-login-title">
+    <div>
+      <span class="section-badge">${escapeHtml(c.common.dashboard)}</span>
+      <h2 id="dashboard-login-title">${escapeHtml(c.dashboardPage.loginTitle)}</h2>
+      <p>${escapeHtml(c.dashboardPage.loginText)}</p>
+    </div>
+    <button class="btn-primary btn-lg" id="dashboard-login-btn">${escapeHtml(c.dashboardPage.loginButton)}</button>
   </section>`;
 }
 
@@ -673,7 +725,7 @@ function renderPlatformPage(pageKey, locale) {
           <h1 class="hero-title" id="platform-title">${escapeHtml(data.title)}</h1>
           <p class="hero-subtitle">${escapeHtml(data.subtitle)}</p>
           <div class="hero-buttons">
-            <a href="${home}#pricing" class="btn-primary btn-lg">${escapeHtml(data.primaryCta)}</a>
+            <a href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener" class="btn-primary btn-lg btn-store">${escapeHtml(data.primaryCta)}</a>
             <a href="${home}#platforms" class="btn-outline btn-lg">${escapeHtml(data.secondaryCta)}</a>
           </div>
         </div>
@@ -710,7 +762,6 @@ function renderPlatformPage(pageKey, locale) {
     ${renderFaq(locale, data.faq)}
     ${renderRelatedPages(locale, pageKey)}
     ${renderPlatforms(locale)}
-    ${renderDashboard(locale)}
   </main>`;
 }
 
@@ -831,6 +882,51 @@ function renderAuth(locale) {
   </div>`;
 }
 
+function renderDashboardPage({ locale, nonce }) {
+  const c = content(locale);
+  const d = c.dashboardPage;
+  const dashboardPath = pathFor('dashboard', locale);
+
+  return `<!DOCTYPE html>
+<html lang="${c.htmlLang}">
+<head>
+${renderUtilityHead({
+  locale,
+  nonce,
+  title: d.metaTitle,
+  description: d.metaDescription,
+  canonicalPath: dashboardPath
+})}
+</head>
+<body class="marketing-body dashboard-page-body" data-locale="${locale}" data-home-path="${pathFor('home', locale)}" data-dashboard-path="${dashboardPath}" data-page="dashboard">
+  <div id="particles-bg" aria-hidden="true"></div>
+  ${renderNav('dashboard', locale)}
+  <main id="main-content" class="dashboard-page-main">
+    <section class="dashboard-hero" aria-labelledby="dashboard-page-title">
+      <div class="section-container dashboard-hero-grid">
+        <div>
+          <span class="section-badge">${escapeHtml(c.common.dashboard)}</span>
+          <h1 class="hero-title" id="dashboard-page-title">${escapeHtml(d.title)}</h1>
+          <p class="hero-subtitle">${escapeHtml(d.subtitle)}</p>
+        </div>
+        <a class="btn-primary btn-lg btn-store" href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener">
+          <span>${escapeHtml(c.common.installExtension)}</span>
+          <span class="btn-arrow" aria-hidden="true">-&gt;</span>
+        </a>
+      </div>
+    </section>
+    <div class="section-container">
+      ${renderDashboardLogin(locale)}
+    </div>
+    ${renderDashboard(locale)}
+  </main>
+  ${renderFooter(locale)}
+  ${renderAuth(locale)}
+  <script src="/marketing.js?v=${ASSET_VERSION}" defer></script>
+</body>
+</html>`;
+}
+
 function renderMarketingPage({ pageKey, locale, nonce }) {
   const c = content(locale);
   const body = pageKey === 'home' ? renderHome(locale) : renderPlatformPage(pageKey, locale);
@@ -840,7 +936,7 @@ function renderMarketingPage({ pageKey, locale, nonce }) {
 <head>
 ${renderHead({ pageKey, locale, nonce })}
 </head>
-<body class="marketing-body" data-locale="${locale}" data-home-path="${pathFor('home', locale)}">
+<body class="marketing-body" data-locale="${locale}" data-home-path="${pathFor('home', locale)}" data-dashboard-path="${pathFor('dashboard', locale)}">
   <div id="particles-bg" aria-hidden="true"></div>
   ${renderNav(pageKey, locale)}
   ${body}
@@ -915,5 +1011,6 @@ module.exports = {
   getRobotsTxt,
   getSitemapXml,
   pathFor,
+  renderDashboardPage,
   renderMarketingPage
 };

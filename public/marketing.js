@@ -2,8 +2,11 @@
   const API = window.location.origin;
   const locale = document.body.dataset.locale === 'pl' ? 'pl' : 'en';
   const homePath = document.body.dataset.homePath || (locale === 'pl' ? '/pl/' : '/');
+  const dashboardPath = document.body.dataset.dashboardPath || (locale === 'pl' ? '/pl/dashboard' : '/dashboard');
+  const isDashboardPage = document.body.dataset.page === 'dashboard';
   let authToken = localStorage.getItem('qs_token') || null;
   let currentUser = null;
+  let dashboardHistoryLoaded = false;
 
   const messages = {
     en: {
@@ -157,6 +160,34 @@
       guest.classList.remove('hidden');
       user.classList.add('hidden');
     }
+    setDashboardPageState();
+  }
+
+  function setDashboardPageState() {
+    if (!isDashboardPage) return;
+    const loginCard = $('#dashboard-login-card');
+    const dashboard = $('#dashboard');
+    if (!loginCard || !dashboard) return;
+
+    if (currentUser) {
+      loginCard.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      updateDashboard();
+      if (!dashboardHistoryLoaded) {
+        dashboardHistoryLoaded = true;
+        loadHistory();
+      }
+      if (window.location.hash) {
+        setTimeout(() => {
+          const target = $(window.location.hash);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    } else {
+      dashboardHistoryLoaded = false;
+      loginCard.classList.remove('hidden');
+      dashboard.classList.add('hidden');
+    }
   }
 
   function updateDashboard() {
@@ -233,6 +264,7 @@
       authToken = res.token;
       currentUser = res.user;
       localStorage.setItem('qs_token', res.token);
+      dashboardHistoryLoaded = false;
       setAuthUI();
       updateDashboard();
       closeModal();
@@ -266,6 +298,7 @@
       authToken = res.token;
       currentUser = res.user;
       localStorage.setItem('qs_token', res.token);
+      dashboardHistoryLoaded = false;
       setAuthUI();
       updateDashboard();
       closeModal();
@@ -279,9 +312,9 @@
     if (authToken) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
     authToken = null;
     currentUser = null;
+    dashboardHistoryLoaded = false;
     localStorage.removeItem('qs_token');
     setAuthUI();
-    $('#dashboard')?.classList.add('hidden');
     if (showMessage) showToast(t('loggedOut'));
   }
 
@@ -311,13 +344,16 @@
     showToast(res.error || t('checkoutError'), 4000);
   }
 
-  function showDashboard() {
-    const dashboard = $('#dashboard');
-    if (!dashboard) return;
-    dashboard.classList.remove('hidden');
-    updateDashboard();
-    loadHistory();
-    dashboard.scrollIntoView({ behavior: 'smooth' });
+  function goToDashboard(hash = '') {
+    const targetUrl = `${dashboardPath}${hash}`;
+    if (!isDashboardPage) {
+      window.location.href = targetUrl;
+      return;
+    }
+
+    setDashboardPageState();
+    const target = hash ? $(hash) : $('#dashboard');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   on('#nav-login-btn', 'click', () => openModal('login'));
@@ -336,14 +372,15 @@
   });
   on('#modal-login-btn', 'click', login);
   on('#modal-register-btn', 'click', register);
+  on('#dashboard-login-btn', 'click', () => openModal('login'));
   on('#nav-avatar-wrap', 'click', (event) => {
     event.stopPropagation();
     $('#nav-dropdown')?.classList.toggle('show');
   });
   on(document, 'click', () => $('#nav-dropdown')?.classList.remove('show'));
   on('#dropdown-logout-btn', 'click', () => logout());
-  on('#dropdown-dashboard-btn', 'click', showDashboard);
-  on('#dropdown-history-btn', 'click', showDashboard);
+  on('#dropdown-dashboard-btn', 'click', () => goToDashboard());
+  on('#dropdown-history-btn', 'click', () => goToDashboard('#purchase-history'));
   on('#dropdown-buy-btn', 'click', () => {
     const pricing = $('#pricing');
     if (pricing) pricing.scrollIntoView({ behavior: 'smooth' });

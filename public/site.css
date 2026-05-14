@@ -355,6 +355,17 @@ img{max-width:100%;height:auto}
 .install-panel h2{font-size:2rem;line-height:1.14;margin:6px 0 10px}
 .install-panel p{max-width:720px;color:var(--text-muted);font-size:.95rem;line-height:1.7}
 
+.dashboard-page-main{padding-top:90px}
+.dashboard-hero{padding:72px 0 28px}
+.dashboard-hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end}
+.dashboard-hero .hero-title{max-width:760px;font-size:clamp(2.2rem,5vw,4rem)}
+.dashboard-hero .hero-subtitle{max-width:720px;margin-bottom:0}
+.dashboard-auth-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:24px;padding:30px 34px;margin:10px auto 8px;max-width:980px;border-color:rgba(108,61,255,.22);background:linear-gradient(135deg,rgba(108,61,255,.08),rgba(255,255,255,.025))}
+.dashboard-auth-card h2{font-size:1.35rem;line-height:1.25;margin:6px 0 8px}
+.dashboard-auth-card p{color:var(--text-muted);font-size:.95rem;line-height:1.65;max-width:680px}
+.dashboard-page-body .dashboard-section{padding-top:46px}
+.dashboard-page-body .dash-history{scroll-margin-top:112px}
+
 .related-seo-compact{padding-top:46px}
 .related-seo-compact .related-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 .related-seo-compact .related-card{min-height:112px}
@@ -386,6 +397,8 @@ img{max-width:100%;height:auto}
   .hero-orbit-two{left:3%;bottom:20px}
   .install-panel{grid-template-columns:1fr;padding:28px}
   .install-panel h2{font-size:1.55rem}
+  .dashboard-hero-grid,.dashboard-auth-card{grid-template-columns:1fr;align-items:start}
+  .dashboard-auth-card{padding:26px}
   .marketing-body .section-title{font-size:1.9rem}
   .marketing-body .features,.marketing-body .platforms,.marketing-body .pricing,.marketing-body .mobile-section,.marketing-body .leaderboard-section,.marketing-body .dashboard-section,.marketing-body .how-it-works,.marketing-body .related-seo,.marketing-body .faq-section,.marketing-body .keyword-sections{padding:66px 0}
 }

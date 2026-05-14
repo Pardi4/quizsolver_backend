@@ -72,6 +72,15 @@
     "subtitle": "Add the extension, sign in, and start using answer suggestions, explanations, Study Notes, and Practice Mode on supported quiz platforms.",
     "button": "Open Chrome Web Store"
   },
+  "dashboardPage": {
+    "metaTitle": "QuizSolver Dashboard - Credits, History and Practice Notes",
+    "metaDescription": "Open your QuizSolver dashboard to manage credits, purchase history, referral code, and quiz practice activity.",
+    "title": "Your QuizSolver dashboard",
+    "subtitle": "Manage credits, review your account activity, copy your referral code, and keep your quiz workflow separate from the public landing page.",
+    "loginTitle": "Sign in to open your dashboard",
+    "loginText": "Your credits, purchase history, and saved study workflow are connected to your QuizSolver account.",
+    "loginButton": "Sign in"
+  },
   "home": {
     "meta": {
       "title": "QuizSolver - AI Quiz Solver Extension for Testportal, Moodle and Canvas",
@@ -149,9 +158,9 @@
       "items": ["Testportal", "Moodle", "Canvas", "Google Forms", "Microsoft Forms", "Blackboard", "Quizlet", "Socrative", "Kahoot", "Quizizz"]
     },
     "pricing": {
-      "badge": "Pricing",
-      "title": "Simple credits, no confusing plans",
-      "subtitle": "Start free with monthly credits, then buy more only when you need them.",
+      "badge": "Credits",
+      "title": "Need more quiz credits later?",
+      "subtitle": "Install the extension first. Free monthly credits get you started, and extra credits are here only when you actually need more.",
       "packs": [
         {
           "id": "starter",

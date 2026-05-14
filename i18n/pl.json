@@ -72,6 +72,15 @@
     "subtitle": "Dodaj rozszerzenie, zaloguj się i używaj sugestii odpowiedzi, wyjaśnień, Study Notes oraz Practice Mode na wspieranych platformach.",
     "button": "Otwórz Chrome Web Store"
   },
+  "dashboardPage": {
+    "metaTitle": "Panel QuizSolver - kredyty, historia i notatki",
+    "metaDescription": "Otwórz panel QuizSolver, aby zarządzać kredytami, historią zakupów, kodem polecenia i aktywnością quizową.",
+    "title": "Twój panel QuizSolver",
+    "subtitle": "Zarządzaj kredytami, sprawdzaj aktywność konta, kopiuj kod polecenia i trzymaj panel oddzielnie od publicznej strony.",
+    "loginTitle": "Zaloguj się, aby otworzyć panel",
+    "loginText": "Kredyty, historia zakupów i zapisany workflow nauki są połączone z Twoim kontem QuizSolver.",
+    "loginButton": "Zaloguj"
+  },
   "home": {
     "meta": {
       "title": "QuizSolver - AI quiz solver dla Testportal, Moodle i Canvas",
