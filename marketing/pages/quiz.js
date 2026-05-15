@@ -1,54 +1,49 @@
-<!DOCTYPE html>
-<html lang="en">
+const {
+  ASSET_VERSION,
+  content,
+  escapeAttr,
+  escapeHtml,
+  pathFor
+} = require('../config');
+const { renderAuth, renderFooter, renderNav } = require('../partials');
+const { renderUtilityHead } = require('../seo');
+
+function renderQuizPage({ locale, nonce }) {
+  const c = content(locale);
+  const q = c.quizPage;
+  const quizPath = pathFor('quiz', locale);
+  const dashboardPath = pathFor('dashboard', locale);
+
+  return `<!DOCTYPE html>
+<html lang="${c.htmlLang}">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Study Notes & Practice Quiz | QuizSolver</title>
-  <meta name="description" content="Review your saved QuizSolver study notes and create practice quizzes from questions in your history.">
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#6c3dff">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/site.css">
+${renderUtilityHead({
+  locale,
+  nonce,
+  pageKey: 'quiz',
+  title: q.metaTitle,
+  description: q.metaDescription,
+  canonicalPath: quizPath,
+  robots: 'noindex, nofollow'
+})}
 </head>
-<body>
+<body class="marketing-body utility-page-body quiz-page-body" data-locale="${locale}" data-home-path="${pathFor('home', locale)}" data-dashboard-path="${dashboardPath}" data-page="quiz">
   <div id="particles-bg" aria-hidden="true"></div>
-
-  <nav class="navbar" aria-label="Study navigation">
-    <div class="nav-container">
-      <a href="/" class="nav-logo">
-        <span class="logo-icon" aria-hidden="true">🧠</span>
-        <span class="logo-text">QuizSolver</span>
-      </a>
-      <div class="nav-links">
-        <a href="/" class="nav-link" data-i18n="home">Home</a>
-        <a href="/quiz" class="nav-link" data-i18n="studyNotes">Study Notes</a>
-        <a href="/privacy" class="nav-link" data-i18n="privacy">Privacy</a>
-      </div>
-      <div class="nav-actions">
-        <div class="nav-lang-switch" role="group" aria-label="Language">
-          <button type="button" class="lang-btn active" data-lang="en" aria-pressed="true">EN</button>
-          <button type="button" class="lang-btn" data-lang="pl" aria-pressed="false">PL</button>
-        </div>
-      </div>
-    </div>
-  </nav>
-
-  <main class="quiz-page">
-    <header class="quiz-hero">
-      <span class="section-badge" data-i18n="badge">Study Notes</span>
-      <h1 data-i18n="title">Build a practice quiz from your saved history</h1>
-      <p data-i18n="subtitle">Choose questions from answers and explanations saved by QuizSolver, then practice them in a clean quiz view.</p>
+  ${renderNav('quiz', locale)}
+  <main id="main-content" class="quiz-page utility-page">
+    <header class="quiz-hero utility-hero-narrow">
+      <span class="section-badge" data-i18n="badge">${escapeHtml(q.badge)}</span>
+      <h1 data-i18n="title">${escapeHtml(q.title)}</h1>
+      <p data-i18n="subtitle">${escapeHtml(q.subtitle)}</p>
     </header>
 
     <section class="quiz-auth-card glass-card hidden" id="auth-card">
-      <h2 data-i18n="loginTitle">Sign in to load your notes</h2>
-      <p data-i18n="loginSubtitle">Use the same account as the extension or landing page.</p>
+      <h2 data-i18n="loginTitle">${escapeHtml(q.loginTitle)}</h2>
+      <p data-i18n="loginSubtitle">${escapeHtml(q.loginSubtitle)}</p>
       <div class="quiz-auth-grid">
-        <input class="form-input" id="quiz-email" type="email" placeholder="Email" autocomplete="email">
-        <input class="form-input" id="quiz-password" type="password" placeholder="Password" autocomplete="current-password">
-        <button class="btn-primary" id="quiz-login-btn" data-i18n="loginButton">Sign in</button>
+        <input class="form-input" id="quiz-email" type="email" placeholder="${escapeAttr(c.common.email)}" autocomplete="email">
+        <input class="form-input" id="quiz-password" type="password" placeholder="${escapeAttr(c.common.password)}" autocomplete="current-password">
+        <button class="btn-primary" id="quiz-login-btn" data-i18n="loginButton">${escapeHtml(c.common.signIn)}</button>
       </div>
       <div class="form-error hidden" id="quiz-login-error"></div>
     </section>
@@ -56,8 +51,8 @@
     <section class="quiz-shell hidden" id="notes-shell">
       <div class="quiz-toolbar glass-card">
         <div>
-          <h2 data-i18n="historyTitle">Your question history</h2>
-          <p><span id="notes-count">0</span> <span data-i18n="historyCount">saved questions</span></p>
+          <h2 data-i18n="historyTitle">${escapeHtml(q.historyTitle)}</h2>
+          <p><span id="notes-count">0</span> <span data-i18n="historyCount">${escapeHtml(q.historyCount)}</span></p>
         </div>
         <div class="quiz-toolbar-actions">
           <input class="form-input" id="notes-search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Search notes">
@@ -107,11 +102,14 @@
       </div>
     </section>
   </main>
-
-  <div class="toast hidden" id="toast">
-    <span id="toast-message"></span>
-  </div>
-
-  <script src="/quiz-app.js"></script>
+  ${renderFooter(locale)}
+  ${renderAuth(locale)}
+  <script src="/marketing.js?v=${ASSET_VERSION}" defer></script>
+  <script src="/quiz-app.js?v=${ASSET_VERSION}" defer></script>
 </body>
-</html>
+</html>`;
+}
+
+module.exports = {
+  renderQuizPage
+};

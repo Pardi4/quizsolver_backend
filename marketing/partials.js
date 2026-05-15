@@ -15,15 +15,17 @@ function renderNav(pageKey, locale) {
   const navLinks = [
     { href: `${home}#how-it-works`, label: c.nav.how },
     { href: `${home}#platforms`, label: c.nav.platforms },
-    { href: quizPath, label: c.nav.study },
-    { href: `${home}#platform-guides`, label: c.footer.seoPages },
+    { href: quizPath, label: c.nav.study, page: 'quiz' },
+    { href: `${home}#platform-guides`, label: c.footer.seoPages, page: 'platforms' },
     { href: `${home}#pricing`, label: c.nav.pricing }
   ];
 
   const links = navLinks.map(link => {
-    const active = link.page && link.page === pageKey ? ' aria-current="page"' : '';
+    const active = link.page && (link.page === pageKey || (link.page === 'platforms' && pageKey !== 'home' && pageKey !== 'quiz' && pageKey !== 'dashboard' && pageKey !== 'privacy' && pageKey !== 'notFound')) ? ' aria-current="page"' : '';
     return `<a href="${escapeAttr(link.href)}" class="nav-link"${active}>${escapeHtml(link.label)}</a>`;
   }).join('');
+  const enCurrent = locale === 'en' ? ' aria-current="page"' : '';
+  const plCurrent = locale === 'pl' ? ' aria-current="page"' : '';
 
   return `
   <nav class="navbar" id="navbar" aria-label="Primary navigation">
@@ -36,8 +38,8 @@ function renderNav(pageKey, locale) {
       <div class="nav-actions">
         <a class="btn-primary btn-sm nav-install" href="${CHROME_WEB_STORE_URL}" target="_blank" rel="noopener">${escapeHtml(c.common.installExtension)}</a>
         <div class="nav-lang-switch" role="group" aria-label="Language">
-          <a class="lang-btn ${locale === 'en' ? 'active' : ''}" href="${pathFor(pageKey, 'en')}" hreflang="en" aria-pressed="${locale === 'en'}">EN</a>
-          <a class="lang-btn ${locale === 'pl' ? 'active' : ''}" href="${pathFor(pageKey, 'pl')}" hreflang="pl" aria-pressed="${locale === 'pl'}">PL</a>
+          <a class="lang-btn ${locale === 'en' ? 'active' : ''}" href="${pathFor(pageKey, 'en')}" hreflang="en"${enCurrent}>EN</a>
+          <a class="lang-btn ${locale === 'pl' ? 'active' : ''}" href="${pathFor(pageKey, 'pl')}" hreflang="pl"${plCurrent}>PL</a>
         </div>
         <div id="nav-guest">
           <button class="btn-ghost" id="nav-login-btn">${escapeHtml(c.nav.login)}</button>
@@ -87,7 +89,7 @@ function renderFooter(locale) {
           <p class="footer-desc">${escapeHtml(c.footer.description)}</p>
         </div>
         <div class="footer-links">
-          <h4>${escapeHtml(c.footer.product)}</h4>
+          <div class="footer-heading">${escapeHtml(c.footer.product)}</div>
           <a href="${home}#how-it-works">${escapeHtml(c.nav.how)}</a>
           <a href="${home}#features">${escapeHtml(c.nav.features)}</a>
           <a href="${home}#pricing">${escapeHtml(c.nav.pricing)}</a>
@@ -95,14 +97,14 @@ function renderFooter(locale) {
           <a href="${quizPath}">${escapeHtml(c.nav.study)}</a>
         </div>
         <div class="footer-links">
-          <h4>${escapeHtml(c.footer.seoPages)}</h4>
+          <div class="footer-heading">${escapeHtml(c.footer.seoPages)}</div>
           ${platformLinks.map(({ pageKey, data }) => `<a href="${pathFor(pageKey, locale)}">${escapeHtml(data.shortName || data.platformName || data.badge)}</a>`).join('')}
         </div>
         <div class="footer-links">
-          <h4>${escapeHtml(c.footer.legal)}</h4>
+          <div class="footer-heading">${escapeHtml(c.footer.legal)}</div>
           <a href="${pathFor('privacy', locale)}">${escapeHtml(c.footer.privacy)}</a>
-          <h4 class="footer-subhead">${escapeHtml(c.footer.support)}</h4>
-          <a href="mailto:support@getquizsolver.com">${escapeHtml(c.footer.contact)}</a>
+          <div class="footer-heading footer-subhead">${escapeHtml(c.footer.support)}</div>
+          <a href="${pathFor('privacy', locale)}#contact">${escapeHtml(c.footer.contact)}</a>
         </div>
       </div>
       <div class="footer-bottom">

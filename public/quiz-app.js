@@ -1,7 +1,7 @@
 (() => {
   const API = window.location.origin;
   let token = localStorage.getItem('qs_token') || null;
-  let lang = localStorage.getItem('qs_lang') || (navigator.language?.startsWith('pl') ? 'pl' : 'en');
+  let lang = document.body.dataset.locale || localStorage.getItem('qs_lang') || (navigator.language?.startsWith('pl') ? 'pl' : 'en');
   let notes = [];
   let selected = new Set();
   let practice = [];
@@ -56,17 +56,17 @@
       textPlaceholder: 'Type your answer'
     },
     pl: {
-      home: 'Strona główna',
+      home: 'Strona g\u0142\u00f3wna',
       studyNotes: 'Notatki',
-      privacy: 'Prywatność',
+      privacy: 'Prywatno\u015b\u0107',
       badge: 'Study Notes',
-      title: 'Zbuduj quiz powtórkowy z zapisanej historii',
-      subtitle: 'Wybierz pytania z odpowiedzi i wyjaśnień zapisanych przez QuizSolver, a potem przećwicz je w czystym widoku quizu.',
-      loginTitle: 'Zaloguj się, aby wczytać notatki',
-      loginSubtitle: 'Użyj tego samego konta co w rozszerzeniu albo na landing page.',
-      loginButton: 'Zaloguj się',
-      historyTitle: 'Twoja historia pytań',
-      historyCount: 'zapisanych pytań',
+      title: 'Zbuduj quiz powt\u00f3rkowy z zapisanej historii',
+      subtitle: 'Wybierz pytania z odpowiedzi i wyja\u015bnie\u0144 zapisanych przez QuizSolver, a potem prze\u0107wicz je w czystym widoku quizu.',
+      loginTitle: 'Zaloguj si\u0119, aby wczyta\u0107 notatki',
+      loginSubtitle: 'U\u017cyj tego samego konta co w rozszerzeniu albo na stronie.',
+      loginButton: 'Zaloguj si\u0119',
+      historyTitle: 'Twoja historia pyta\u0144',
+      historyCount: 'zapisanych pyta\u0144',
       searchPlaceholder: 'Szukaj notatek',
       filterAll: 'Wszystkie',
       filterFavorite: 'Ulubione',
@@ -76,16 +76,16 @@
       selectVisible: 'Zaznacz widoczne',
       startPractice: 'Zacznij quiz',
       emptyTitle: 'Nie ma jeszcze notatek',
-      emptyText: 'Rozwiąż pytania z włączonym zapisem Study Notes, a potem wróć tutaj, żeby ćwiczyć z historii.',
-      backToNotes: 'Wróć do notatek',
-      checkAnswer: 'Sprawdź odpowiedź',
-      nextQuestion: 'Następne pytanie',
-      resultTitle: 'Quiz zakończony',
+      emptyText: 'Rozwi\u0105\u017c pytania z w\u0142\u0105czonym zapisem Study Notes, a potem wr\u00f3\u0107 tutaj, \u017ceby \u0107wiczy\u0107 z historii.',
+      backToNotes: 'Wr\u00f3\u0107 do notatek',
+      checkAnswer: 'Sprawd\u017a odpowied\u017a',
+      nextQuestion: 'Nast\u0119pne pytanie',
+      resultTitle: 'Quiz zako\u0144czony',
       correctAnswers: 'poprawnych odpowiedzi',
-      restartPractice: 'Ćwicz ponownie',
-      answer: 'Odpowiedź',
-      explanation: 'Wyjaśnienie',
-      noExplanation: 'Brak zapisanego wyjaśnienia.',
+      restartPractice: '\u0106wicz ponownie',
+      answer: 'Odpowied\u017a',
+      explanation: 'Wyja\u015bnienie',
+      noExplanation: 'Brak zapisanego wyja\u015bnienia.',
       favorite: 'Ulubione',
       selected: 'Wybrane',
       status: 'Status',
@@ -95,10 +95,10 @@
       correct: 'Poprawnie',
       incorrect: 'Jeszcze nie',
       selectAtLeastOne: 'Zaznacz co najmniej jedno pytanie.',
-      loginError: 'Nie udało się zalogować.',
-      loadError: 'Nie udało się wczytać notatek.',
-      networkError: 'Błąd sieci.',
-      textPlaceholder: 'Wpisz odpowiedź'
+      loginError: 'Nie uda\u0142o si\u0119 zalogowa\u0107.',
+      loadError: 'Nie uda\u0142o si\u0119 wczyta\u0107 notatek.',
+      networkError: 'B\u0142\u0105d sieci.',
+      textPlaceholder: 'Wpisz odpowied\u017a'
     }
   };
 
@@ -113,7 +113,8 @@
     $$('[data-lang]').forEach(btn => {
       const active = btn.dataset.lang === lang;
       btn.classList.toggle('active', active);
-      btn.setAttribute('aria-pressed', String(active));
+      if (active) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
     });
   }
 

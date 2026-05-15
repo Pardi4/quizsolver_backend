@@ -81,16 +81,89 @@
     "loginText": "Kredyty, historia zakupów i zapisany workflow nauki są połączone z Twoim kontem QuizSolver.",
     "loginButton": "Zaloguj"
   },
+  "privacyPage": {
+    "metaTitle": "Polityka prywatności | QuizSolver",
+    "metaDescription": "Przeczytaj politykę prywatności QuizSolver dla rozszerzenia AI quiz solver, panelu, kredytów, Study Notes i Practice Mode.",
+    "keywords": "polityka prywatności QuizSolver, quiz solver prywatność, AI quiz solver dane, prywatność rozszerzenia Chrome",
+    "badge": "Polityka prywatności",
+    "title": "Polityka prywatności QuizSolver",
+    "subtitle": "Krótko i jasno: jakie dane są potrzebne stronie, panelowi i rozszerzeniu Chrome, żeby obsługiwać konta, kredyty, notatki i pomoc AI przy quizach.",
+    "effective": "Data obowiązywania: 15 maja 2026",
+    "contactLabel": "Kontakt",
+    "contactValue": "support [at] getquizsolver.com",
+    "sections": [
+      {
+        "title": "1. Dane, które zbieramy",
+        "items": [
+          "Dane konta, takie jak email, nazwa wyświetlana, zahashowane hasło, rola, kredyty, kod polecenia i podstawowe liczniki aktywności.",
+          "Dane workflow quizu, takie jak treść pytania, opcje, format odpowiedzi, wyjaśnienia, zapisane Study Notes i opcjonalne obrazy potrzebne do przetworzenia zapytania.",
+          "Dane zakupu, takie jak pakiet kredytów, status płatności, identyfikatory checkout, czas zakupu i historia płatności. Pełne dane karty obsługuje dostawca płatności.",
+          "Dane bezpieczeństwa i wsparcia, takie jak metadane żądań, liczniki limitów, logi serwera, zgłoszenia błędów i wiadomości do supportu."
+        ]
+      },
+      {
+        "title": "2. Jak używamy danych",
+        "text": "Używamy danych do logowania, obsługi zapytań quizowych, zwracania sugestii odpowiedzi i wyjaśnień, zarządzania kredytami, Practice Mode, zakupów, ochrony przed nadużyciami, diagnozy błędów i wsparcia użytkowników."
+      },
+      {
+        "title": "3. Przetwarzanie przez AI",
+        "text": "Gdy prosisz QuizSolver o odpowiedź lub wyjaśnienie, odpowiednia treść pytania może zostać wysłana do dostawcy AI. Nie przesyłaj wrażliwych danych osobowych, poufnych materiałów egzaminacyjnych ani informacji, których nie wolno Ci przetwarzać."
+      },
+      {
+        "title": "4. Przechowywanie danych",
+        "text": "Dane konta i zakupów przechowujemy, gdy konto jest aktywne oraz tak długo, jak wymagają tego kwestie bezpieczeństwa, księgowości, sporów lub prawa. Cache odpowiedzi może być przechowywany, żeby przyspieszać działanie i ograniczać powtarzające się zapytania AI."
+      },
+      {
+        "title": "5. Twoje wybory",
+        "text": "Możesz poprosić o dostęp, poprawienie, usunięcie lub eksport danych konta, kontaktując się ze wsparciem QuizSolver. Część rekordów może zostać zachowana, jeśli wymagają tego przepisy albo uzasadnione potrzeby bezpieczeństwa."
+      },
+      {
+        "title": "6. Bezpieczeństwo",
+        "text": "QuizSolver używa HTTPS, logowania, limitów, kontroli dostępu i zabezpieczeń operacyjnych. Żadna usługa online nie gwarantuje pełnego bezpieczeństwa, dlatego używaj silnego unikalnego hasła i nie przesyłaj danych wrażliwych."
+      }
+    ]
+  },
+  "quizPage": {
+    "metaTitle": "Study Notes i Practice Mode | QuizSolver",
+    "metaDescription": "Przeglądaj zapisane Study Notes QuizSolver i twórz quiz powtórkowy z historii pytań.",
+    "badge": "Study Notes",
+    "title": "Zbuduj quiz powtórkowy z zapisanej historii pytań",
+    "subtitle": "Wybierz zapisane pytania, odpowiedzi i wyjaśnienia z QuizSolver, a potem ćwicz je w czystym trybie powtórki.",
+    "loginTitle": "Zaloguj się, aby wczytać notatki",
+    "loginSubtitle": "Użyj tego samego konta co w rozszerzeniu Chrome i panelu.",
+    "historyTitle": "Twoja historia pytań",
+    "historyCount": "zapisanych pytań"
+  },
+  "notFoundPage": {
+    "metaTitle": "Nie znaleziono strony | QuizSolver",
+    "metaDescription": "Ta strona QuizSolver nie została znaleziona. Wróć do strony głównej AI quiz solver, poradników platform albo Chrome Web Store.",
+    "badge": "404",
+    "title": "Ta strona nie jest dostępna",
+    "subtitle": "Link może być nieaktualny, przeniesiony albo wpisany z błędem. Możesz wrócić na stronę główną, otworzyć poradniki platform albo zainstalować rozszerzenie Chrome.",
+    "homeCta": "Wróć na stronę główną",
+    "guidesCta": "Zobacz poradniki platform",
+    "storeCta": "Otwórz Chrome Web Store"
+  },
+  "successPage": {
+    "metaTitle": "Płatność zakończona | QuizSolver",
+    "metaDescription": "Twoje kredyty QuizSolver zostały dodane. Otwórz panel albo wróć na stronę główną AI quiz solver.",
+    "badge": "Płatność zakończona",
+    "title": "Twoje kredyty są gotowe",
+    "subtitle": "Zakup został zakończony poprawnie. Otwórz panel, sprawdź saldo i użyj rozszerzenia Chrome, kiedy będziesz gotowy.",
+    "dashboardCta": "Otwórz panel",
+    "homeCta": "Wróć na stronę główną",
+    "storeCta": "Otwórz Chrome Web Store"
+  },
   "home": {
     "meta": {
-      "title": "QuizSolver - AI quiz solver dla Testportal, Moodle i Canvas",
-      "description": "QuizSolver to rozszerzenie AI quiz solver do ćwiczeń, wyjaśnień odpowiedzi, notatek i wspieranych platform: Testportal, Moodle, Canvas, Google Forms, Kahoot i Quizizz.",
-      "keywords": "quiz solver, quiz solver ai, ai quiz solver, testportal quiz solver, moodle quiz solver, canvas quiz solver, kahoot ai bot, asystent odpowiedzi ai, rozszerzenie quiz solver"
+      "title": "QuizSolver - AI quiz solver Chrome dla Testportal, Moodle i Canvas",
+      "description": "QuizSolver to angielskojęzyczne rozszerzenie AI quiz solver Chrome do sugestii odpowiedzi, krótkich wyjaśnień, Study Notes, Practice Mode i platform takich jak Testportal, Moodle, Canvas, Google Forms, Kahoot oraz Quizizz.",
+      "keywords": "quiz solver, quiz solver ai, ai quiz solver chrome, testportal quiz solver, moodle quiz solver, canvas quiz solver, kahoot ai bot, asystent odpowiedzi ai, rozszerzenie quiz solver"
     },
     "hero": {
-      "badge": "Rozszerzenie AI quiz solver",
-      "title": "Rozwiązuj, rozumiej i ćwicz pytania quizowe szybciej",
-      "subtitle": "QuizSolver wykrywa pytania na wspieranych platformach, sugeruje odpowiedź, wyjaśnia tok rozumowania i zapisuje notatki, żeby można było wrócić do nauki później.",
+      "badge": "Rozszerzenie AI quiz solver Chrome",
+      "title": "Odpowiedzi, wyjaśnienia i notatki do quizów w jednym rozszerzeniu Chrome",
+      "subtitle": "QuizSolver odczytuje pytania na wspieranych platformach, sugeruje krótkie odpowiedzi, wyjaśnia tok rozumowania i zapisuje przydatne pytania do późniejszych powtórek.",
       "primaryCta": "Zainstaluj z Chrome Web Store",
       "secondaryCta": "Jak to działa",
       "proof": [
@@ -126,38 +199,38 @@
     },
     "features": {
       "badge": "Nasze funkcje",
-      "title": "Wszystko, co przydaje si? w rozszerzeniu",
-      "subtitle": "QuizSolver to nie tylko jeden przycisk odpowiedzi. Pomaga rozwi?zywa?, rozumie?, zapisywa?, powtarza? i ?wiczy? z jednego konta.",
+      "title": "Wszystko, co przydaje się w rozszerzeniu",
+      "subtitle": "QuizSolver to nie tylko jeden przycisk odpowiedzi. Pomaga rozwiązywać, rozumieć, zapisywać, powtarzać i ćwiczyć z jednego konta.",
       "items": [
         {
           "icon": "AI",
           "title": "Sugestie odpowiedzi AI",
-          "text": "Wykrywaj pytania i otrzymuj czyste sugestie odpowiedzi bez zb?dnego lania wody."
+          "text": "Wykrywaj pytania i otrzymuj czyste sugestie odpowiedzi bez zbędnego lania wody."
         },
         {
-          "icon": "?",
-          "title": "Wyja?nij odpowied?",
-          "text": "Po rozwi?zaniu popro? o kr?tkie wyja?nienie, kiedy chcesz zrozumie? odpowied?."
+          "icon": "EX",
+          "title": "Wyjaśnij odpowiedź",
+          "text": "Po rozwiązaniu poproś o krótkie wyjaśnienie, kiedy chcesz zrozumieć odpowiedź."
         },
         {
           "icon": "N",
           "title": "Historia Study Notes",
-          "text": "Zapisuj pytania, odpowiedzi, wyja?nienia i status nauki do p??niejszej powt?rki."
+          "text": "Zapisuj pytania, odpowiedzi, wyjaśnienia i status nauki do późniejszej powtórki."
         },
         {
           "icon": "Q",
           "title": "Practice Mode",
-          "text": "Wybierz zapisane pytania i zamie? je w czysty quiz powt?rkowy na getquizsolver.com/quiz."
+          "text": "Wybierz zapisane pytania i zamień je w czysty quiz powtórkowy na getquizsolver.com/quiz."
         },
         {
           "icon": "C",
           "title": "Inteligentny cache",
-          "text": "Powtarzaj?ce si? pytania mog? wraca? z cache, co skraca czas i obni?a koszt."
+          "text": "Powtarzające się pytania mogą wracać z cache, co skraca czas i obniża koszt."
         },
         {
           "icon": "OK",
-          "title": "Kontrola uprawnie?",
-          "text": "Znane platformy dzia?aj? od razu, a zaufane strony mo?na w??cza? pojedynczo."
+          "title": "Kontrola uprawnień",
+          "text": "Znane platformy działają od razu, a zaufane strony można włączać pojedynczo."
         },
         {
           "icon": "PL",
@@ -167,12 +240,12 @@
         {
           "icon": "$",
           "title": "Estymacja kosztu dla admina",
-          "text": "Tryb testowy admina mo?e pokaza? wykryte pytania i szacowany koszt kredyt?w przed startem."
+          "text": "Tryb testowy admina może pokazać wykryte pytania i szacowany koszt kredytów przed startem."
         },
         {
           "icon": "IMG",
           "title": "Pytania z obrazami",
-          "text": "Wspierane pytania obrazkowe mog? przechodzi? przez ten sam workflow odpowiedzi."
+          "text": "Wspierane pytania obrazkowe mogą przechodzić przez ten sam workflow odpowiedzi."
         }
       ]
     },
@@ -196,26 +269,26 @@
     "pricing": {
       "badge": "Kredyty",
       "title": "Kup kredyty, kiedy ich potrzebujesz",
-      "subtitle": "Bez plan?w wygl?daj?cych jak subskrypcja. Wybierz jednorazowe do?adowanie kredyt?w i wr?? dopiero wtedy, gdy potrzebujesz wi?cej.",
+      "subtitle": "Bez planów wyglądających jak subskrypcja. Wybierz jednorazowe doładowanie kredytów i wróć dopiero wtedy, gdy potrzebujesz więcej.",
       "packs": [
         {
           "id": "starter",
-          "name": "100 kredyt?w",
+          "name": "100 kredytów",
           "price": "$1.99",
-          "credits": "Ma?e jednorazowe do?adowanie",
-          "button": "Kup 100 kredyt?w",
+          "credits": "Małe jednorazowe doładowanie",
+          "button": "Kup 100 kredytów",
           "features": [
             "Jednorazowy zakup",
-            "Dobre do szybkich powt?rek",
-            "Dzia?a z odpowiedziami i wyja?nieniami"
+            "Dobre do szybkich powtórek",
+            "Działa z odpowiedziami i wyjaśnieniami"
           ]
         },
         {
           "id": "popular",
-          "name": "500 kredyt?w",
+          "name": "500 kredytów",
           "price": "$4.99",
-          "credits": "Najlepsze do regularnego u?ycia",
-          "button": "Kup 500 kredyt?w",
+          "credits": "Najlepsze do regularnego użycia",
+          "button": "Kup 500 kredytów",
           "features": [
             "Jednorazowy zakup",
             "Lepsza cena za kredyt",
@@ -224,14 +297,14 @@
         },
         {
           "id": "pro",
-          "name": "2000 kredyt?w",
+          "name": "2000 kredytów",
           "price": "$9.99",
-          "credits": "Du?e jednorazowe do?adowanie",
-          "button": "Kup 2000 kredyt?w",
+          "credits": "Duże jednorazowe doładowanie",
+          "button": "Kup 2000 kredytów",
           "features": [
             "Jednorazowy zakup",
-            "Najni?szy koszt za kredyt",
-            "Najlepsze do wi?kszych sesji ?wicze?"
+            "Najniższy koszt za kredyt",
+            "Najlepsze do większych sesji ćwiczeń"
           ]
         }
       ]
@@ -271,31 +344,39 @@
       "copy": "Kopiuj link",
       "purchaseHistory": "Historia zakupów",
       "noPurchases": "Brak zakupów.",
-      "referralTitle": "Program polece?",
-      "referralSubtitle": "Udost?pnij link. Gdy polecony u?ytkownik kupi kredyty, bonus trafia na Twoje konto automatycznie.",
-      "referralLink": "Tw?j link polecaj?cy",
-      "referredUsers": "Zarejestrowani u?ytkownicy",
+      "referralTitle": "Program poleceń",
+      "referralSubtitle": "Udostępnij link. Gdy polecony użytkownik kupi kredyty, bonus trafia na Twoje konto automatycznie.",
+      "referralLink": "Twój link polecający",
+      "referredUsers": "Zarejestrowani użytkownicy",
       "referralPurchases": "Zakupy z Twojego kodu",
       "referralCredits": "Zdobyte kredyty bonusowe",
-      "referralHowTitle": "Jak to dzia?a",
-      "referralHow": "Skopiuj link, wy?lij go znajomemu, a jego konto zostanie po??czone z Twoim kodem podczas rejestracji. Bonusy pojawi? si? po zako?czonych zakupach kredyt?w."
+      "referralHowTitle": "Jak to działa",
+      "referralHow": "Skopiuj link, wyślij go znajomemu, a jego konto zostanie połączone z Twoim kodem podczas rejestracji. Bonusy pojawią się po zakończonych zakupach kredytów."
     },
     "faq": [
       {
         "question": "Czym jest QuizSolver?",
-        "answer": "QuizSolver to rozszerzenie AI quiz solver do ćwiczeń, wyjaśniania odpowiedzi, Study Notes i powtórek na wspieranych platformach."
+        "answer": "QuizSolver to rozszerzenie AI quiz solver Chrome i panel webowy do sugestii odpowiedzi, krótkich wyjaśnień, zapisanych Study Notes i Practice Mode na wspieranych platformach quizowych."
       },
       {
         "question": "Czy angielski jest głównym językiem getquizsolver.com?",
-        "answer": "Tak. Angielski jest domyślnym językiem głównych adresów URL. Polski jest dodatkową wersją pod /pl/."
+        "answer": "Tak. Główne publiczne adresy są pisane pod angielskie zapytania w Google. Polska wersja jest dostępna pod /pl/ i połączona przez hreflang."
       },
       {
         "question": "Jakie platformy obsługuje QuizSolver?",
-        "answer": "QuizSolver ma dedykowane workflow i strony SEO dla Testportal, Moodle, Canvas, Google Forms, Microsoft Forms, Kahoot, Quizizz i ogólnych fraz AI quiz solver."
+        "answer": "QuizSolver obsługuje workflow i poradniki dla Testportal, Moodle, Canvas, Google Forms, Microsoft Forms, Kahoot, Quizizz oraz ogólnych zastosowań AI quiz solver."
       },
       {
         "question": "Czy QuizSolver wyjaśnia odpowiedzi?",
-        "answer": "Tak. Użytkownik może poprosić o krótkie wyjaśnienie po rozwiązaniu i zapisać przydatne pytania do Study Notes."
+        "answer": "Tak. Po rozwiązaniu można poprosić o krótkie wyjaśnienie i zapisać ważne pytania w Study Notes do późniejszej powtórki."
+      },
+      {
+        "question": "Czy muszę kupować subskrypcję?",
+        "answer": "Nie. QuizSolver używa jednorazowych doładowań kredytów, więc kupujesz je wtedy, kiedy ich potrzebujesz."
+      },
+      {
+        "question": "Po co jest Practice Mode?",
+        "answer": "Practice Mode zamienia zapisaną historię w quiz powtórkowy, dzięki czemu rozszerzenie pomaga w nauce, a nie tylko pokazuje jednorazową odpowiedź."
       }
     ]
   },

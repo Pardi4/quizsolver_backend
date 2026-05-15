@@ -50,36 +50,58 @@ function renderHead({ pageKey, locale, nonce }) {
   <script type="application/ld+json" nonce="${escapeAttr(nonce || '')}">${safeJson(jsonLd)}</script>`;
 }
 
-function renderUtilityHead({ locale, nonce, title, description, canonicalPath, robots = 'noindex, nofollow', styles = [] }) {
+function renderUtilityHead({
+  locale,
+  nonce,
+  title,
+  description,
+  canonicalPath,
+  robots = 'noindex, nofollow',
+  styles = [],
+  pageKey = '',
+  keywords = '',
+  ogType = 'website',
+  jsonLd
+}) {
+  const c = content(locale);
   const canonical = abs(canonicalPath);
+  const alternateLinks = pageKey ? `
+  <link rel="alternate" hreflang="en" href="${abs(pathFor(pageKey, 'en'))}">
+  <link rel="alternate" hreflang="pl" href="${abs(pathFor(pageKey, 'pl'))}">
+  <link rel="alternate" hreflang="x-default" href="${abs(pathFor(pageKey, 'en'))}">` : '';
+  const pageJsonLd = jsonLd || {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    url: canonical,
+    isPartOf: { '@type': 'WebSite', name: 'QuizSolver', url: abs('/') },
+    inLanguage: locale
+  };
   return `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeAttr(description)}">
+  ${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}">` : ''}
   <meta name="author" content="QuizSolver">
   <meta name="robots" content="${escapeAttr(robots)}">
   <meta name="theme-color" content="#6c3dff">
   <link rel="canonical" href="${canonical}">
-  <meta property="og:type" content="website">
+  ${alternateLinks}
+  <meta property="og:type" content="${escapeAttr(ogType)}">
   <meta property="og:site_name" content="QuizSolver">
   <meta property="og:url" content="${canonical}">
   <meta property="og:title" content="${escapeAttr(title)}">
   <meta property="og:description" content="${escapeAttr(description)}">
   <meta property="og:image" content="${abs('/og-image.svg')}">
+  <meta property="og:locale" content="${c.ogLocale}">
+  <meta property="og:locale:alternate" content="${locale === 'pl' ? 'en_US' : 'pl_PL'}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeAttr(title)}">
   <meta name="twitter:description" content="${escapeAttr(description)}">
   <meta name="twitter:image" content="${abs('/og-image.svg')}">
   ${renderCommonAssets(styles)}
-  <script type="application/ld+json" nonce="${escapeAttr(nonce || '')}">${safeJson({
-    '@context': 'https://schema.org',
-    '@type': 'WebApplication',
-    name: 'QuizSolver Dashboard',
-    url: canonical,
-    isPartOf: { '@type': 'WebSite', name: 'QuizSolver', url: abs('/') },
-    inLanguage: locale
-  })}</script>`;
+  <script type="application/ld+json" nonce="${escapeAttr(nonce || '')}">${safeJson(pageJsonLd)}</script>`;
 }
 
 function renderCommonAssets(styles = []) {
@@ -87,10 +109,7 @@ function renderCommonAssets(styles = []) {
     .map(href => `<link rel="stylesheet" href="${escapeAttr(href)}">`)
     .join('\n  ');
 
-  return `<link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/site.css?v=${ASSET_VERSION}">
+  return `<link rel="stylesheet" href="/site.css?v=${ASSET_VERSION}">
   ${extraStyles}`;
 }
 
@@ -106,7 +125,7 @@ function buildJsonLd({ pageKey, locale, data, meta, canonical }) {
       logo: abs('/og-image.svg'),
       contactPoint: {
         '@type': 'ContactPoint',
-        email: 'support@getquizsolver.com',
+        url: abs('/privacy#contact'),
         contactType: 'customer support',
         availableLanguage: ['English', 'Polish']
       }
@@ -233,15 +252,6 @@ function sitemapUrl(pageKey, locale, priority) {
   </url>`;
 }
 
-function simpleSitemapUrl(urlPath, priority) {
-  return `  <url>
-    <loc>${abs(urlPath)}</loc>
-    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>${priority}</priority>
-  </url>`;
-}
-
 function getSitemapXml() {
   const entries = [
     sitemapUrl('home', 'en', '1.0'),
@@ -253,7 +263,8 @@ function getSitemapXml() {
         sitemapUrl(pageKey, 'pl', priority)
       ];
     }),
-    simpleSitemapUrl('/privacy', '0.3')
+    sitemapUrl('privacy', 'en', '0.4'),
+    sitemapUrl('privacy', 'pl', '0.35')
   ];
 
   return `<?xml version="1.0" encoding="UTF-8"?>

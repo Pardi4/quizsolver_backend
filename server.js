@@ -12,7 +12,11 @@ const {
   getRobotsTxt,
   getSitemapXml,
   renderDashboardPage,
-  renderMarketingPage
+  renderMarketingPage,
+  renderNotFoundPage,
+  renderPrivacyPage,
+  renderQuizPage,
+  renderSuccessPage
 } = require('./marketing/render');
 
 const authRoutes = require('./routes/auth');
@@ -54,8 +58,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'"],
       scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
       imgSrc: ["'self'", "data:"],
       connectSrc: ["'self'"],
@@ -67,6 +71,11 @@ app.use(helmet({
   crossOriginOpenerPolicy: false,
   xFrameOptions: { action: 'deny' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  hsts: IS_PRODUCTION ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  } : false,
 }));
 
 app.use(cors({
@@ -170,6 +179,70 @@ app.get(['/pl/dashboard', '/pl/dashboard/'], (req, res) => {
   }));
 });
 
+app.get(['/privacy', '/privacy/'], (req, res) => {
+  res.set('Content-Language', 'en');
+  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+  res.type('html').send(renderPrivacyPage({
+    locale: 'en',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get(['/pl/privacy', '/pl/privacy/'], (req, res) => {
+  res.set('Content-Language', 'pl');
+  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+  res.type('html').send(renderPrivacyPage({
+    locale: 'pl',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get('/privacy.html', (req, res) => {
+  res.redirect(301, '/privacy');
+});
+
+app.get(['/quiz', '/quiz/'], (req, res) => {
+  res.set('Content-Language', 'en');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderQuizPage({
+    locale: 'en',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get(['/pl/quiz', '/pl/quiz/'], (req, res) => {
+  res.set('Content-Language', 'pl');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderQuizPage({
+    locale: 'pl',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get('/quiz.html', (req, res) => {
+  res.redirect(301, '/quiz');
+});
+
+app.get(['/404', '/404/'], (req, res) => {
+  res.status(404);
+  res.set('Content-Language', 'en');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderNotFoundPage({
+    locale: 'en',
+    nonce: res.locals.cspNonce
+  }));
+});
+
+app.get(['/pl/404', '/pl/404/'], (req, res) => {
+  res.status(404);
+  res.set('Content-Language', 'pl');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderNotFoundPage({
+    locale: 'pl',
+    nonce: res.locals.cspNonce
+  }));
+});
+
 getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
   app.get(routePath, (req, res) => {
     if (req.query.lang === 'pl') {
@@ -178,8 +251,6 @@ getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
     sendMarketingPage(res, pageKey, locale);
   });
 });
-
-app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
@@ -211,42 +282,53 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
-app.get('/privacy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+app.get(['/success', '/success/'], (req, res) => {
+  res.set('Content-Language', 'en');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderSuccessPage({
+    locale: 'en',
+    nonce: res.locals.cspNonce
+  }));
 });
 
-app.get('/pl/privacy', (req, res) => {
-  res.redirect(301, '/privacy');
+app.get(['/pl/success', '/pl/success/'], (req, res) => {
+  res.set('Content-Language', 'pl');
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderSuccessPage({
+    locale: 'pl',
+    nonce: res.locals.cspNonce
+  }));
 });
 
-app.get('/privacy.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
-});
-
-app.get('/quiz', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
-});
-
-app.get('/quiz.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'quiz.html'));
-});
-
-app.get('/pl/quiz', (req, res) => {
-  res.redirect(302, '/quiz');
-});
-
-app.get('/success', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'success.html'));
+app.get('/success.html', (req, res) => {
+  res.redirect(301, '/success');
 });
 
 if (!IS_PRODUCTION) {
   app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
   });
+} else {
+  app.get(['/admin', '/admin/', '/admin.html', '/admin-app.js'], (req, res) => {
+    res.status(404).json({ error: 'Not found.' });
+  });
 }
 
+app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
+
 app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found.' });
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Endpoint not found.' });
+  }
+
+  const locale = req.path.startsWith('/pl/') || req.path === '/pl' ? 'pl' : 'en';
+  res.status(404);
+  res.set('Content-Language', locale);
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderNotFoundPage({
+    locale,
+    nonce: res.locals.cspNonce
+  }));
 });
 
 app.use((err, req, res, next) => {

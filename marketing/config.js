@@ -2,7 +2,7 @@ const en = require('../i18n/en.json');
 const pl = require('../i18n/pl.json');
 
 const SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
-const ASSET_VERSION = '2026-05-14';
+const ASSET_VERSION = '2026-05-15';
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
 
 const TRANSLATIONS = { en, pl };
@@ -26,6 +26,10 @@ const PAGE_ROUTES = {
   dashboard: {
     en: '/dashboard',
     pl: '/pl/dashboard'
+  },
+  quiz: {
+    en: '/quiz',
+    pl: '/pl/quiz'
   },
   quizSolverAi: {
     en: '/quiz-solver-ai',
@@ -61,7 +65,15 @@ const PAGE_ROUTES = {
   },
   privacy: {
     en: '/privacy',
-    pl: '/privacy'
+    pl: '/pl/privacy'
+  },
+  notFound: {
+    en: '/404',
+    pl: '/pl/404'
+  },
+  success: {
+    en: '/success',
+    pl: '/pl/success'
   }
 };
 
@@ -122,7 +134,7 @@ function platformLabel(pageKey, locale) {
 }
 
 function localizedQuizPath(locale) {
-  return locale === 'pl' ? '/pl/quiz' : '/quiz';
+  return pathFor('quiz', locale);
 }
 
 module.exports = {

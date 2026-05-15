@@ -159,7 +159,7 @@ function renderStudyWorkflow(locale) {
           <article class="tutorial-step">
             <div class="step-number">${index + 1}</div>
             <div class="step-content">
-              <h4>${escapeHtml(step.title)}</h4>
+              <h3>${escapeHtml(step.title)}</h3>
               <p>${escapeHtml(step.text)}</p>
             </div>
           </article>`).join('')}
@@ -294,7 +294,7 @@ function renderDashboard(locale, options = {}) {
           </div>
         </div>
         <div class="referral-how">
-          <h4>${escapeHtml(d.referralHowTitle)}</h4>
+          <h3>${escapeHtml(d.referralHowTitle)}</h3>
           <p>${escapeHtml(d.referralHow)}</p>
         </div>
       </div>

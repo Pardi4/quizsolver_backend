@@ -178,3 +178,26 @@ systemctl status nginx
 docker ps
 curl http://127.0.0.1:30583/api/health
 ```
+
+## 14. Release checklist SEO
+
+Przed publicznym wydaniem sprawdz:
+
+```bash
+curl -I https://getquizsolver.com/
+curl https://getquizsolver.com/sitemap.xml
+curl https://getquizsolver.com/robots.txt
+curl -I https://getquizsolver.com/privacy
+curl -I https://getquizsolver.com/pl/privacy
+curl -I https://getquizsolver.com/quiz
+curl -I https://getquizsolver.com/404
+```
+
+W Google Search Console:
+
+- dodaj wlasnosc domeny `getquizsolver.com`,
+- wyslij `https://getquizsolver.com/sitemap.xml`,
+- uzyj URL Inspection dla `/`, `/quiz-solver-ai`, `/testportal-quiz-solver`, `/privacy`,
+- po wdrozeniu odpal PageSpeed Insights dla `https://getquizsolver.com/` i porownaj wynik z raportem.
+
+Strona glowna jest wersja angielska i `x-default`; polska wersja jest pod `/pl/`.

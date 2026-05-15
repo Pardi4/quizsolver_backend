@@ -3,7 +3,11 @@ const { renderAuth, renderFooter, renderNav } = require('./partials');
 const { getRobotsTxt, getSitemapXml, renderHead } = require('./seo');
 const { renderDashboardPage } = require('./pages/dashboard');
 const { renderHome } = require('./pages/home');
+const { renderNotFoundPage } = require('./pages/notFound');
 const { renderPlatformPage } = require('./pages/platform');
+const { renderPrivacyPage } = require('./pages/privacy');
+const { renderQuizPage } = require('./pages/quiz');
+const { renderSuccessPage } = require('./pages/success');
 
 function renderMarketingPage({ pageKey, locale, nonce }) {
   const c = content(locale);
@@ -35,5 +39,9 @@ module.exports = {
   getSitemapXml,
   pathFor,
   renderDashboardPage,
-  renderMarketingPage
+  renderMarketingPage,
+  renderNotFoundPage,
+  renderPrivacyPage,
+  renderQuizPage,
+  renderSuccessPage
 };

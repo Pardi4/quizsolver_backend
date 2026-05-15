@@ -81,16 +81,89 @@
     "loginText": "Your credits, purchase history, and saved study workflow are connected to your QuizSolver account.",
     "loginButton": "Sign in"
   },
+  "privacyPage": {
+    "metaTitle": "Privacy Policy | QuizSolver",
+    "metaDescription": "Read the QuizSolver privacy policy for the AI quiz solver Chrome extension, web dashboard, credits, Study Notes, and Practice Mode.",
+    "keywords": "QuizSolver privacy policy, quiz solver privacy, AI quiz solver data, Chrome extension privacy",
+    "badge": "Privacy Policy",
+    "title": "QuizSolver Privacy Policy",
+    "subtitle": "A clear summary of what the QuizSolver website, dashboard, and Chrome extension need to operate accounts, credits, saved notes, and AI-powered quiz assistance.",
+    "effective": "Effective date: May 15, 2026",
+    "contactLabel": "Contact",
+    "contactValue": "support [at] getquizsolver.com",
+    "sections": [
+      {
+        "title": "1. Data we collect",
+        "items": [
+          "Account data such as email address, display name, hashed password, role, credits, referral code, and basic activity counters.",
+          "Quiz workflow data such as question text, options, answer format, explanations, saved Study Notes, and optional image content needed to process a request.",
+          "Purchase data such as credit pack, payment status, checkout identifiers, timestamps, and purchase history. Full card details are handled by the payment provider.",
+          "Security and support data such as request metadata, rate-limit counters, server logs, bug reports, and support messages."
+        ]
+      },
+      {
+        "title": "2. How we use data",
+        "text": "We use data to authenticate users, process quiz requests, return answer suggestions and explanations, manage credit balances, provide Practice Mode, process purchases, prevent abuse, diagnose errors, and support users."
+      },
+      {
+        "title": "3. AI processing",
+        "text": "When you ask QuizSolver to answer or explain a question, the relevant question content may be sent to an AI provider. Do not submit sensitive personal data, confidential exam material, or information you are not allowed to process."
+      },
+      {
+        "title": "4. Storage and retention",
+        "text": "Account and purchase records are retained while the account is active and as required for security, accounting, dispute handling, or legal compliance. Cached answer data may be retained to improve speed and reduce repeated AI requests."
+      },
+      {
+        "title": "5. Your choices",
+        "text": "You can request access, correction, deletion, or export of your account data by contacting QuizSolver support. Some records may need to be retained where required by law or legitimate security needs."
+      },
+      {
+        "title": "6. Security",
+        "text": "QuizSolver uses HTTPS, authentication, rate limits, access controls, and operational safeguards. No online service can guarantee perfect security, so use a strong unique password and avoid submitting sensitive data."
+      }
+    ]
+  },
+  "quizPage": {
+    "metaTitle": "Study Notes and Practice Mode | QuizSolver",
+    "metaDescription": "Review saved QuizSolver Study Notes and build a practice quiz from your question history.",
+    "badge": "Study Notes",
+    "title": "Build a practice quiz from your saved question history",
+    "subtitle": "Choose saved questions, answers, and explanations from QuizSolver, then practice them in a clean review mode.",
+    "loginTitle": "Sign in to load your notes",
+    "loginSubtitle": "Use the same account as the Chrome extension and dashboard.",
+    "historyTitle": "Your question history",
+    "historyCount": "saved questions"
+  },
+  "notFoundPage": {
+    "metaTitle": "Page Not Found | QuizSolver",
+    "metaDescription": "This QuizSolver page could not be found. Return to the AI quiz solver homepage, platform guides, or Chrome Web Store.",
+    "badge": "404",
+    "title": "This page is not available",
+    "subtitle": "The link may be outdated, moved, or typed incorrectly. You can return to the English homepage, open platform guides, or install the Chrome extension.",
+    "homeCta": "Go to homepage",
+    "guidesCta": "View platform guides",
+    "storeCta": "Open Chrome Web Store"
+  },
+  "successPage": {
+    "metaTitle": "Payment Successful | QuizSolver",
+    "metaDescription": "Your QuizSolver credits were added successfully. Open your dashboard or return to the AI quiz solver homepage.",
+    "badge": "Payment complete",
+    "title": "Your credits are ready",
+    "subtitle": "The purchase was completed successfully. Open your dashboard to check your balance, then use the Chrome extension when you are ready.",
+    "dashboardCta": "Open dashboard",
+    "homeCta": "Back to homepage",
+    "storeCta": "Open Chrome Web Store"
+  },
   "home": {
     "meta": {
-      "title": "QuizSolver - AI Quiz Solver Extension for Testportal, Moodle and Canvas",
-      "description": "QuizSolver is an AI quiz solver browser extension for practice, answer explanations, study notes, and supported platforms including Testportal, Moodle, Canvas, Google Forms, Kahoot and Quizizz.",
-      "keywords": "quiz solver, quiz solver ai, ai quiz solver, testportal quiz solver, moodle quiz solver, canvas quiz solver, kahoot ai bot, quiz answer assistant, quiz solver extension"
+      "title": "QuizSolver - AI Quiz Solver Chrome Extension for Testportal, Moodle and Canvas",
+      "description": "QuizSolver is an English-first AI quiz solver Chrome extension for answer suggestions, short explanations, Study Notes, Practice Mode, and supported platforms including Testportal, Moodle, Canvas, Google Forms, Kahoot and Quizizz.",
+      "keywords": "quiz solver, quiz solver ai, ai quiz solver chrome extension, testportal quiz solver, moodle quiz solver, canvas quiz solver, kahoot ai bot, quiz answer assistant, quiz solver extension, get quiz solver"
     },
     "hero": {
-      "badge": "AI quiz solver browser extension",
-      "title": "Solve, understand, and practice quiz questions faster",
-      "subtitle": "QuizSolver detects questions on supported quiz platforms, suggests an answer, explains the reasoning, and saves study notes so you can practice again later.",
+      "badge": "AI quiz solver Chrome extension",
+      "title": "Get quiz answers, explanations, and practice notes in one Chrome extension",
+      "subtitle": "QuizSolver reads questions on supported quiz platforms, suggests concise answers, explains the reasoning, and saves useful questions so you can practice them later.",
       "primaryCta": "Install from Chrome Web Store",
       "secondaryCta": "How it works",
       "proof": ["Works on Testportal, Moodle, Canvas and more", "Answer explanations after solving", "Practice Mode from saved history"],
@@ -256,19 +329,27 @@
     "faq": [
       {
         "question": "What is QuizSolver?",
-        "answer": "QuizSolver is an AI quiz solver browser extension built for practice, answer explanations, Study Notes, and revision on supported quiz platforms."
+        "answer": "QuizSolver is an AI quiz solver Chrome extension and web dashboard for answer suggestions, short explanations, saved Study Notes, and Practice Mode on supported quiz platforms."
       },
       {
-        "question": "Is English the main language of getquizsolver.com?",
-        "answer": "Yes. English is the default language on the main URLs. Polish is available as a secondary version under /pl/."
+        "question": "Is English the primary language of getquizsolver.com?",
+        "answer": "Yes. The main public URLs are written for English search intent. Polish pages are available under /pl/ and are connected with hreflang."
       },
       {
         "question": "Which quiz platforms are supported?",
-        "answer": "QuizSolver has dedicated workflows and SEO pages for Testportal, Moodle, Canvas, Google Forms, Microsoft Forms, Kahoot, Quizizz, and general AI quiz solver searches."
+        "answer": "QuizSolver supports workflows and platform guides for Testportal, Moodle, Canvas, Google Forms, Microsoft Forms, Kahoot, Quizizz, and broader AI quiz solver use cases."
       },
       {
         "question": "Does QuizSolver explain answers?",
-        "answer": "Yes. Users can request a short explanation after solving and save useful questions into Study Notes for later practice."
+        "answer": "Yes. After solving, users can request a concise explanation and save important questions into Study Notes for later review."
+      },
+      {
+        "question": "Do I need a subscription?",
+        "answer": "No. QuizSolver uses one-time credit top-ups, so users can buy credits when they need them instead of choosing a subscription plan."
+      },
+      {
+        "question": "Why does QuizSolver have a Practice Mode?",
+        "answer": "Practice Mode turns saved history into review quizzes, which makes the extension useful for learning instead of only returning a one-time answer."
       }
     ]
   },
