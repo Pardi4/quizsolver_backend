@@ -274,7 +274,20 @@ router.post('/practice', async (req, res) => {
 
 router.use(quizLimiter);
 
-router.post('/solve-snapshot', async (req, res) => {
+const userLocks = new Set();
+const preventConcurrentQuiz = (req, res, next) => {
+  const userId = req.user._id.toString();
+  if (userLocks.has(userId)) {
+    return res.status(429).json({ error: 'Please wait for your previous request to finish.', limitReached: false });
+  }
+  userLocks.add(userId);
+  const release = () => userLocks.delete(userId);
+  res.on('finish', release);
+  res.on('close', release);
+  next();
+};
+
+router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
   try {
     const imageData = String(req.body.imageData || '');
     const user = req.user;
@@ -353,7 +366,7 @@ router.post('/solve-snapshot', async (req, res) => {
   }
 });
 
-router.post('/solve', async (req, res) => {
+router.post('/solve', preventConcurrentQuiz, async (req, res) => {
   try {
     const { questionData } = req.body;
     const user = req.user;
@@ -410,7 +423,7 @@ router.post('/solve', async (req, res) => {
   }
 });
 
-router.post('/solve-batch', async (req, res) => {
+router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
   try {
     const { questions } = req.body;
     const user = req.user;
@@ -473,7 +486,7 @@ router.post('/solve-batch', async (req, res) => {
   }
 });
 
-router.post('/explain', async (req, res) => {
+router.post('/explain', preventConcurrentQuiz, async (req, res) => {
   try {
     const { answer } = req.body;
     const text = sanitizeText(req.body.text);

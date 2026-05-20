@@ -25,7 +25,7 @@ const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
-const ANGULAR_BROWSER_DIR = path.join(__dirname, 'angular-web', 'dist', 'angular-web', 'browser');
+const ANGULAR_BROWSER_DIR = path.join(__dirname, '..', 'frontend', 'dist', 'angular-web', 'browser');
 const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
 const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
 
@@ -162,7 +162,9 @@ function angularIndexPath(routePath) {
   return cleanPath ? path.join(ANGULAR_BROWSER_DIR, cleanPath, 'index.html') : ANGULAR_INDEX;
 }
 
-function sendAngularPage(req, res, routePath = req.path, statusCode = 200) {
+const routeFileCache = new Map();
+
+async function sendAngularPage(req, res, routePath = req.path, statusCode = 200) {
   if (!HAS_ANGULAR_BUILD) {
     res.status(503).type('html').send([
       '<!doctype html><html><head><meta charset="utf-8"><title>QuizSolver</title></head>',
@@ -175,7 +177,21 @@ function sendAngularPage(req, res, routePath = req.path, statusCode = 200) {
   }
 
   const routeFile = angularIndexPath(routePath);
-  const filePath = fs.existsSync(routeFile) ? routeFile : ANGULAR_INDEX;
+  let filePath = ANGULAR_INDEX;
+
+  if (routeFileCache.has(routeFile)) {
+    filePath = routeFileCache.get(routeFile) ? routeFile : ANGULAR_INDEX;
+  } else {
+    try {
+      await fs.promises.access(routeFile, fs.constants.R_OK);
+      routeFileCache.set(routeFile, true);
+      filePath = routeFile;
+    } catch {
+      routeFileCache.set(routeFile, false);
+      filePath = ANGULAR_INDEX;
+    }
+  }
+
   const noStore = /(?:dashboard|success|404|admin|quiz)/.test(routePath);
 
   res.status(statusCode);

@@ -31,18 +31,26 @@ ufw enable
 ufw status
 ```
 
-## 4. Wgranie backendu
+## 4. Wgranie kodu i budowanie Frontendu
 
-Na serwerze:
+Na serwerze najpierw wgraj cały projekt (zawierający foldery `frontend` i `backend`).
 
 ```bash
 mkdir -p /var/www/quizsolver
 cd /var/www/quizsolver
 git clone https://github.com/Pardi4/quizsolver_backend.git .
+
+# 1. Zbudowanie frontend'u (Angular)
+cd frontend
+npm install
+npm run build
+
+# 2. Instalacja backend'u
+cd ../backend
 npm ci --omit=dev
 ```
 
-Jesli nie uzywasz gita, wrzuc folder `backend` przez SFTP do `/var/www/quizsolver`, potem wejdz do `/var/www/quizsolver` i uruchom `npm ci --omit=dev`.
+Jeśli nie używasz Gita, wrzuć foldery `frontend` i `backend` przez SFTP do `/var/www/quizsolver`, a następnie wykonaj w nich polecenia `npm install` (i `npm run build` w frontendzie).
 
 ## 5. MongoDB na tym VPS
 
@@ -165,6 +173,14 @@ Dodaj:
 ```bash
 cd /var/www/quizsolver
 git pull
+
+# Update frontend'u
+cd frontend
+npm install
+npm run build
+
+# Update backend'u
+cd ../backend
 npm ci --omit=dev
 pm2 restart quizsolver
 ```

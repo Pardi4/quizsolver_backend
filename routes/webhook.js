@@ -59,8 +59,13 @@ router.post('/payment', async (req, res) => {
     const signature = req.headers['whop-signature'] || req.headers['x-signature'] || req.headers['webhook-signature'] || '';
     const rawBody = req.body.toString();
 
-    if (secret && signature && !verifyWhopSignature(rawBody, signature, secret)) {
-      console.warn('[Webhook] Invalid signature');
+    if (!secret) {
+      console.error('[Webhook] WHOP_WEBHOOK_SECRET is not configured!');
+      return res.status(500).json({ error: 'Webhook configuration error.' });
+    }
+
+    if (!signature || !verifyWhopSignature(rawBody, signature, secret)) {
+      console.warn('[Webhook] Invalid or missing signature');
       return res.status(400).json({ error: 'Invalid signature.' });
     }
 
@@ -167,55 +172,6 @@ router.post('/payment', async (req, res) => {
   }
 });
 
-// Demo payment endpoint (for testing only)
-router.post('/demo-payment', express.json(), async (req, res) => {
-  try {
-    const { userId, pack, credits } = req.body;
-    if (!userId || !pack || !credits) {
-      return res.status(400).json({ error: 'Missing required fields.' });
-    }
 
-    const creditsNum = parseInt(credits, 10);
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-
-    // Add credits
-    user.addCredits(creditsNum);
-    await user.save();
-
-    // Record purchase
-    await Purchase.create({
-      userId: user._id,
-      pack: pack,
-      credits: creditsNum,
-      priceUsd: pack === 'starter' ? 1.99 : pack === 'popular' ? 4.99 : 9.99,
-      paymentProvider: 'demo',
-      externalOrderId: `demo_${Date.now()}`
-    });
-
-    // Handle referral bonus (5% of credits to referrer)
-    if (user.referredBy) {
-      const referrer = await User.findById(user.referredBy);
-      if (referrer) {
-        const bonus = Math.max(1, Math.floor(creditsNum * 0.05));
-        referrer.addCredits(bonus);
-        await referrer.save();
-        await Purchase.create({
-          userId: referrer._id,
-          pack: 'referral_bonus',
-          credits: bonus,
-          priceUsd: 0,
-          paymentProvider: 'referral',
-          grantReason: `5% referral from ${user.email}`
-        });
-      }
-    }
-
-    res.json({ success: true, credits: user.credits });
-  } catch (error) {
-    console.error('[Webhook] Demo payment error:', error.message);
-    res.status(500).json({ error: 'Demo payment failed.' });
-  }
-});
 
 module.exports = router;
