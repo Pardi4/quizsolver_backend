@@ -134,15 +134,13 @@ router.post('/payment', async (req, res) => {
       if (targetUser.referredBy) {
         const referrer = await User.findById(targetUser.referredBy);
         if (referrer) {
-          const bonus = Math.floor(credits * 0.1);
-          if (bonus > 0) {
-            await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
-              priceUsd: 0,
-              paymentProvider: 'referral',
-              grantReason: `Referral from ${targetUser.email}`
-            });
-            console.log(`[Webhook] Referral bonus: +${bonus} to ${referrer.email}`);
-          }
+          const bonus = Math.max(1, Math.floor(credits * 0.05));
+          await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
+            priceUsd: 0,
+            paymentProvider: 'referral',
+            grantReason: `Referral bonus (5%) from ${targetUser.email}`
+          });
+          console.log(`[Webhook] Referral 5% bonus: +${bonus} credits to ${referrer.email}`);
         }
       }
 
@@ -166,6 +164,57 @@ router.post('/payment', async (req, res) => {
   } catch (error) {
     console.error('[Webhook] Error:', error.message);
     res.status(200).json({ received: true });
+  }
+});
+
+// Demo payment endpoint (for testing only)
+router.post('/demo-payment', express.json(), async (req, res) => {
+  try {
+    const { userId, pack, credits } = req.body;
+    if (!userId || !pack || !credits) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    const creditsNum = parseInt(credits, 10);
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    // Add credits
+    user.addCredits(creditsNum);
+    await user.save();
+
+    // Record purchase
+    await Purchase.create({
+      userId: user._id,
+      pack: pack,
+      credits: creditsNum,
+      priceUsd: pack === 'starter' ? 1.99 : pack === 'popular' ? 4.99 : 9.99,
+      paymentProvider: 'demo',
+      externalOrderId: `demo_${Date.now()}`
+    });
+
+    // Handle referral bonus (5% of credits to referrer)
+    if (user.referredBy) {
+      const referrer = await User.findById(user.referredBy);
+      if (referrer) {
+        const bonus = Math.max(1, Math.floor(creditsNum * 0.05));
+        referrer.addCredits(bonus);
+        await referrer.save();
+        await Purchase.create({
+          userId: referrer._id,
+          pack: 'referral_bonus',
+          credits: bonus,
+          priceUsd: 0,
+          paymentProvider: 'referral',
+          grantReason: `5% referral from ${user.email}`
+        });
+      }
+    }
+
+    res.json({ success: true, credits: user.credits });
+  } catch (error) {
+    console.error('[Webhook] Demo payment error:', error.message);
+    res.status(500).json({ error: 'Demo payment failed.' });
   }
 });
 

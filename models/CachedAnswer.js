@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const { cleanQuizText } = require('../utils/textSanitizer');
 
 const cachedAnswerSchema = new mongoose.Schema({
   questionHash: {
@@ -18,6 +19,10 @@ const cachedAnswerSchema = new mongoose.Schema({
     required: true
   },
   options: [String],
+  imageFingerprint: {
+    type: String,
+    default: ''
+  },
   answer: {
     type: mongoose.Schema.Types.Mixed,
     required: true
@@ -27,13 +32,42 @@ const cachedAnswerSchema = new mongoose.Schema({
   lastUsedAt: { type: Date, default: Date.now }
 });
 
+function normalizeOption(text) {
+  return cleanQuizText(text).toLowerCase().replace(/\s+/g, ' ');
+}
+
+function imageFingerprint(questionData) {
+  const raw = String(questionData?.imageFingerprint || questionData?.imageUrl || '').trim();
+  if (!raw) return '';
+
+  if (raw.startsWith('data:image/')) {
+    return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+  }
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return crypto
+        .createHash('sha256')
+        .update(`${parsed.protocol}//${parsed.hostname}${parsed.pathname}`)
+        .digest('hex')
+        .slice(0, 32);
+    }
+  } catch {}
+
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32);
+}
+
+cachedAnswerSchema.statics.generateImageFingerprint = imageFingerprint;
+
 cachedAnswerSchema.statics.generateHash = function(questionData) {
-  const sortedOptions = [...(questionData.options || [])].map(o => o.trim().toLowerCase()).sort();
+  const sortedOptions = [...(questionData.options || [])].map(normalizeOption).sort();
 
   const normalized = JSON.stringify({
-    text: (questionData.text || '').trim().toLowerCase().replace(/\s+/g, ' '),
+    text: cleanQuizText(questionData.text).toLowerCase().replace(/\s+/g, ' '),
     options: sortedOptions,
-    type: questionData.type
+    type: questionData.type,
+    image: imageFingerprint(questionData)
   });
   return crypto.createHash('sha256').update(normalized).digest('hex');
 };
@@ -49,7 +83,7 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
     if (questionData.type === 'radio' && typeof cached.answer === 'number') {
       const oldText = cached.options[cached.answer];
       if (oldText && questionData.options) {
-        const newIdx = questionData.options.findIndex(o => o.trim() === oldText.trim());
+        const newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
         if (newIdx !== -1) return newIdx;
       }
     } else if (questionData.type === 'checkbox' && Array.isArray(cached.answer)) {
@@ -58,7 +92,7 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
         for (const oldIdx of cached.answer) {
           const oldText = cached.options[oldIdx];
           if (oldText) {
-            const newIdx = questionData.options.findIndex(o => o.trim() === oldText.trim());
+            const newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
             if (newIdx !== -1) newIndices.push(newIdx);
           }
         }
@@ -78,9 +112,10 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
       { questionHash: hash },
       {
         $set: {
-          questionText: (questionData.text || '').substring(0, 500),
+          questionText: cleanQuizText(questionData.cacheQuestionText || questionData.text || '').substring(0, 500),
           questionType: questionData.type,
-          options: (questionData.options || []).map(o => o.substring(0, 200)),
+          options: (questionData.options || []).map(o => cleanQuizText(o).substring(0, 200)),
+          imageFingerprint: imageFingerprint(questionData),
           answer: answer,
           lastUsedAt: new Date()
         },

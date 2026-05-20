@@ -667,6 +667,108 @@
       ],
       "note": "Używaj QuizSolver odpowiedzialnie i tylko tam, gdzie pomoc jest dozwolona."
     },
+    "blackboard": {
+      "platformName": "Blackboard",
+      "shortName": "Blackboard",
+      "linkTitle": "Poradnik Blackboard quiz solver",
+      "meta": {
+        "title": "Blackboard Quiz Solver AI - asystent nauki z wyjaśnieniami",
+        "description": "Używaj QuizSolver jako Blackboard quiz solver AI do dozwolonych ćwiczeń, wyjaśnień odpowiedzi, notatek i powtórek.",
+        "keywords": "blackboard quiz solver, blackboard quiz solver ai, asystent odpowiedzi blackboard, quiz solver ai, blackboard quiz helper"
+      },
+      "badge": "Workflow Blackboard",
+      "title": "Blackboard quiz solver AI do powtórek i ćwiczeń",
+      "subtitle": "QuizSolver pomaga powtarzać pytania w stylu Blackboard z sugestiami AI, krótkimi wyjaśnieniami i Study Notes.",
+      "primaryCta": "Wypróbuj QuizSolver",
+      "secondaryCta": "Zobacz platformy",
+      "introTitle": "Dedykowany landing SEO dla Blackboard",
+      "intro": "Ta strona daje frazom Blackboard quiz solver osobny cel z treścią dopasowaną do platformy, FAQ schema i linkowaniem wewnętrznym.",
+      "stepsTitle": "Jak używać QuizSolver z Blackboard",
+      "steps": ["Zainstaluj QuizSolver i zaloguj się.", "Otwórz quiz Blackboard albo dozwoloną stronę ćwiczeniową.", "Używaj wyjaśnień i Study Notes do powtórek słabszych tematów."],
+      "featureTitle": "Funkcje ćwiczeń Blackboard",
+      "features": ["Wykrywanie pytań", "Sugestie odpowiedzi AI", "Krótkie wyjaśnienia", "Historia nauki", "Practice Mode", "Opcjonalne uprawnienia stron"],
+      "keywordSections": [
+        {
+          "title": "Pokrycie fraz Blackboard quiz solver",
+          "text": "Strona obejmuje zapytania Blackboard quiz solver, Blackboard answer assistant, Blackboard quiz helper i AI quiz solver."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Czy QuizSolver pomaga przy ćwiczeniach Blackboard?",
+          "answer": "Tak, QuizSolver może wspierać dozwolone workflow ćwiczeń w stylu Blackboard z sugestiami odpowiedzi, wyjaśnieniami i Study Notes."
+        }
+      ],
+      "note": "Używaj QuizSolver do nauki, powtórek i dozwolonych ćwiczeń."
+    },
+    "quizlet": {
+      "platformName": "Quizlet",
+      "shortName": "Quizlet",
+      "linkTitle": "Poradnik Quizlet solver",
+      "meta": {
+        "title": "Quizlet Solver AI - asystent ćwiczeń ze Study Notes",
+        "description": "QuizSolver wspiera workflow w stylu Quizlet z sugestiami odpowiedzi AI, wyjaśnieniami, notatkami i quizami powtórkowymi.",
+        "keywords": "quizlet solver, quizlet quiz solver, asystent odpowiedzi quizlet, quiz solver ai, quizlet ai solver"
+      },
+      "badge": "Workflow Quizlet",
+      "title": "Quizlet solver AI do nauki i przeglądu odpowiedzi",
+      "subtitle": "Powtarzaj pytania w stylu Quizlet, rozumiej odpowiedzi i zapisuj przydatne treści w Study Notes.",
+      "primaryCta": "Wypróbuj QuizSolver",
+      "secondaryCta": "Zobacz platformy",
+      "introTitle": "Landing SEO dla Quizlet",
+      "intro": "Zapytania związane z Quizlet dostają skupiony landing page zamiast konkurować wyłącznie przez stronę główną.",
+      "stepsTitle": "Jak używać QuizSolver z pytaniami w stylu Quizlet",
+      "steps": ["Zainstaluj QuizSolver.", "Otwórz wspieraną treść w stylu Quizlet albo zapisaną historię.", "Przeglądaj sugestie, wyjaśnienia i pytania w Practice Mode."],
+      "featureTitle": "Funkcje powtórek Quizlet",
+      "features": ["Szybki przegląd odpowiedzi", "Wyjaśnienia", "Study Notes", "Practice Mode", "Filtry historii", "Inteligentny cache"],
+      "keywordSections": [
+        {
+          "title": "Long-tail SEO Quizlet solver",
+          "text": "Strona celuje w Quizlet solver, Quizlet AI solver, Quizlet answer assistant i quiz solver AI."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Czy QuizSolver analizuje pytania w stylu Quizlet?",
+          "answer": "QuizSolver jest zbudowany pod wspierane układy quizowe i powtórki z zapisanej historii tam, gdzie pomoc w nauce jest dozwolona."
+        }
+      ],
+      "note": "Używaj QuizSolver odpowiedzialnie i tylko tam, gdzie pomoc jest dozwolona."
+    },
+    "socrative": {
+      "platformName": "Socrative",
+      "shortName": "Socrative",
+      "linkTitle": "Poradnik Socrative quiz solver",
+      "meta": {
+        "title": "Socrative Quiz Solver AI - asystent odpowiedzi do ćwiczeń",
+        "description": "Używaj QuizSolver jako Socrative quiz solver AI do dozwolonych ćwiczeń, wyjaśnień, Study Notes i powtórek.",
+        "keywords": "socrative quiz solver, socrative solver, asystent odpowiedzi socrative, quiz solver ai, socrative quiz helper"
+      },
+      "badge": "Workflow Socrative",
+      "title": "Socrative quiz solver AI do sesji ćwiczeniowych",
+      "subtitle": "QuizSolver pomaga powtarzać pytania w stylu Socrative, prosić o krótkie wyjaśnienia i zapisywać przydatne treści.",
+      "primaryCta": "Wypróbuj QuizSolver",
+      "secondaryCta": "Zobacz platformy",
+      "introTitle": "Landing SEO dla Socrative",
+      "intro": "Ta strona celuje we frazy Socrative quiz solver i answer assistant z jasnym opisem produktu oraz odpowiedzialnego użycia.",
+      "stepsTitle": "Jak używać QuizSolver z Socrative",
+      "steps": ["Zainstaluj QuizSolver i zaloguj się.", "Otwórz wspierany quiz Socrative albo stronę ćwiczeniową.", "Używaj sugestii, wyjaśnień i zapisanych notatek do powtórek materiału."],
+      "featureTitle": "Funkcje powtórek Socrative",
+      "features": ["Parsowanie pytań", "Sugestie AI", "Wyjaśnienia odpowiedzi", "Study Notes", "Practice Mode", "Opcjonalne uprawnienia"],
+      "keywordSections": [
+        {
+          "title": "Pokrycie fraz Socrative quiz solver",
+          "text": "Strona obejmuje Socrative quiz solver, Socrative answer assistant, Socrative solver i AI quiz solver."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Czy QuizSolver pomaga przy powtórkach Socrative?",
+          "answer": "Tak, przy dozwolonych ćwiczeniach QuizSolver może pomóc analizować wspierane pytania w stylu Socrative i zapisywać wyjaśnienia."
+        }
+      ],
+      "note": "Używaj QuizSolver do nauki, powtórek i dozwolonych ćwiczeń."
+    },
     "kahoot": {
       "platformName": "Kahoot",
       "shortName": "Kahoot",

@@ -582,6 +582,108 @@
       ],
       "note": "Use QuizSolver responsibly and only where assistance is permitted."
     },
+    "blackboard": {
+      "platformName": "Blackboard",
+      "shortName": "Blackboard",
+      "linkTitle": "Blackboard quiz solver guide",
+      "meta": {
+        "title": "Blackboard Quiz Solver AI - Study Assistant with Explanations",
+        "description": "Use QuizSolver as a Blackboard quiz solver AI assistant for allowed practice, answer explanations, saved notes, and review workflows.",
+        "keywords": "blackboard quiz solver, blackboard quiz solver ai, blackboard answer assistant, quiz solver ai, blackboard quiz helper"
+      },
+      "badge": "Blackboard workflow",
+      "title": "Blackboard quiz solver AI for review and practice",
+      "subtitle": "QuizSolver helps users review Blackboard-style quiz questions with AI suggestions, concise explanations, and Study Notes.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "View platform support",
+      "introTitle": "Dedicated Blackboard SEO landing page",
+      "intro": "This page gives Blackboard quiz solver searches a clear destination with platform-specific wording, FAQ schema, and internal links.",
+      "stepsTitle": "How to use QuizSolver with Blackboard",
+      "steps": ["Install QuizSolver and sign in.", "Open a Blackboard quiz or permitted practice page.", "Use explanations and Study Notes to review weak topics."],
+      "featureTitle": "Blackboard practice features",
+      "features": ["Question detection", "AI answer suggestions", "Short explanations", "Study history", "Practice Mode", "Optional site permissions"],
+      "keywordSections": [
+        {
+          "title": "Blackboard quiz solver keyword coverage",
+          "text": "The page targets Blackboard quiz solver, Blackboard answer assistant, Blackboard quiz helper, and AI quiz solver searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver help with Blackboard quiz practice?",
+          "answer": "Yes, QuizSolver can support allowed Blackboard-style practice workflows with answer suggestions, explanations, and saved Study Notes."
+        }
+      ],
+      "note": "Use QuizSolver for learning, revision, and permitted practice workflows."
+    },
+    "quizlet": {
+      "platformName": "Quizlet",
+      "shortName": "Quizlet",
+      "linkTitle": "Quizlet solver guide",
+      "meta": {
+        "title": "Quizlet Solver AI - Practice Assistant with Study Notes",
+        "description": "QuizSolver supports Quizlet-style review workflows with AI answer suggestions, explanations, saved notes, and practice quizzes.",
+        "keywords": "quizlet solver, quizlet quiz solver, quizlet answer assistant, quiz solver ai, quizlet ai solver"
+      },
+      "badge": "Quizlet workflow",
+      "title": "Quizlet solver AI for study and answer review",
+      "subtitle": "Review Quizlet-style prompts, understand answers, and save useful questions into Study Notes for later practice.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "See platform support",
+      "introTitle": "Quizlet SEO landing page",
+      "intro": "Quizlet-related searches get a focused landing page instead of competing only through the homepage.",
+      "stepsTitle": "How to use QuizSolver with Quizlet-style questions",
+      "steps": ["Install QuizSolver.", "Open supported Quizlet-style content or saved history.", "Review suggestions, explanations, and Practice Mode questions."],
+      "featureTitle": "Quizlet review features",
+      "features": ["Fast answer review", "Explanations", "Study Notes", "Practice Mode", "History filters", "Smart cache"],
+      "keywordSections": [
+        {
+          "title": "Quizlet solver long-tail SEO",
+          "text": "The page targets Quizlet solver, Quizlet AI solver, Quizlet answer assistant, and quiz solver AI searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver review Quizlet-style prompts?",
+          "answer": "QuizSolver is built for supported quiz layouts and saved-history review where study assistance is allowed."
+        }
+      ],
+      "note": "Use QuizSolver responsibly and only where assistance is allowed."
+    },
+    "socrative": {
+      "platformName": "Socrative",
+      "shortName": "Socrative",
+      "linkTitle": "Socrative quiz solver guide",
+      "meta": {
+        "title": "Socrative Quiz Solver AI - Answer Assistant for Practice",
+        "description": "Use QuizSolver as a Socrative quiz solver AI assistant for allowed practice sessions, explanations, Study Notes, and review.",
+        "keywords": "socrative quiz solver, socrative solver, socrative answer assistant, quiz solver ai, socrative quiz helper"
+      },
+      "badge": "Socrative workflow",
+      "title": "Socrative quiz solver AI for practice sessions",
+      "subtitle": "QuizSolver helps users review Socrative-style questions, request short explanations, and save useful prompts for later.",
+      "primaryCta": "Try QuizSolver",
+      "secondaryCta": "View platform support",
+      "introTitle": "Socrative SEO landing page",
+      "intro": "This page targets Socrative quiz solver and answer assistant searches with clear product context and responsible-use copy.",
+      "stepsTitle": "How to use QuizSolver with Socrative",
+      "steps": ["Install and sign in to QuizSolver.", "Open a supported Socrative quiz or practice page.", "Use answer suggestions, explanations, and saved notes to review material."],
+      "featureTitle": "Socrative review features",
+      "features": ["Question parsing", "AI suggestions", "Answer explanations", "Study Notes", "Practice Mode", "Optional permissions"],
+      "keywordSections": [
+        {
+          "title": "Socrative quiz solver keyword coverage",
+          "text": "The page covers Socrative quiz solver, Socrative answer assistant, Socrative solver, and AI quiz solver searches."
+        }
+      ],
+      "faq": [
+        {
+          "question": "Can QuizSolver help with Socrative-style quiz review?",
+          "answer": "Yes, for permitted practice workflows, QuizSolver can help review supported Socrative-style prompts and save explanations."
+        }
+      ],
+      "note": "Use QuizSolver for learning, revision, and permitted practice workflows."
+    },
     "kahoot": {
       "platformName": "Kahoot",
       "shortName": "Kahoot",

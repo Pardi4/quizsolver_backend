@@ -4,23 +4,13 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/db');
 const { generalLimiter, adminLimiter } = require('./middleware/rateLimiter');
-const {
-  getMarketingRoutes,
-  getRobotsTxt,
-  getSitemapXml,
-  renderDashboardPage,
-  renderMarketingPage,
-  renderNotFoundPage,
-  renderPrivacyPage,
-  renderQuizPage,
-  renderSuccessPage
-} = require('./marketing/render');
 
 const authRoutes = require('./routes/auth');
-const quizRoutes = require('./routes/quiz');
+const { router: quizRoutes, publicRouter: quizPublicRoutes } = require('./routes/quiz');
 const adminRoutes = require('./routes/admin');
 const creditsRoutes = require('./routes/credits');
 const webhookRoutes = require('./routes/webhook');
@@ -33,21 +23,94 @@ const HOST = process.env.HOST || '127.0.0.1';
 const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
 const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
+const ANGULAR_BROWSER_DIR = path.join(__dirname, 'angular-web', 'dist', 'angular-web', 'browser');
+const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
+const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
+
+const PAGE_ROUTES = {
+  home: { en: '/', pl: '/pl/' },
+  dashboard: { en: '/dashboard', pl: '/pl/dashboard' },
+  quiz: { en: '/quiz', pl: '/pl/quiz' },
+  admin: { en: '/admin', pl: '/admin' },
+  privacy: { en: '/privacy', pl: '/pl/privacy' },
+  success: { en: '/success', pl: '/pl/success' },
+  notFound: { en: '/404', pl: '/pl/404' },
+  quizSolverAi: { en: '/quiz-solver-ai', pl: '/pl/quiz-solver-ai' },
+  testportal: { en: '/testportal-quiz-solver', pl: '/pl/testportal-quiz-solver' },
+  moodle: { en: '/moodle-quiz-solver', pl: '/pl/moodle-quiz-solver' },
+  canvas: { en: '/canvas-quiz-solver', pl: '/pl/canvas-quiz-solver' },
+  googleForms: { en: '/google-forms-quiz-solver', pl: '/pl/google-forms-quiz-solver' },
+  microsoftForms: { en: '/microsoft-forms-quiz-solver', pl: '/pl/microsoft-forms-quiz-solver' },
+  blackboard: { en: '/blackboard-quiz-solver', pl: '/pl/blackboard-quiz-solver' },
+  quizlet: { en: '/quizlet-solver', pl: '/pl/quizlet-solver' },
+  socrative: { en: '/socrative-quiz-solver', pl: '/pl/socrative-quiz-solver' },
+  kahoot: { en: '/kahoot-ai-bot', pl: '/pl/kahoot-ai-bot' },
+  quizizz: { en: '/quizizz-solver', pl: '/pl/quizizz-solver' }
+};
+
+const ANGULAR_ROUTE_PATHS = Array.from(new Set(
+  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route))
+));
+
+const INDEXED_ROUTES = [
+  PAGE_ROUTES.home.en,
+  PAGE_ROUTES.home.pl,
+  PAGE_ROUTES.quiz.en,
+  PAGE_ROUTES.quiz.pl,
+  PAGE_ROUTES.quizSolverAi.en,
+  PAGE_ROUTES.quizSolverAi.pl,
+  PAGE_ROUTES.testportal.en,
+  PAGE_ROUTES.testportal.pl,
+  PAGE_ROUTES.moodle.en,
+  PAGE_ROUTES.moodle.pl,
+  PAGE_ROUTES.canvas.en,
+  PAGE_ROUTES.canvas.pl,
+  PAGE_ROUTES.googleForms.en,
+  PAGE_ROUTES.googleForms.pl,
+  PAGE_ROUTES.microsoftForms.en,
+  PAGE_ROUTES.microsoftForms.pl,
+  PAGE_ROUTES.blackboard.en,
+  PAGE_ROUTES.blackboard.pl,
+  PAGE_ROUTES.quizlet.en,
+  PAGE_ROUTES.quizlet.pl,
+  PAGE_ROUTES.socrative.en,
+  PAGE_ROUTES.socrative.pl,
+  PAGE_ROUTES.kahoot.en,
+  PAGE_ROUTES.kahoot.pl,
+  PAGE_ROUTES.quizizz.en,
+  PAGE_ROUTES.quizizz.pl,
+  PAGE_ROUTES.privacy.en,
+  PAGE_ROUTES.privacy.pl
+];
+
 const STATIC_OPTIONS = {
   index: false,
   etag: true,
   maxAge: IS_PRODUCTION ? '30d' : 0,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache');
-    }
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
   }
 };
 
 app.set('trust proxy', 1);
-
 connectDB();
+
+app.use((req, res, next) => {
+  if (!IS_PRODUCTION) return next();
+
+  const host = req.get('host') || '';
+  const hostname = host.split(':')[0].toLowerCase();
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || req.protocol || '').split(',')[0].trim();
+  const apexHost = 'getquizsolver.com';
+
+  if (hostname === `www.${apexHost}` || (forwardedProto && forwardedProto !== 'https')) {
+    return res.redirect(301, `https://${apexHost}${req.originalUrl}`);
+  }
+
+  next();
+});
 
 app.use((req, res, next) => {
   res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
@@ -61,10 +124,10 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'"],
       scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
-      imgSrc: ["'self'", "data:"],
+      imgSrc: ["'self'", 'data:', 'https:'],
       connectSrc: ["'self'"],
       frameAncestors: ["'none'"],
-      upgradeInsecureRequests: null,
+      upgradeInsecureRequests: null
     }
   },
   crossOriginEmbedderPolicy: false,
@@ -75,246 +138,148 @@ app.use(helmet({
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true
-  } : false,
+  } : false
 }));
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-
-    const extId = process.env.EXTENSION_ID;
     if (origin.startsWith('chrome-extension://')) return callback(null, true);
-
-    if (!IS_PRODUCTION) {
-      if (origin.startsWith('chrome-extension://')) return callback(null, true);
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) return callback(null, true);
+    if (!IS_PRODUCTION && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+      return callback(null, true);
     }
 
     const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
     if (allowed.includes(origin)) return callback(null, true);
-
-    if (IS_PRODUCTION) {
-      return callback(new Error('CORS: origin not allowed'));
-    }
-
-    callback(null, true);
+    if (IS_PRODUCTION) return callback(new Error('CORS: origin not allowed'));
+    return callback(null, true);
   },
   credentials: true
 }));
 
-app.use('/api/webhook', webhookRoutes);
-
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: false, limit: '10kb' }));
-
-app.use('/api/', generalLimiter);
-
-app.get('/robots.txt', (req, res) => {
-  res.set('Cache-Control', 'public, max-age=3600');
-  res.type('text/plain').send(getRobotsTxt());
-});
-
-app.get('/sitemap.xml', (req, res) => {
-  res.set('Cache-Control', 'public, max-age=3600');
-  res.type('application/xml').send(getSitemapXml());
-});
-
-app.get('/index.html', (req, res) => {
-  res.redirect(301, '/');
-});
-
-function sendMarketingPage(res, pageKey, locale) {
-  res.set('Content-Language', locale);
-  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
-  res.type('html').send(renderMarketingPage({
-    pageKey,
-    locale,
-    nonce: res.locals.cspNonce
-  }));
+function angularIndexPath(routePath) {
+  const cleanPath = routePath.replace(/^\/+/, '').replace(/\/+$/, '');
+  return cleanPath ? path.join(ANGULAR_BROWSER_DIR, cleanPath, 'index.html') : ANGULAR_INDEX;
 }
 
-app.get(['/pl', '/pl/'], (req, res) => {
-  sendMarketingPage(res, 'home', 'pl');
-});
+function sendAngularPage(req, res, routePath = req.path, statusCode = 200) {
+  if (!HAS_ANGULAR_BUILD) {
+    res.status(503).type('html').send([
+      '<!doctype html><html><head><meta charset="utf-8"><title>QuizSolver</title></head>',
+      '<body style="font-family:system-ui;background:#0f0f1a;color:#f0f0f5;padding:40px">',
+      '<h1>Angular build missing</h1>',
+      '<p>Run <code>npm --prefix backend/angular-web run build</code> and restart the server.</p>',
+      '</body></html>'
+    ].join(''));
+    return true;
+  }
 
-app.get('/ai-quiz-solver', (req, res) => {
-  res.redirect(301, '/quiz-solver-ai');
-});
+  const routeFile = angularIndexPath(routePath);
+  const filePath = fs.existsSync(routeFile) ? routeFile : ANGULAR_INDEX;
+  const noStore = /(?:dashboard|success|404|admin|quiz)/.test(routePath);
 
-app.get('/pl/ai-quiz-solver', (req, res) => {
-  res.redirect(301, '/pl/quiz-solver-ai');
-});
+  res.status(statusCode);
+  res.set('Cache-Control', noStore ? 'no-store' : 'public, max-age=300, stale-while-revalidate=86400');
+  res.sendFile(filePath);
+  return true;
+}
 
-app.get('/pricing', (req, res) => {
-  res.redirect(301, '/#pricing');
-});
+function robotsTxt() {
+  return [
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /dashboard',
+    'Disallow: /pl/dashboard',
+    '',
+    `Sitemap: ${PUBLIC_SITE_URL}/sitemap.xml`,
+    ''
+  ].join('\n');
+}
 
-app.get('/download', (req, res) => {
-  res.redirect(302, CHROME_WEB_STORE_URL);
-});
+function sitemapXml() {
+  const urls = INDEXED_ROUTES
+    .map(route => {
+      const loc = `${PUBLIC_SITE_URL}${route === '/' ? '/' : route}`;
+      return `  <url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>${route === '/' || route === '/pl/' ? '1.0' : '0.8'}</priority></url>`;
+    })
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+}
 
-app.get('/pl/pricing', (req, res) => {
-  res.redirect(301, '/pl/#pricing');
-});
-
-app.get('/pl/download', (req, res) => {
-  res.redirect(302, CHROME_WEB_STORE_URL);
-});
-
-app.get(['/dashboard', '/dashboard/'], (req, res) => {
-  res.set('Content-Language', 'en');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderDashboardPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/pl/dashboard', '/pl/dashboard/'], (req, res) => {
-  res.set('Content-Language', 'pl');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderDashboardPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/privacy', '/privacy/'], (req, res) => {
-  res.set('Content-Language', 'en');
-  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
-  res.type('html').send(renderPrivacyPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/pl/privacy', '/pl/privacy/'], (req, res) => {
-  res.set('Content-Language', 'pl');
-  res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
-  res.type('html').send(renderPrivacyPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get('/privacy.html', (req, res) => {
-  res.redirect(301, '/privacy');
-});
-
-app.get(['/quiz', '/quiz/'], (req, res) => {
-  res.set('Content-Language', 'en');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderQuizPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/pl/quiz', '/pl/quiz/'], (req, res) => {
-  res.set('Content-Language', 'pl');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderQuizPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get('/quiz.html', (req, res) => {
-  res.redirect(301, '/quiz');
-});
-
-app.get(['/404', '/404/'], (req, res) => {
-  res.status(404);
-  res.set('Content-Language', 'en');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderNotFoundPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-app.get(['/pl/404', '/pl/404/'], (req, res) => {
-  res.status(404);
-  res.set('Content-Language', 'pl');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderNotFoundPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
-});
-
-getMarketingRoutes().forEach(({ path: routePath, pageKey, locale }) => {
-  app.get(routePath, (req, res) => {
-    if (req.query.lang === 'pl') {
-      return res.redirect(301, locale === 'pl' ? routePath : `/pl${routePath === '/' ? '/' : routePath}`);
-    }
-    sendMarketingPage(res, pageKey, locale);
-  });
-});
+app.use('/api/webhook', webhookRoutes);
+app.use(['/api/quiz/solve', '/api/quiz/solve-batch', '/api/quiz/solve-snapshot'], express.json({ limit: '6mb' }));
+app.use(express.json({ limit: '80kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+app.use('/api/', generalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/quiz', quizPublicRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/credits', creditsRoutes);
 
-app.get('/api/leaderboard', async (req, res) => {
+app.get('/api/stats/public', async (req, res) => {
   try {
-    const User = require('./models/User');
-    const users = await User.find({
-      excludeFromLeaderboard: { $ne: true },
-      isBanned: { $ne: true },
-      role: { $ne: 'admin' }
-    })
-      .sort({ 'stats.totalQuestionsSolved': -1 })
-      .limit(10)
-      .select('email stats.totalQuestionsSolved streak');
-    const leaderboard = users.map((u, i) => ({
-      rank: i + 1,
-      name: u.getLeaderboardName(),
-      questionsSolved: u.stats.totalQuestionsSolved,
-      streak: u.streak.current
-    }));
-    res.json({ success: true, leaderboard });
-  } catch { res.json({ success: true, leaderboard: [] }); }
+    const [totalUsers, totalQuestions] = await Promise.all([
+      User.countDocuments({ isBanned: { $ne: true } }),
+      User.aggregate([
+        { $group: { _id: null, total: { $sum: '$stats.totalQuestionsSolved' } } }
+      ])
+    ]);
+
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({
+      success: true,
+      totalUsers: totalUsers || 0,
+      totalQuestionsSolved: totalQuestions[0]?.total || 0
+    });
+  } catch {
+    res.json({ success: true, totalUsers: 0, totalQuestionsSolved: 0 });
+  }
 });
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
 });
 
-app.get(['/success', '/success/'], (req, res) => {
-  res.set('Content-Language', 'en');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderSuccessPage({
-    locale: 'en',
-    nonce: res.locals.cspNonce
-  }));
+app.get('/robots.txt', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.type('text/plain').send(robotsTxt());
 });
 
-app.get(['/pl/success', '/pl/success/'], (req, res) => {
-  res.set('Content-Language', 'pl');
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderSuccessPage({
-    locale: 'pl',
-    nonce: res.locals.cspNonce
-  }));
+app.get('/sitemap.xml', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.type('application/xml').send(sitemapXml());
 });
 
-app.get('/success.html', (req, res) => {
-  res.redirect(301, '/success');
-});
+app.get('/index.html', (req, res) => res.redirect(301, '/'));
+app.get('/pl', (req, res) => res.redirect(301, '/pl/'));
+app.get('/pricing', (req, res) => res.redirect(301, '/#pricing'));
+app.get('/pl/pricing', (req, res) => res.redirect(301, '/pl/#pricing'));
+app.get('/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
+app.get('/pl/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
+app.get('/ai-quiz-solver', (req, res) => res.redirect(301, '/quiz-solver-ai'));
+app.get('/pl/ai-quiz-solver', (req, res) => res.redirect(301, '/pl/quiz-solver-ai'));
+app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
+app.get('/quiz.html', (req, res) => res.redirect(301, '/quiz'));
+app.get('/success.html', (req, res) => res.redirect(301, '/success'));
+app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
+app.get('/admin-app.js', (req, res) => res.status(404).json({ error: 'Admin panel is served by Angular.' }));
+app.get('/quiz/shared/:token', (req, res) => sendAngularPage(req, res, '/quiz'));
 
-if (!IS_PRODUCTION) {
-  app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-  });
-} else {
-  app.get(['/admin', '/admin/', '/admin.html', '/admin-app.js'], (req, res) => {
-    res.status(404).json({ error: 'Not found.' });
-  });
+
+if (HAS_ANGULAR_BUILD) {
+  app.use(express.static(ANGULAR_BROWSER_DIR, STATIC_OPTIONS));
 }
 
 app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
+
+app.get(ANGULAR_ROUTE_PATHS, (req, res) => {
+  const routePath = req.path === '/pl' ? '/pl/' : req.path;
+  const statusCode = routePath.endsWith('/404') || routePath === '/404' ? 404 : 200;
+  sendAngularPage(req, res, routePath, statusCode);
+});
 
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
@@ -322,22 +287,15 @@ app.use((req, res) => {
   }
 
   const locale = req.path.startsWith('/pl/') || req.path === '/pl' ? 'pl' : 'en';
-  res.status(404);
-  res.set('Content-Language', locale);
-  res.set('Cache-Control', 'no-store');
-  res.type('html').send(renderNotFoundPage({
-    locale,
-    nonce: res.locals.cspNonce
-  }));
+  sendAngularPage(req, res, locale === 'pl' ? '/pl/404' : '/404', 404);
 });
 
 app.use((err, req, res, next) => {
   if (IS_PRODUCTION) {
-    res.status(500).json({ error: 'Internal server error.' });
-  } else {
-    console.error('[Server]', err.message);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Internal server error.' });
   }
+  console.error('[Server]', err.message);
+  return res.status(500).json({ error: err.message });
 });
 
 async function seedAdmin() {
@@ -358,25 +316,17 @@ async function seedAdmin() {
       console.log(`[Server] Admin created: ${adminEmail}`);
     }
   } catch (error) {
-    if (error.code !== 11000) {
-      console.error('[Server] Admin seed error:', error.message);
-    }
+    if (error.code !== 11000) console.error('[Server] Admin seed error:', error.message);
   }
 }
 
-function startAdminServer() {
+function createAdminServer() {
   const adminApp = express();
   adminApp.set('trust proxy', 1);
-
   adminApp.use(helmet({ contentSecurityPolicy: false }));
-
   adminApp.use(cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (!IS_PRODUCTION) return callback(null, true);
-      if (origin === `http://127.0.0.1:${ADMIN_PORT}` || origin === `http://localhost:${ADMIN_PORT}`) {
-        return callback(null, true);
-      }
+      if (!origin || !IS_PRODUCTION) return callback(null, true);
       const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
       if (allowed.includes(origin)) return callback(null, true);
       callback(new Error('CORS blocked'));
@@ -385,35 +335,32 @@ function startAdminServer() {
   }));
 
   adminApp.use(adminLimiter);
-
-  adminApp.use(express.static(path.join(__dirname, 'public'), { index: false, etag: true, maxAge: 0 }));
-
-  adminApp.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-  });
-
-  adminApp.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-  });
-
-  adminApp.use(express.json({ limit: '10kb' }));
+  adminApp.use(express.json({ limit: '80kb' }));
   adminApp.use('/api/auth', authRoutes);
   adminApp.use('/api/admin', adminRoutes);
   adminApp.use('/api/credits', creditsRoutes);
 
+  if (HAS_ANGULAR_BUILD) {
+    adminApp.use(express.static(ANGULAR_BROWSER_DIR, STATIC_OPTIONS));
+  }
+  adminApp.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
+
+  adminApp.get(['/', '/admin'], (req, res) => sendAngularPage(req, res, '/admin'));
   adminApp.use((req, res) => {
-    res.status(404).json({ error: 'Not found.' });
+    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found.' });
+    return sendAngularPage(req, res, '/admin', 404);
   });
 
-  adminApp.listen(ADMIN_PORT, ADMIN_HOST, () => {
-    console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
-  });
+  return adminApp;
 }
 
 app.listen(PORT, HOST, async () => {
-  console.log(`[Server] QuizSolver v2.0 | ${HOST}:${PORT} | env: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`[Server] QuizSolver v2.0 | ${HOST}:${PORT} | Angular: ${HAS_ANGULAR_BUILD ? 'ready' : 'missing'} | env: ${process.env.NODE_ENV || 'development'}`);
   await seedAdmin();
-  startAdminServer();
+
+  createAdminServer().listen(ADMIN_PORT, ADMIN_HOST, () => {
+    console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
+  });
 });
 
 module.exports = app;

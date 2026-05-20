@@ -50,6 +50,15 @@ router.post('/buy', async (req, res) => {
     }
 
     const packInfo = PACKS[pack];
+
+    // Demo mode: use test checkout page
+    const IS_DEMO = !process.env.WHOP_API_KEY || process.env.WHOP_API_KEY.includes('XXXXXXX') || process.env.DEMO_PAYMENTS === 'true';
+    if (IS_DEMO) {
+      const siteUrl = (process.env.PUBLIC_SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+      const checkoutUrl = `${siteUrl}/demo-checkout.html?pack=${pack}&credits=${packInfo.credits}&price=${packInfo.price}&userId=${req.user._id}&email=${encodeURIComponent(req.user.email)}`;
+      return res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits, demo: true });
+    }
+
     const apiKey = process.env.WHOP_API_KEY;
     const planId = process.env[packInfo.planEnv];
 
