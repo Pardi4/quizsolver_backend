@@ -778,7 +778,9 @@ publicRouter.post('/shared/:token/attempt', async (req, res) => {
     if (!shared) return res.status(404).json({ error: 'Shared quiz not found.' });
 
     const answers = Array.isArray(req.body.answers) ? req.body.answers.slice(0, 50) : [];
-    const displayName = String(req.body.displayName || 'Anonymous').substring(0, 60);
+    const rawDisplayName = String(req.body.displayName || '').trim();
+    if (!rawDisplayName) return res.status(400).json({ error: 'Display name is required.' });
+    const displayName = rawDisplayName.substring(0, 60);
     const userId = req.body.userId || null;
 
     const notes = await StudyNote.find({ _id: { $in: shared.noteIds } }).lean();
