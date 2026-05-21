@@ -213,7 +213,7 @@ async function normalizeCachedAnswer(cachedDoc, answer, type) {
 
 router.get('/study-notes', async (req, res) => {
   try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const search = String(req.query.search || '').trim();
     const filter = { user: req.user._id };
