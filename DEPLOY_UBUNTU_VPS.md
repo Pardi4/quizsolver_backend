@@ -33,31 +33,33 @@ ufw status
 
 ## 4. Wgranie kodu i budowanie Frontendu
 
-Na serwerze najpierw wgraj cały projekt (zawierający foldery `frontend` i `backend`).
+Aplikacja składa się z dwóch osobnych repozytoriów na GitHubie, które muszą leżeć obok siebie w katalogu `/var/www/quizsolver`.
 
 ```bash
 mkdir -p /var/www/quizsolver
 cd /var/www/quizsolver
-git clone https://github.com/Pardi4/quizsolver_backend.git .
 
-# 1. Zbudowanie frontend'u (Angular)
+# 1. Pobranie i instalacja backendu
+git clone https://github.com/Pardi4/quizsolver_backend.git backend
+cd backend
+npm ci --omit=dev
+
+# 2. Pobranie, instalacja i zbudowanie frontendu (Angular)
+cd /var/www/quizsolver
+git clone https://github.com/Pardi4/frontend.git frontend
 cd frontend
 npm install
 npm run build
-
-# 2. Instalacja backend'u
-cd ../backend
-npm ci --omit=dev
 ```
 
-Jeśli nie używasz Gita, wrzuć foldery `frontend` i `backend` przez SFTP do `/var/www/quizsolver`, a następnie wykonaj w nich polecenia `npm install` (i `npm run build` w frontendzie).
+Jeśli nie używasz Gita, wrzuć foldery `frontend` i `backend` przez SFTP obok siebie do `/var/www/quizsolver`, a następnie wykonaj w nich odpowiednio `npm ci` i `npm install && npm run build`.
 
 ## 5. MongoDB na tym VPS
 
 Najprosciej uruchomic MongoDB lokalnie w Dockerze:
 
 ```bash
-cd /var/www/quizsolver
+cd /var/www/quizsolver/backend
 cp deploy/docker-compose.mongo.example.yml deploy/docker-compose.mongo.yml
 nano deploy/docker-compose.mongo.yml
 docker compose -f deploy/docker-compose.mongo.yml up -d
@@ -68,7 +70,7 @@ W pliku zmien `CHANGE_ME_MONGO_PASSWORD` na mocne haslo.
 ## 6. Plik .env backendu
 
 ```bash
-cd /var/www/quizsolver
+cd /var/www/quizsolver/backend
 cp .env.vps.example .env
 nano .env
 ```
@@ -92,7 +94,7 @@ openssl rand -hex 32
 ## 7. Start backendu
 
 ```bash
-cd /var/www/quizsolver
+cd /var/www/quizsolver/backend
 pm2 start ecosystem.config.cjs
 pm2 save
 pm2 startup
@@ -110,7 +112,7 @@ curl http://127.0.0.1:40583/admin
 ## 8. Nginx dla domeny
 
 ```bash
-cp /var/www/quizsolver/deploy/nginx/quizsolver.conf /etc/nginx/sites-available/quizsolver
+cp /var/www/quizsolver/backend/deploy/nginx/quizsolver.conf /etc/nginx/sites-available/quizsolver
 ln -s /etc/nginx/sites-available/quizsolver /etc/nginx/sites-enabled/quizsolver
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
@@ -152,8 +154,8 @@ Na serwerze:
 
 ```bash
 mkdir -p /var/backups/quizsolver-mongo
-chmod +x /var/www/quizsolver/deploy/backup-mongo.sh
-MONGO_URI='mongodb://quizsolver_admin:TWOJE_HASLO@127.0.0.1:27017/quizsolver?authSource=admin' /var/www/quizsolver/deploy/backup-mongo.sh
+chmod +x /var/www/quizsolver/backend/deploy/backup-mongo.sh
+MONGO_URI='mongodb://quizsolver_admin:TWOJE_HASLO@127.0.0.1:27017/quizsolver?authSource=admin' /var/www/quizsolver/backend/deploy/backup-mongo.sh
 ```
 
 Cron codziennie o 03:20:
@@ -165,23 +167,24 @@ crontab -e
 Dodaj:
 
 ```cron
-20 3 * * * MONGO_URI='mongodb://quizsolver_admin:TWOJE_HASLO@127.0.0.1:27017/quizsolver?authSource=admin' /var/www/quizsolver/deploy/backup-mongo.sh
+20 3 * * * MONGO_URI='mongodb://quizsolver_admin:TWOJE_HASLO@127.0.0.1:27017/quizsolver?authSource=admin' /var/www/quizsolver/backend/deploy/backup-mongo.sh
 ```
 
 ## 12. Update aplikacji
 
 ```bash
-cd /var/www/quizsolver
+# 1. Update backendu
+cd /var/www/quizsolver/backend
 git pull
+npm ci --omit=dev
 
-# Update frontend'u
-cd frontend
+# 2. Update frontendu
+cd /var/www/quizsolver/frontend
+git pull
 npm install
 npm run build
 
-# Update backend'u
-cd ../backend
-npm ci --omit=dev
+# 3. Restart PM2
 pm2 restart quizsolver
 ```
 
