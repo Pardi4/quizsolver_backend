@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build:web": "npm --prefix angular-web run build"
+    "build:web": "cd ../frontend && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

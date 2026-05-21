@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/db');
@@ -127,18 +126,15 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use((req, res, next) => {
-  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
-  next();
-});
-
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      fontSrc: ["'self'"],
-      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      // Angular prerender output contains inline hydration scripts and a CSS onload handler.
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
       connectSrc: ["'self'"],
       frameAncestors: ["'none'"],
@@ -185,7 +181,7 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
       '<!doctype html><html><head><meta charset="utf-8"><title>QuizSolver</title></head>',
       '<body style="font-family:system-ui;background:#0f0f1a;color:#f0f0f5;padding:40px">',
       '<h1>Angular build missing</h1>',
-      '<p>Run <code>npm --prefix backend/angular-web run build</code> and restart the server.</p>',
+      '<p>Run <code>npm run build:web</code> from the backend directory and restart the server.</p>',
       '</body></html>'
     ].join(''));
     return true;
