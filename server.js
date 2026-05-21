@@ -30,9 +30,10 @@ const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
 const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
 
 const PAGE_ROUTES = {
-  home: { en: '/', pl: '/pl/' },
+  home: { en: '/', pl: '/pl' },
   dashboard: { en: '/dashboard', pl: '/pl/dashboard' },
   quiz: { en: '/quiz', pl: '/pl/quiz' },
+  credits: { en: '/credits', pl: '/pl/credits' },
   admin: { en: '/admin', pl: '/admin' },
   privacy: { en: '/privacy', pl: '/pl/privacy' },
   success: { en: '/success', pl: '/pl/success' },
@@ -59,6 +60,8 @@ const INDEXED_ROUTES = [
   PAGE_ROUTES.home.pl,
   PAGE_ROUTES.quiz.en,
   PAGE_ROUTES.quiz.pl,
+  PAGE_ROUTES.credits.en,
+  PAGE_ROUTES.credits.pl,
   PAGE_ROUTES.quizSolverAi.en,
   PAGE_ROUTES.quizSolverAi.pl,
   PAGE_ROUTES.testportal.en,
@@ -99,6 +102,7 @@ connectDB();
 
 app.use((req, res, next) => {
   if (!IS_PRODUCTION) return next();
+  if (process.env.DISABLE_HTTPS_REDIRECT === 'true') return next();
 
   const host = req.get('host') || '';
   const hostname = host.split(':')[0].toLowerCase();
@@ -203,7 +207,7 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
     }
   }
 
-  const noStore = /(?:dashboard|success|404|admin|quiz)/.test(routePath);
+  const noStore = /(?:dashboard|success|404|admin|quiz|credits)/.test(routePath);
 
   res.status(statusCode);
   res.set('Cache-Control', noStore ? 'no-store' : 'public, max-age=300, stale-while-revalidate=86400');
@@ -228,7 +232,7 @@ function sitemapXml() {
   const urls = INDEXED_ROUTES
     .map(route => {
       const loc = `${PUBLIC_SITE_URL}${route === '/' ? '/' : route}`;
-      return `  <url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>${route === '/' || route === '/pl/' ? '1.0' : '0.8'}</priority></url>`;
+      return `  <url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>${route === '/' || route === '/pl' ? '1.0' : '0.8'}</priority></url>`;
     })
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
@@ -281,7 +285,7 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 app.get('/index.html', (req, res) => res.redirect(301, '/'));
-app.get('/pl', (req, res) => res.redirect(301, '/pl/'));
+app.get('/pl/', (req, res) => sendAngularPage(req, res, '/pl'));
 app.get('/pricing', (req, res) => res.redirect(301, '/#pricing'));
 app.get('/pl/pricing', (req, res) => res.redirect(301, '/pl/#pricing'));
 app.get('/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
@@ -303,7 +307,7 @@ if (HAS_ANGULAR_BUILD) {
 app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
 
 app.get(ANGULAR_ROUTE_PATHS, (req, res) => {
-  const routePath = req.path === '/pl' ? '/pl/' : req.path;
+  const routePath = req.path === '/pl/' ? '/pl' : req.path;
   const statusCode = routePath.endsWith('/404') || routePath === '/404' ? 404 : 200;
   sendAngularPage(req, res, routePath, statusCode);
 });
