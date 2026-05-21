@@ -102,7 +102,18 @@ app.use((req, res, next) => {
 
   const host = req.get('host') || '';
   const hostname = host.split(':')[0].toLowerCase();
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || req.protocol || '').split(',')[0].trim();
+  
+  let proto = req.headers['x-forwarded-proto'] || req.protocol || '';
+  if (req.headers['cf-visitor']) {
+    try {
+      const cfVisitor = JSON.parse(req.headers['cf-visitor']);
+      if (cfVisitor && cfVisitor.scheme) {
+        proto = cfVisitor.scheme;
+      }
+    } catch (e) {}
+  }
+  const forwardedProto = String(proto).split(',')[0].trim();
+  
   const apexHost = 'getquizsolver.com';
 
   if (hostname === `www.${apexHost}` || (forwardedProto && forwardedProto !== 'https')) {
