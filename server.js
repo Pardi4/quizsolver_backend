@@ -241,8 +241,8 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use('/api/', generalLimiter);
 
 app.use('/api/auth', authRoutes);
-app.use('/api/quiz', quizRoutes);
 app.use('/api/quiz', quizPublicRoutes);
+app.use('/api/quiz', quizRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/credits', creditsRoutes);
 

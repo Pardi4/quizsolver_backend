@@ -318,7 +318,7 @@ async function requestChatCompletion(body) {
     const response = await openai.chat.completions.create({
       model: body.model,
       temperature: body.temperature,
-      max_tokens: body.max_completion_tokens,
+      max_completion_tokens: body.max_completion_tokens,
       messages: body.messages,
     }, { timeout: 30000 });
 

@@ -213,7 +213,8 @@ async function normalizeCachedAnswer(cachedDoc, answer, type) {
 
 router.get('/study-notes', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 80, 150);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const search = String(req.query.search || '').trim();
     const filter = { user: req.user._id };
 
@@ -231,13 +232,26 @@ router.get('/study-notes', async (req, res) => {
       ];
     }
 
-    const notes = await StudyNote.find(filter)
-      .sort({ lastSeenAt: -1 })
-      .limit(limit)
-      .populate('cachedAnswer')
-      .lean();
+    const [notes, total] = await Promise.all([
+      StudyNote.find(filter)
+        .sort({ lastSeenAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('cachedAnswer')
+        .lean(),
+      StudyNote.countDocuments(filter)
+    ]);
 
-    res.json({ success: true, notes: notes.map(serializeStudyNote) });
+    res.json({
+      success: true,
+      notes: notes.map(serializeStudyNote),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit))
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Could not load study notes.' });
   }
