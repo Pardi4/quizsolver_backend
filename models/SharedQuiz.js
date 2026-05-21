@@ -43,5 +43,7 @@ const sharedQuizSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 sharedQuizSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+sharedQuizSchema.index({ createdBy: 1, createdAt: -1 });
+sharedQuizSchema.index({ 'attempts.userId': 1, updatedAt: -1 });
 
 module.exports = mongoose.model('SharedQuiz', sharedQuizSchema);

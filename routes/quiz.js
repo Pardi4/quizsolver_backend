@@ -1,6 +1,8 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const { authMiddleware } = require('../middleware/auth');
 const { quizLimiter } = require('../middleware/rateLimiter');
+const User = require('../models/User');
 const CachedAnswer = require('../models/CachedAnswer');
 const StudyNote = require('../models/StudyNote');
 const QuizSession = require('../models/QuizSession');
@@ -148,6 +150,86 @@ function answerToText(type, options, answer, meta = {}) {
     }).join('; ');
   }
   return String(answer ?? '');
+}
+
+function orderedNotesByIds(notes, ids) {
+  const byId = new Map((notes || []).map(note => [String(note._id), note]));
+  return (ids || []).map(id => byId.get(String(id?._id || id))).filter(Boolean);
+}
+
+function isAnswerCorrect(note, given) {
+  const correct = note.answer;
+  if (note.questionType === 'radio') return given === correct;
+  if (note.questionType === 'checkbox' && Array.isArray(given) && Array.isArray(correct)) {
+    return JSON.stringify([...given].sort()) === JSON.stringify([...correct].sort());
+  }
+  if ((note.questionType === 'matching' || note.questionType === 'matrix') && Array.isArray(given) && Array.isArray(correct)) {
+    return JSON.stringify(given) === JSON.stringify(correct);
+  }
+  if (note.questionType === 'text' && typeof given === 'string') {
+    return given.trim().toLowerCase() === String(correct).trim().toLowerCase();
+  }
+  return false;
+}
+
+function serializeSharedQuestion(note) {
+  const options = (note.options || []).map(cleanQuizText);
+  return {
+    id: note._id,
+    questionText: cleanQuizText(note.questionText) || 'Question shown in image',
+    questionType: note.questionType,
+    options,
+    prompts: (note.prompts || []).map(cleanQuizText),
+    rows: (note.rows || []).map(cleanQuizText),
+    answer: note.answer,
+    answerText: answerToText(note.questionType, options, note.answer, { prompts: note.prompts || [], rows: note.rows || [] }),
+    explanation: note.explanation || ''
+  };
+}
+
+function serializeSharedAttempt(attempt, notes) {
+  const answers = (notes || []).map((note, i) => {
+    const options = (note.options || []).map(cleanQuizText);
+    const given = attempt.answers?.[i];
+    return {
+      questionId: note._id,
+      questionText: cleanQuizText(note.questionText) || 'Question shown in image',
+      questionType: note.questionType,
+      given,
+      givenText: answerToText(note.questionType, options, given, { prompts: note.prompts || [], rows: note.rows || [] }),
+      correct: isAnswerCorrect(note, given),
+      correctAnswer: note.answer,
+      correctAnswerText: answerToText(note.questionType, options, note.answer, { prompts: note.prompts || [], rows: note.rows || [] }),
+      explanation: note.explanation || ''
+    };
+  });
+
+  const totalQuestions = attempt.totalQuestions || notes.length || 0;
+  return {
+    id: attempt._id,
+    userId: attempt.userId || null,
+    displayName: attempt.displayName || 'Anonymous',
+    score: attempt.score || 0,
+    totalQuestions,
+    percentage: totalQuestions ? Math.round(((attempt.score || 0) / totalQuestions) * 100) : 0,
+    completedAt: attempt.completedAt,
+    answers
+  };
+}
+
+async function optionalAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) return next();
+
+    const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET, {
+      issuer: process.env.JWT_ISSUER || 'quizsolver-api',
+      audience: process.env.JWT_AUDIENCE || 'quizsolver-ext',
+    });
+    const user = await User.findById(decoded.userId).select('-__v');
+    if (user && !user.isBanned) req.user = user;
+  } catch {}
+  next();
 }
 
 function serializeStudyNote(note) {
@@ -728,6 +810,73 @@ router.post('/share', async (req, res) => {
 });
 
 /* Public endpoints — no auth required */
+router.get('/shared-created', async (req, res) => {
+  try {
+    const quizzes = await SharedQuiz.find({ createdBy: req.user._id, isActive: true })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate({ path: 'noteIds', select: 'questionText questionType options prompts rows answer explanation' })
+      .lean();
+
+    res.json({
+      success: true,
+      quizzes: quizzes.map(shared => {
+        const notes = orderedNotesByIds(shared.noteIds || [], shared.noteIds || []);
+        return {
+          token: shared.token,
+          title: shared.title,
+          shareUrl: `${PUBLIC_SITE_URL}/quiz/shared/${shared.token}`,
+          questionCount: shared.questionCount,
+          viewCount: shared.viewCount,
+          createdAt: shared.createdAt,
+          expiresAt: shared.expiresAt,
+          attemptCount: shared.attempts?.length || 0,
+          questions: notes.map(serializeSharedQuestion),
+          attempts: (shared.attempts || [])
+            .slice()
+            .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+            .map(attempt => serializeSharedAttempt(attempt, notes))
+        };
+      })
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Could not load shared quizzes.' });
+  }
+});
+
+router.get('/shared-attempts', async (req, res) => {
+  try {
+    const quizzes = await SharedQuiz.find({
+      isActive: true,
+      'attempts.userId': req.user._id
+    })
+      .sort({ updatedAt: -1 })
+      .limit(100)
+      .populate({ path: 'noteIds', select: 'questionText questionType options prompts rows answer explanation' })
+      .lean();
+
+    res.json({
+      success: true,
+      attempts: quizzes.flatMap(shared => {
+        const notes = orderedNotesByIds(shared.noteIds || [], shared.noteIds || []);
+        return (shared.attempts || [])
+          .filter(attempt => String(attempt.userId || '') === String(req.user._id))
+          .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+          .map(attempt => ({
+            token: shared.token,
+            title: shared.title,
+            shareUrl: `${PUBLIC_SITE_URL}/quiz/shared/${shared.token}`,
+            questionCount: shared.questionCount,
+            createdAt: shared.createdAt,
+            ...serializeSharedAttempt(attempt, notes)
+          }));
+      }).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Could not load participated quizzes.' });
+  }
+});
+
 const publicRouter = express.Router();
 
 publicRouter.get('/shared/:token', async (req, res) => {
@@ -772,29 +921,24 @@ publicRouter.get('/shared/:token', async (req, res) => {
   }
 });
 
-publicRouter.post('/shared/:token/attempt', async (req, res) => {
+publicRouter.post('/shared/:token/attempt', optionalAuth, async (req, res) => {
   try {
     const shared = await SharedQuiz.findOne({ token: req.params.token, isActive: true });
     if (!shared) return res.status(404).json({ error: 'Shared quiz not found.' });
 
     const answers = Array.isArray(req.body.answers) ? req.body.answers.slice(0, 50) : [];
     const rawDisplayName = String(req.body.displayName || '').trim();
-    if (!rawDisplayName) return res.status(400).json({ error: 'Display name is required.' });
-    const displayName = rawDisplayName.substring(0, 60);
-    const userId = req.body.userId || null;
+    const displayName = req.user
+      ? (req.user.displayName || req.user.email.split('@')[0] || 'User').substring(0, 60)
+      : rawDisplayName.substring(0, 60);
+    if (!displayName) return res.status(400).json({ error: 'Display name is required.' });
+    const userId = req.user?._id || null;
 
-    const notes = await StudyNote.find({ _id: { $in: shared.noteIds } }).lean();
+    const foundNotes = await StudyNote.find({ _id: { $in: shared.noteIds } }).lean();
+    const notes = orderedNotesByIds(foundNotes, shared.noteIds);
     let score = 0;
     notes.forEach((note, i) => {
-      const given = answers[i];
-      const correct = note.answer;
-      if (note.questionType === 'radio' && given === correct) score++;
-      else if (note.questionType === 'checkbox' && Array.isArray(given) && Array.isArray(correct)
-        && JSON.stringify([...given].sort()) === JSON.stringify([...correct].sort())) score++;
-      else if ((note.questionType === 'matching' || note.questionType === 'matrix') && Array.isArray(given) && Array.isArray(correct)
-        && JSON.stringify(given) === JSON.stringify(correct)) score++;
-      else if (note.questionType === 'text' && typeof given === 'string'
-        && given.trim().toLowerCase() === String(correct).trim().toLowerCase()) score++;
+      if (isAnswerCorrect(note, answers[i])) score++;
     });
 
     await SharedQuiz.updateOne({ _id: shared._id }, {
