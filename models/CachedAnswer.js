@@ -15,10 +15,12 @@ const cachedAnswerSchema = new mongoose.Schema({
   },
   questionType: {
     type: String,
-    enum: ['radio', 'checkbox', 'text'],
+    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix'],
     required: true
   },
   options: [String],
+  prompts: [String],
+  rows: [String],
   imageFingerprint: {
     type: String,
     default: ''
@@ -66,6 +68,8 @@ cachedAnswerSchema.statics.generateHash = function(questionData) {
   const normalized = JSON.stringify({
     text: cleanQuizText(questionData.text).toLowerCase().replace(/\s+/g, ' '),
     options: sortedOptions,
+    prompts: [...(questionData.prompts || [])].map(normalizeOption),
+    rows: [...(questionData.rows || [])].map(normalizeOption),
     type: questionData.type,
     image: imageFingerprint(questionData)
   });
@@ -86,7 +90,7 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
         const newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
         if (newIdx !== -1) return newIdx;
       }
-    } else if (questionData.type === 'checkbox' && Array.isArray(cached.answer)) {
+    } else if (['checkbox', 'matching', 'matrix'].includes(questionData.type) && Array.isArray(cached.answer)) {
       if (questionData.options) {
         const newIndices = [];
         for (const oldIdx of cached.answer) {
@@ -96,6 +100,8 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
             if (newIdx !== -1) newIndices.push(newIdx);
           }
         }
+        if (['matching', 'matrix'].includes(questionData.type) && newIndices.length === cached.answer.length) return newIndices;
+        if (['matching', 'matrix'].includes(questionData.type)) return cached.answer;
         if (newIndices.length > 0) return newIndices;
       }
     }
@@ -115,6 +121,8 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
           questionText: cleanQuizText(questionData.cacheQuestionText || questionData.text || '').substring(0, 500),
           questionType: questionData.type,
           options: (questionData.options || []).map(o => cleanQuizText(o).substring(0, 200)),
+          prompts: (questionData.prompts || []).map(o => cleanQuizText(o).substring(0, 200)),
+          rows: (questionData.rows || []).map(o => cleanQuizText(o).substring(0, 200)),
           imageFingerprint: imageFingerprint(questionData),
           answer: answer,
           lastUsedAt: new Date()

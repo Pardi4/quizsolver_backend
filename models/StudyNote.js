@@ -32,10 +32,12 @@ const studyNoteSchema = new mongoose.Schema({
   },
   questionType: {
     type: String,
-    enum: ['radio', 'checkbox', 'text'],
+    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix'],
     required: true
   },
   options: [String],
+  prompts: [String],
+  rows: [String],
   answer: {
     type: mongoose.Schema.Types.Mixed,
     required: true
@@ -127,6 +129,8 @@ studyNoteSchema.statics.upsertFromCache = async function(userId, cachedAnswer, u
     questionText: cachedAnswer.questionText,
     questionType: cachedAnswer.questionType,
     options: cachedAnswer.options || [],
+    prompts: cachedAnswer.prompts || [],
+    rows: cachedAnswer.rows || [],
     answer: cachedAnswer.answer,
     lastSeenAt: new Date()
   };

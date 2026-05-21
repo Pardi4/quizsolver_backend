@@ -18,7 +18,8 @@ const {
   shortenTextAnswer,
   callAI,
   solveSnapshotImage,
-  callExplanationAI
+  callExplanationAI,
+  callFollowUpAI
 } = require('../services/aiService');
 
 function validateQuestionData(q) {
@@ -26,19 +27,32 @@ function validateQuestionData(q) {
   if (!q.text || typeof q.text !== 'string') return 'Missing question text.';
   if (q.text.trim().length < 3) return 'Question text too short.';
   if (q.text.length > 2000) return 'Question text too long (max 2000 chars).';
-  if (q.type && !['radio', 'checkbox', 'text'].includes(q.type)) return 'Invalid question type.';
+  if (q.type && !['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(q.type)) return 'Invalid question type.';
   if (q.imageUrl !== undefined && q.imageUrl !== null && q.imageUrl !== '') {
     if (typeof q.imageUrl !== 'string') return 'Image URL must be a string.';
     if (q.imageUrl.length > MAX_IMAGE_DATA_URL_LENGTH) return 'Image too large.';
   }
   if (q.options) {
     if (!Array.isArray(q.options)) return 'Options must be an array.';
-    if (q.options.length > 20) return 'Too many options (max 20).';
+    if (q.options.length > 30) return 'Too many options (max 30).';
     for (const opt of q.options) {
       if (typeof opt !== 'string') return 'Each option must be a string.';
       if (opt.length > 500) return 'Option too long (max 500 chars).';
     }
   }
+  for (const key of ['prompts', 'rows']) {
+    if (q[key] !== undefined) {
+      if (!Array.isArray(q[key])) return `${key} must be an array.`;
+      if (q[key].length > 30) return `Too many ${key} (max 30).`;
+      for (const item of q[key]) {
+        if (typeof item !== 'string') return `Each ${key} item must be a string.`;
+        if (item.length > 500) return `${key} item too long (max 500 chars).`;
+      }
+    }
+  }
+  if (q.type === 'matching' && (!Array.isArray(q.prompts) || q.prompts.length === 0)) return 'Matching question needs prompts.';
+  if (q.type === 'matrix' && (!Array.isArray(q.rows) || q.rows.length === 0)) return 'Matrix question needs rows.';
+  if (['matching', 'matrix'].includes(q.type) && (!Array.isArray(q.options) || q.options.length < 2)) return 'Question needs at least two options.';
   return null;
 }
 
@@ -57,6 +71,8 @@ function sanitizeText(text) {
 function normalizeQuestionPayload(questionData) {
   questionData.text = sanitizeText(questionData.text);
   questionData.options = questionData.options?.map(sanitizeText);
+  questionData.prompts = questionData.prompts?.map(sanitizeText).filter(Boolean);
+  questionData.rows = questionData.rows?.map(sanitizeText).filter(Boolean);
 
   if (!questionData.text && questionData.imageUrl) {
     questionData.text = 'Question shown in image';
@@ -64,6 +80,12 @@ function normalizeQuestionPayload(questionData) {
 
   if (!questionData.text) {
     return 'Question text empty after cleanup.';
+  }
+  if (questionData.type === 'matching' && (!questionData.prompts || questionData.prompts.length === 0)) {
+    return 'Matching question prompts empty after cleanup.';
+  }
+  if (questionData.type === 'matrix' && (!questionData.rows || questionData.rows.length === 0)) {
+    return 'Matrix question rows empty after cleanup.';
   }
 
   return null;
@@ -113,10 +135,17 @@ function escapeRegex(text) {
   return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function answerToText(type, options, answer) {
+function answerToText(type, options, answer, meta = {}) {
   if (type === 'radio' && Array.isArray(options)) return options[answer] || String(answer);
   if (type === 'checkbox' && Array.isArray(options) && Array.isArray(answer)) {
     return answer.map(i => options[i] || String(i)).join(', ');
+  }
+  if ((type === 'matching' || type === 'matrix') && Array.isArray(options) && Array.isArray(answer)) {
+    const labels = type === 'matching' ? (meta.prompts || []) : (meta.rows || []);
+    return answer.map((idx, i) => {
+      const label = labels[i] ? `${labels[i]} -> ` : '';
+      return `${label}${options[idx] || String(idx)}`;
+    }).join('; ');
   }
   return String(answer ?? '');
 }
@@ -133,8 +162,10 @@ function serializeStudyNote(note) {
     questionText,
     questionType: note.questionType,
     options,
+    prompts: (note.prompts || []).map(cleanQuizText),
+    rows: (note.rows || []).map(cleanQuizText),
     answer: note.answer,
-    answerText: answerToText(note.questionType, options, note.answer),
+    answerText: answerToText(note.questionType, options, note.answer, { prompts: note.prompts || [], rows: note.rows || [] }),
     explanation: note.explanation || '',
     personalNote: note.personalNote || '',
     userNote: note.userNote || '',
@@ -491,7 +522,9 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     const { answer } = req.body;
     const text = sanitizeText(req.body.text);
     const options = Array.isArray(req.body.options) ? req.body.options.map(sanitizeText) : [];
-    const type = ['radio', 'checkbox', 'text'].includes(req.body.type) ? req.body.type : 'radio';
+    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(req.body.type) ? req.body.type : 'radio';
+    const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
+    const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const user = req.user;
 
     if (!text || answer === undefined) {
@@ -502,8 +535,8 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
       return res.status(429).json({ error: 'No credits remaining.', limitReached: true });
     }
 
-    const explanation = await callExplanationAI(text, options, answer, type, req.body.explanationLanguage || 'auto');
-    const questionData = { text, options, type };
+    const explanation = await callExplanationAI(text, options, answer, type, req.body.explanationLanguage || 'auto', { prompts, rows });
+    const questionData = { text, options, type, prompts, rows };
     let cachedDoc = await CachedAnswer.findOne({ questionHash: CachedAnswer.generateHash(questionData) });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation });
@@ -525,6 +558,58 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
 
 
 /* ── QUIZ SESSIONS ── */
+
+router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
+  try {
+    const { answer } = req.body;
+    const text = sanitizeText(req.body.text);
+    const options = Array.isArray(req.body.options) ? req.body.options.map(sanitizeText) : [];
+    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(req.body.type) ? req.body.type : 'radio';
+    const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
+    const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
+    const prompt = sanitizeText(String(req.body.prompt || 'Explain more.')).substring(0, 500);
+    const previousExplanation = sanitizeText(String(req.body.previousExplanation || '')).substring(0, 1200);
+    const user = req.user;
+
+    if (!text || answer === undefined) {
+      return res.status(400).json({ error: 'Missing question text or answer.' });
+    }
+
+    if (!user.canUse(1)) {
+      return res.status(429).json({ error: 'No credits remaining.', limitReached: true });
+    }
+
+    const followUp = await callFollowUpAI({
+      text,
+      options,
+      answer,
+      type,
+      prompt,
+      previousExplanation,
+      explanationLanguage: req.body.explanationLanguage || 'auto',
+      prompts,
+      rows
+    });
+
+    const questionData = { text, options, type, prompts, rows };
+    let cachedDoc = await CachedAnswer.findOne({ questionHash: CachedAnswer.generateHash(questionData) });
+    if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
+    const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation: followUp });
+
+    user.useCredits(1);
+    await user.save();
+
+    res.json({
+      success: true,
+      followUp,
+      remaining: user.getRemaining(),
+      studyNoteSaved: !!studyNote,
+      noteId: studyNote?._id || null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Follow-up error.' });
+  }
+});
 
 router.post('/sessions', async (req, res) => {
   try {
@@ -648,6 +733,8 @@ publicRouter.get('/shared/:token', async (req, res) => {
       questionText: cleanQuizText(note.questionText) || 'Question shown in image',
       questionType: note.questionType,
       options: (note.options || []).map(cleanQuizText),
+      prompts: (note.prompts || []).map(cleanQuizText),
+      rows: (note.rows || []).map(cleanQuizText),
       hasImage: !!(note.questionImageBase64 || note.questionImageUrl),
       questionImageBase64: note.questionImageBase64 || null,
       questionImageUrl: note.questionImageUrl || null,
@@ -688,6 +775,8 @@ publicRouter.post('/shared/:token/attempt', async (req, res) => {
       if (note.questionType === 'radio' && given === correct) score++;
       else if (note.questionType === 'checkbox' && Array.isArray(given) && Array.isArray(correct)
         && JSON.stringify([...given].sort()) === JSON.stringify([...correct].sort())) score++;
+      else if ((note.questionType === 'matching' || note.questionType === 'matrix') && Array.isArray(given) && Array.isArray(correct)
+        && JSON.stringify(given) === JSON.stringify(correct)) score++;
       else if (note.questionType === 'text' && typeof given === 'string'
         && given.trim().toLowerCase() === String(correct).trim().toLowerCase()) score++;
     });
@@ -699,7 +788,7 @@ publicRouter.post('/shared/:token/attempt', async (req, res) => {
     const correctAnswers = notes.map(note => ({
       id: note._id,
       answer: note.answer,
-      answerText: answerToText(note.questionType, (note.options || []).map(cleanQuizText), note.answer),
+      answerText: answerToText(note.questionType, (note.options || []).map(cleanQuizText), note.answer, { prompts: note.prompts || [], rows: note.rows || [] }),
       explanation: note.explanation || ''
     }));
 

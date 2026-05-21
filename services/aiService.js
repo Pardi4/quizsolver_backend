@@ -68,19 +68,54 @@ function getSystemMessage(type) {
   if (type === 'checkbox') {
     return 'You answer quiz questions. Return ONLY correct zero-based option numbers separated by commas. Example: 0,2,3. No words. If unsure, still choose the best options.';
   }
+  if (type === 'matching') {
+    return 'You answer matching/dropdown quiz questions. Return ONLY a JSON array of zero-based option numbers, one number for each item, in item order. Example: [2,0,1]. No words.';
+  }
+  if (type === 'matrix') {
+    return 'You answer matrix/grid quiz questions. Return ONLY a JSON array of zero-based column numbers, one number for each row, in row order. Example: [1,0,3]. No words.';
+  }
   if (type === 'text') {
     return 'You answer quiz questions. Return ONLY the final answer in the shortest useful form. No explanation, no markdown, no lead-in sentence, no final period. If the question asks what an acronym stands for, return only the expanded phrase in lowercase unless proper nouns require capitals. Example question: what is html? Example answer: hypertext markup language.';
   }
   return 'You answer quiz questions. Return ONLY the correct zero-based option number. Example: 2. No words. If unsure, still choose the best option.';
 }
 
-function buildUserPrompt(text, options) {
+function buildUserPrompt(textOrQuestion, optionsArg) {
+  const question = typeof textOrQuestion === 'object'
+    ? textOrQuestion
+    : { text: textOrQuestion, options: optionsArg };
+  const text = question.text || '';
+  const options = Array.isArray(question.options) ? question.options : [];
+
+  if (question.type === 'matching') {
+    const prompts = Array.isArray(question.prompts) ? question.prompts : [];
+    return [
+      text,
+      'Items:',
+      ...prompts.map((prompt, i) => `${i}. ${prompt}`),
+      'Options:',
+      ...options.map((option, i) => `${i}. ${option}`)
+    ].join('\n');
+  }
+
+  if (question.type === 'matrix') {
+    const rows = Array.isArray(question.rows) ? question.rows : [];
+    return [
+      text,
+      'Rows:',
+      ...rows.map((row, i) => `${i}. ${row}`),
+      'Columns:',
+      ...options.map((option, i) => `${i}. ${option}`)
+    ].join('\n');
+  }
+
   if (!options || options.length === 0) return text;
   return text + '\n' + options.map((o, i) => `${i}. ${o}`).join('\n');
 }
 
 function getMaxTokens(type) {
   if (type === 'checkbox') return 20;
+  if (type === 'matching' || type === 'matrix') return 120;
   if (type === 'text') return 40;
   return 5;
 }
@@ -108,7 +143,45 @@ function shortenTextAnswer(text) {
   return (firstSentence ? firstSentence[1] : firstLine).replace(/[.!?。]+$/g, '').trim();
 }
 
-function parseAnswer(raw, type, options) {
+function parseIndexArrayAnswer(text, raw, type, options, expectedCount) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const bracketMatch = text.match(/\[[^\]]*\]/);
+    if (bracketMatch) {
+      try { parsed = JSON.parse(bracketMatch[0]); } catch {}
+    }
+  }
+
+  let indices = [];
+  if (Array.isArray(parsed)) {
+    indices = parsed.map(item => {
+      if (typeof item === 'number') return item;
+      if (item && typeof item === 'object') {
+        return Number(item.answer ?? item.option ?? item.column ?? item.value);
+      }
+      return Number(item);
+    });
+  } else {
+    indices = text
+      .split(/[,\s;]+/)
+      .map(s => parseInt(s.trim(), 10));
+  }
+
+  indices = indices.filter(n => Number.isInteger(n));
+  if (!indices.length) throw new AIError('INVALID_RESPONSE', `Cannot parse ${type} answer: "${raw}"`);
+  if (expectedCount && indices.length > expectedCount) indices = indices.slice(0, expectedCount);
+  if (expectedCount && indices.length !== expectedCount) {
+    throw new AIError('INVALID_RESPONSE', `Expected ${expectedCount} ${type} answers, got ${indices.length}.`);
+  }
+  if (options && indices.some(idx => idx < 0 || idx >= options.length)) {
+    throw new AIError('INVALID_RESPONSE', `${type} answer contains option index out of range.`);
+  }
+  return indices;
+}
+
+function parseAnswer(raw, type, options, expectedCount = null) {
   if (!raw || typeof raw !== 'string') {
     throw new AIError('INVALID_RESPONSE', 'Empty AI response.');
   }
@@ -131,6 +204,10 @@ function parseAnswer(raw, type, options) {
   text = text.replace(/\bOption\s+([A-F])\b/gi, (_, l) => LETTER_MAP[l.toUpperCase()] ?? l);
   text = text.replace(/\b([A-F])[.)]\s/gi, (_, l) => LETTER_MAP[l.toUpperCase()] ?? l);
   text = text.replace(/^([A-F])$/gi, (_, l) => LETTER_MAP[l.toUpperCase()] ?? l);
+
+  if (type === 'matching' || type === 'matrix') {
+    return parseIndexArrayAnswer(text, raw, type, options, expectedCount);
+  }
 
   if (type === 'checkbox') {
     if (text === '') return [];
@@ -221,8 +298,8 @@ function getFallbackAIRoute(questionData, error, attemptedRoute) {
 }
 
 async function buildQuestionContent(questionData, imageDetail = 'low') {
-  const { text, options, imageUrl } = questionData;
-  const userContent = [{ type: 'text', text: buildUserPrompt(text, options) }];
+  const { imageUrl } = questionData;
+  const userContent = [{ type: 'text', text: buildUserPrompt(questionData) }];
 
   if (imageUrl) {
     const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
@@ -269,7 +346,12 @@ async function callAIWithModel(questionData, model, imageDetail = 'low') {
   console.log('[AI] ->', JSON.stringify({ model, type, hasImage: !!imageUrl, imageDetail, textLen: text.length }));
   const raw = await requestChatCompletion(body);
   console.log('[AI] <-', raw.substring(0, 120));
-  return parseAnswer(raw, type, options);
+  const expectedCount = Array.isArray(questionData.prompts)
+    ? questionData.prompts.length
+    : Array.isArray(questionData.rows)
+      ? questionData.rows.length
+      : null;
+  return parseAnswer(raw, type, options, expectedCount);
 }
 
 async function callAI(questionData) {
@@ -357,17 +439,33 @@ async function solveSnapshotImage(imageData) {
   }
 }
 
-async function callExplanationAI(text, options, answer, type, explanationLanguage = 'auto') {
+function answerTextForPrompt(options, answer, type, meta = {}) {
   let answerText = '';
   if (type === 'radio' && options) answerText = options[answer] || String(answer);
-  else if (type === 'checkbox' && options) answerText = answer.map(i => options[i] || i).join(', ');
+  else if (type === 'checkbox' && options && Array.isArray(answer)) answerText = answer.map(i => options[i] || i).join(', ');
+  else if ((type === 'matching' || type === 'matrix') && Array.isArray(answer)) {
+    const labels = type === 'matching' ? (meta.prompts || []) : (meta.rows || []);
+    answerText = answer.map((idx, i) => {
+      const label = labels[i] ? `${labels[i]} -> ` : '';
+      return `${label}${options[idx] || idx}`;
+    }).join('; ');
+  }
   else answerText = String(answer);
+  return answerText;
+}
 
-  const languageHint = explanationLanguage === 'pl'
+function languageInstruction(explanationLanguage = 'auto') {
+  return explanationLanguage === 'pl'
     ? 'Answer in Polish.'
     : explanationLanguage === 'en'
       ? 'Answer in English.'
       : 'Answer in the same language as the question when clear.';
+}
+
+async function callExplanationAI(text, options, answer, type, explanationLanguage = 'auto', meta = {}) {
+  const answerText = answerTextForPrompt(options, answer, type, meta);
+
+  const languageHint = languageInstruction(explanationLanguage);
 
   const body = {
     model: BASE_MODEL,
@@ -383,6 +481,33 @@ async function callExplanationAI(text, options, answer, type, explanationLanguag
   return raw || 'No explanation available.';
 }
 
+async function callFollowUpAI({ text, options, answer, type, prompt, previousExplanation, explanationLanguage = 'auto', prompts, rows }) {
+  const answerText = answerTextForPrompt(options || [], answer, type, { prompts, rows });
+  const languageHint = languageInstruction(explanationLanguage);
+  const safePrompt = String(prompt || '').substring(0, 500);
+  const contextLines = [
+    `Question: ${text}`,
+    options?.length ? `Options:\n${options.map((option, i) => `${i}. ${option}`).join('\n')}` : '',
+    Array.isArray(prompts) && prompts.length ? `Items:\n${prompts.map((row, i) => `${i}. ${row}`).join('\n')}` : '',
+    Array.isArray(rows) && rows.length ? `Rows:\n${rows.map((row, i) => `${i}. ${row}`).join('\n')}` : '',
+    `Correct answer: ${answerText}`,
+    previousExplanation ? `Previous explanation: ${String(previousExplanation).substring(0, 1200)}` : ''
+  ].filter(Boolean).join('\n\n');
+
+  const body = {
+    model: BASE_MODEL,
+    temperature: 0,
+    max_completion_tokens: 160,
+    messages: [
+      { role: 'system', content: `You are a concise quiz tutor. Answer the follow-up using the provided correct answer. Max 4 short sentences. ${languageHint}` },
+      { role: 'user', content: `${contextLines}\n\nFollow-up: ${safePrompt || 'Explain more.'}` }
+    ]
+  };
+
+  const raw = await requestChatCompletion(body);
+  return raw || 'No follow-up available.';
+}
+
 module.exports = {
   AIError,
   MAX_IMAGE_DATA_URL_LENGTH,
@@ -390,5 +515,6 @@ module.exports = {
   shortenTextAnswer,
   callAI,
   solveSnapshotImage,
-  callExplanationAI
+  callExplanationAI,
+  callFollowUpAI
 };
