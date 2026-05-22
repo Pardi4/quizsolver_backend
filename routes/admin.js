@@ -4,6 +4,8 @@ const User = require('../models/User');
 const CachedAnswer = require('../models/CachedAnswer');
 const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
+const SupportMessage = require('../models/SupportMessage');
+const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -21,6 +23,7 @@ router.get('/stats', async (req, res) => {
     const cachedAnswers = await CachedAnswer.countDocuments();
     const totalPurchases = await Purchase.countDocuments();
     const totalBugReports = await BugReport.countDocuments();
+    const openSupportMessages = await SupportMessage.countDocuments({ status: { $ne: 'closed' } });
 
     const totalQuestionsAgg = await User.aggregate([{ $group: { _id: null, total: { $sum: '$stats.totalQuestionsSolved' } } }]);
     const totalQuestions = totalQuestionsAgg[0]?.total || 0;
@@ -51,7 +54,8 @@ router.get('/stats', async (req, res) => {
       stats: {
         totalUsers, adminUsers, cachedAnswers, totalPurchases,
         totalBugReports, totalQuestions, totalCreditsInSystem,
-        totalRevenue, todayPurchases, monthRevenue, bannedUsers
+        totalRevenue, todayPurchases, monthRevenue, bannedUsers,
+        openSupportMessages
       },
       recentUsers: recentUsers.map(u => u.toPublicJSON())
     });
@@ -211,6 +215,110 @@ router.get('/bug-reports', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching bug reports.' });
+  }
+});
+
+router.get('/support/messages', async (req, res) => {
+  try {
+    const status = String(req.query.status || '').substring(0, 20);
+    const query = status && ['open', 'pending', 'closed'].includes(status) ? { status } : {};
+    const messages = await SupportMessage.find(query)
+      .sort({ receivedAt: -1 })
+      .limit(150)
+      .populate('replies.adminUser', 'email displayName')
+      .lean();
+    res.json({
+      success: true,
+      messages: messages.map(m => ({
+        id: m._id,
+        fromEmail: m.fromEmail,
+        fromName: m.fromName,
+        toEmail: m.toEmail,
+        subject: m.subject,
+        text: m.text,
+        html: m.html,
+        source: m.source,
+        status: m.status,
+        isRead: m.isRead,
+        receivedAt: m.receivedAt,
+        repliedAt: m.repliedAt,
+        replies: (m.replies || []).map(r => ({
+          id: r._id,
+          admin: r.adminUser?.displayName || r.adminUser?.email || 'Admin',
+          fromEmail: r.fromEmail,
+          toEmail: r.toEmail,
+          subject: r.subject,
+          text: r.text,
+          sentAt: r.sentAt,
+          delivery: r.delivery,
+          error: r.error
+        }))
+      }))
+    });
+  } catch {
+    res.status(500).json({ error: 'Error fetching support messages.' });
+  }
+});
+
+router.patch('/support/messages/:messageId', async (req, res) => {
+  try {
+    const patch = {};
+    if (['open', 'pending', 'closed'].includes(req.body.status)) patch.status = req.body.status;
+    if (typeof req.body.isRead === 'boolean') patch.isRead = req.body.isRead;
+    const message = await SupportMessage.findByIdAndUpdate(req.params.messageId, { $set: patch }, { new: true });
+    if (!message) return res.status(404).json({ error: 'Support message not found.' });
+    auditLog(req.user, 'SUPPORT_UPDATE', { messageId: message._id.toString(), patch });
+    res.json({ success: true, message });
+  } catch {
+    res.status(500).json({ error: 'Error updating support message.' });
+  }
+});
+
+router.post('/support/messages/:messageId/reply', async (req, res) => {
+  try {
+    const message = await SupportMessage.findById(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Support message not found.' });
+    const text = String(req.body.text || '').trim().substring(0, 10000);
+    if (!text) return res.status(400).json({ error: 'Reply text is required.' });
+    const template = supportReplyTemplate({ message, replyText: text });
+    let delivery = { success: false, disabled: true };
+    let error = '';
+    try {
+      delivery = await sendEmail({
+        to: message.fromEmail,
+        replyTo: SUPPORT_EMAIL,
+        ...template
+      });
+    } catch (err) {
+      error = err.message || 'Email delivery failed.';
+    }
+    message.replies.push({
+      adminUser: req.user._id,
+      fromEmail: SUPPORT_EMAIL,
+      toEmail: message.fromEmail,
+      subject: template.subject,
+      text,
+      html: template.html,
+      delivery: delivery.success ? 'sent' : (delivery.disabled ? 'disabled' : 'failed'),
+      error
+    });
+    message.status = delivery.success ? 'pending' : message.status;
+    message.isRead = true;
+    message.repliedAt = new Date();
+    await message.save();
+    auditLog(req.user, 'SUPPORT_REPLY', { messageId: message._id.toString(), to: message.fromEmail, delivery: delivery.success ? 'sent' : 'not-sent' });
+    res.json({
+      success: true,
+      delivery,
+      message: {
+        id: message._id,
+        status: message.status,
+        repliedAt: message.repliedAt,
+        replyPreviewHtml: `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`
+      }
+    });
+  } catch {
+    res.status(500).json({ error: 'Error sending support reply.' });
   }
 });
 

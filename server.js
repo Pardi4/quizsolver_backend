@@ -13,6 +13,7 @@ const { router: quizRoutes, publicRouter: quizPublicRoutes } = require('./routes
 const adminRoutes = require('./routes/admin');
 const creditsRoutes = require('./routes/credits');
 const webhookRoutes = require('./routes/webhook');
+const supportRoutes = require('./routes/support');
 
 const User = require('./models/User');
 
@@ -252,6 +253,7 @@ app.use('/api/quiz', quizPublicRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/credits', creditsRoutes);
+app.use('/api/support', supportRoutes);
 
 app.get('/api/stats/public', async (req, res) => {
   try {
@@ -346,7 +348,9 @@ async function seedAdmin() {
         email: adminEmail,
         passwordHash: adminPassword,
         displayName: 'Administrator',
-        role: 'admin'
+        role: 'admin',
+        authProviders: ['password'],
+        emailVerified: true
       });
       await admin.save();
       console.log(`[Server] Admin created: ${adminEmail}`);
@@ -375,6 +379,7 @@ function createAdminServer() {
   adminApp.use('/api/auth', authRoutes);
   adminApp.use('/api/admin', adminRoutes);
   adminApp.use('/api/credits', creditsRoutes);
+  adminApp.use('/api/support', supportRoutes);
 
   if (HAS_ANGULAR_BUILD) {
     adminApp.use(express.static(ANGULAR_BROWSER_DIR, STATIC_OPTIONS));

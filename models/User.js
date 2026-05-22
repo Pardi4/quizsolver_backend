@@ -14,8 +14,26 @@ const userSchema = new mongoose.Schema({
   },
   passwordHash: {
     type: String,
-    required: true
+    default: ''
   },
+  authProviders: {
+    type: [String],
+    default: ['password']
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationCodeHash: { type: String, default: '' },
+  emailVerificationExpiresAt: { type: Date, default: null },
+  passwordResetCodeHash: { type: String, default: '' },
+  passwordResetExpiresAt: { type: Date, default: null },
+  passwordChangedAt: { type: Date, default: null },
   displayName: {
     type: String,
     trim: true,
@@ -60,7 +78,7 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('passwordHash')) return next();
+  if (!this.isModified('passwordHash') || !this.passwordHash) return next();
   try {
     const salt = await bcrypt.genSalt(12);
     this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
@@ -78,6 +96,7 @@ userSchema.pre('save', function(next) {
 });
 
 userSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.passwordHash) return false;
   return bcrypt.compare(candidatePassword, this.passwordHash);
 };
 
@@ -159,6 +178,8 @@ userSchema.methods.toPublicJSON = function() {
     email: this.email,
     displayName: this.displayName,
     role: this.role,
+    authProviders: this.authProviders || [],
+    emailVerified: !!this.emailVerified,
     credits: this.role === 'admin' ? Infinity : this.credits,
     streak: this.streak,
     referralCode: this.referralCode,
