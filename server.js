@@ -121,8 +121,12 @@ app.use((req, res, next) => {
   const forwardedProto = String(proto).split(',')[0].trim();
   
   const apexHost = 'getquizsolver.com';
+  const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(hostname);
+  const isPublicHost = hostname === apexHost || hostname === `www.${apexHost}`;
 
-  if (hostname === `www.${apexHost}` || (forwardedProto && forwardedProto !== 'https')) {
+  if (isLocalHost) return next();
+
+  if (hostname === `www.${apexHost}` || (isPublicHost && forwardedProto && forwardedProto !== 'https')) {
     return res.redirect(301, `https://${apexHost}${req.originalUrl}`);
   }
 
