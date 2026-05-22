@@ -18,7 +18,7 @@ function run(command, args, options = {}) {
   log(`${options.cwd || process.cwd()} $ ${label}`);
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    env: process.env,
+    env: { ...process.env, ...(options.env || {}) },
     shell: process.platform === 'win32',
     stdio: 'inherit'
   });
@@ -91,13 +91,13 @@ function installDependencies(dir, name, omitDev = false) {
 
   const hasLock = hasFile(dir, 'package-lock.json');
   if (hasLock) {
-    const args = omitDev ? ['ci', '--omit=dev'] : ['ci'];
-    run('npm', args, { cwd: dir });
+    const args = omitDev ? ['ci', '--omit=dev'] : ['ci', '--include=dev'];
+    run('npm', args, { cwd: dir, env: omitDev ? {} : { NODE_ENV: 'development' } });
     return;
   }
 
-  const args = omitDev ? ['install', '--omit=dev'] : ['install'];
-  run('npm', args, { cwd: dir });
+  const args = omitDev ? ['install', '--omit=dev'] : ['install', '--include=dev'];
+  run('npm', args, { cwd: dir, env: omitDev ? {} : { NODE_ENV: 'development' } });
 }
 
 function buildFrontend() {

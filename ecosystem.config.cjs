@@ -15,6 +15,8 @@ module.exports = {
         FRONTEND_DIR: path.join(__dirname, '..', 'frontend')
       },
       max_memory_restart: '700M',
+      min_uptime: '20s',
+      max_restarts: 3,
       time: true
     }
   ]
