@@ -32,6 +32,7 @@ const PAGE_ROUTES = {
   home: { en: '/', pl: '/pl' },
   dashboard: { en: '/dashboard', pl: '/pl/dashboard' },
   quiz: { en: '/quiz', pl: '/pl/quiz' },
+  demo: { en: '/demo', pl: '/pl/demo' },
   credits: { en: '/credits', pl: '/pl/credits' },
   admin: { en: '/admin', pl: '/admin' },
   privacy: { en: '/privacy', pl: '/pl/privacy' },
@@ -59,6 +60,8 @@ const INDEXED_ROUTES = [
   PAGE_ROUTES.home.pl,
   PAGE_ROUTES.quiz.en,
   PAGE_ROUTES.quiz.pl,
+  PAGE_ROUTES.demo.en,
+  PAGE_ROUTES.demo.pl,
   PAGE_ROUTES.credits.en,
   PAGE_ROUTES.credits.pl,
   PAGE_ROUTES.quizSolverAi.en,
@@ -286,6 +289,8 @@ app.get('/pricing', (req, res) => res.redirect(301, '/#pricing'));
 app.get('/pl/pricing', (req, res) => res.redirect(301, '/pl/#pricing'));
 app.get('/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
 app.get('/pl/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
+app.get('/onboarding', (req, res) => res.redirect(301, '/demo'));
+app.get('/pl/onboarding', (req, res) => res.redirect(301, '/pl/demo'));
 app.get('/ai-quiz-solver', (req, res) => res.redirect(301, '/quiz-solver-ai'));
 app.get('/pl/ai-quiz-solver', (req, res) => res.redirect(301, '/pl/quiz-solver-ai'));
 app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));

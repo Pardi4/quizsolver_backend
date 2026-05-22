@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>QuizSolver test checkout</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #030712;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.22);
+      --cyan: #06b6d4;
+      --violet: #8b5cf6;
+      --green: #10b981;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(6, 182, 212, 0.16), transparent 32rem),
+        radial-gradient(circle at 85% 90%, rgba(139, 92, 246, 0.18), transparent 30rem),
+        var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(100%, 520px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(17, 24, 39, 0.88));
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+    header, form, .success {
+      padding: 1.5rem;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+    }
+    .badge {
+      display: inline-flex;
+      margin-bottom: 0.85rem;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 999px;
+      background: rgba(6, 182, 212, 0.09);
+      color: var(--cyan);
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 8vw, 2.6rem);
+      line-height: 1.05;
+    }
+    p {
+      margin: 0.7rem 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.6rem;
+      margin-top: 1.25rem;
+    }
+    .summary div {
+      padding: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+    .summary span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .summary strong {
+      display: block;
+      margin-top: 0.25rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    label {
+      display: grid;
+      gap: 0.4rem;
+      margin-bottom: 0.9rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 800;
+    }
+    input {
+      width: 100%;
+      min-height: 46px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0 0.9rem;
+      background: rgba(2, 6, 23, 0.6);
+      color: var(--text);
+      outline: none;
+    }
+    input:focus {
+      border-color: rgba(6, 182, 212, 0.65);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12);
+    }
+    button, a.button {
+      width: 100%;
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 12px;
+      padding: 0 1rem;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      color: white;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: 0 14px 32px rgba(6, 182, 212, 0.18);
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+    .success {
+      display: none;
+      border-top: 1px solid var(--border);
+      background: rgba(16, 185, 129, 0.08);
+    }
+    .success strong {
+      color: var(--green);
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.7rem;
+      margin-top: 1rem;
+    }
+    .button.secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .error {
+      min-height: 1.4rem;
+      color: #fb7185;
+      font-weight: 700;
+    }
+    @media (max-width: 520px) {
+      .summary, .actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="badge">Test payments</span>
+      <h1>Tymczasowa płatność testowa</h1>
+      <p>Wpisz dowolne dane. Ten ekran jest tylko do testów i po kliknięciu dopisuje kredyty do zalogowanego konta.</p>
+      <div class="summary">
+        <div><span>Pakiet</span><strong id="packName">-</strong></div>
+        <div><span>Kredyty</span><strong id="credits">-</strong></div>
+        <div><span>Cena</span><strong id="price">-</strong></div>
+      </div>
+    </header>
+
+    <form id="checkoutForm">
+      <label>
+        Email
+        <input id="email" autocomplete="email" placeholder="test@example.com">
+      </label>
+      <label>
+        Numer karty
+        <input inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242">
+      </label>
+      <label>
+        CVC
+        <input inputmode="numeric" autocomplete="cc-csc" placeholder="123">
+      </label>
+      <p class="error" id="error"></p>
+      <button id="payButton" type="submit">Zapłać testowo i dodaj kredyty</button>
+    </form>
+
+    <section class="success" id="successBox">
+      <strong id="successTitle">Kredyty dodane.</strong>
+      <p id="successText"></p>
+      <div class="actions">
+        <a class="button" href="/pl/credits">Wróć do kredytów</a>
+        <a class="button secondary" href="/pl/dashboard">Otwórz panel</a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const pack = params.get('pack') || 'starter';
+    const credits = params.get('credits') || '';
+    const price = params.get('price') || '';
+    const email = params.get('email') || '';
+    const token = localStorage.getItem('qs_token') || '';
+
+    const packLabels = {
+      starter: '100 Credits',
+      popular: '500 Credits',
+      pro: '2000 Credits'
+    };
+
+    document.getElementById('packName').textContent = packLabels[pack] || pack;
+    document.getElementById('credits').textContent = credits || '-';
+    document.getElementById('price').textContent = price ? `$${price}` : '-';
+    document.getElementById('email').value = email;
+
+    document.getElementById('checkoutForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const error = document.getElementById('error');
+      const button = document.getElementById('payButton');
+      error.textContent = '';
+
+      if (!token) {
+        error.textContent = 'Brak zalogowanej sesji. Wróć na stronę i zaloguj się ponownie.';
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = 'Dodawanie kredytów...';
+
+      try {
+        const response = await fetch('/api/credits/demo-complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ pack })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Nie udało się dodać kredytów.');
+        }
+
+        document.getElementById('successText').textContent =
+          `Dodano ${data.creditsAdded} kredytów. Aktualne saldo: ${data.user?.credits ?? 'odśwież konto'}.`;
+        document.getElementById('successBox').style.display = 'block';
+        document.getElementById('checkoutForm').style.display = 'none';
+      } catch (err) {
+        error.textContent = err.message || 'Błąd testowej płatności.';
+        button.disabled = false;
+        button.textContent = 'Zapłać testowo i dodaj kredyty';
+      }
+    });
+  </script>
+</body>
+</html>

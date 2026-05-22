@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { authMiddleware } = require('../middleware/auth');
 const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
@@ -12,6 +13,13 @@ const PACKS = {
   popular: { id: 'popular', name: '500 Credits', credits: 500, price: 4.99, planEnv: 'WHOP_PLAN_500' },
   pro:     { id: 'pro',     name: '2000 Credits', credits: 2000, price: 9.99, planEnv: 'WHOP_PLAN_2000' }
 };
+
+function demoPaymentsEnabled() {
+  return !process.env.WHOP_API_KEY
+    || process.env.WHOP_API_KEY.includes('XXXXXXX')
+    || process.env.DEMO_PAYMENTS === 'true'
+    || process.env.TEST_PAYMENTS === 'true';
+}
 
 router.get('/packs', (req, res) => {
   res.json({
@@ -52,8 +60,7 @@ router.post('/buy', async (req, res) => {
     const packInfo = PACKS[pack];
 
     // Demo mode: use test checkout page
-    const IS_DEMO = !process.env.WHOP_API_KEY || process.env.WHOP_API_KEY.includes('XXXXXXX') || process.env.DEMO_PAYMENTS === 'true';
-    if (IS_DEMO) {
+    if (demoPaymentsEnabled()) {
       const siteUrl = (process.env.PUBLIC_SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
       const checkoutUrl = `${siteUrl}/demo-checkout.html?pack=${pack}&credits=${packInfo.credits}&price=${packInfo.price}&userId=${req.user._id}&email=${encodeURIComponent(req.user.email)}`;
       return res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits, demo: true });
@@ -99,6 +106,41 @@ router.post('/buy', async (req, res) => {
   } catch (error) {
     console.error('[Credits] Buy error:', error.message);
     res.status(500).json({ error: 'Error creating checkout.' });
+  }
+});
+
+router.post('/demo-complete', async (req, res) => {
+  try {
+    if (!demoPaymentsEnabled()) {
+      return res.status(403).json({ error: 'Test payments are disabled.' });
+    }
+
+    const { pack } = req.body || {};
+    if (!pack || !PACKS[pack]) {
+      return res.status(400).json({ error: 'Invalid credit top-up.' });
+    }
+
+    const packInfo = PACKS[pack];
+    const orderId = `demo_${req.user._id}_${pack}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+    await Purchase.recordPurchase(req.user._id, packInfo.id, packInfo.credits, {
+      priceUsd: packInfo.price,
+      paymentProvider: 'demo',
+      externalOrderId: orderId,
+      grantReason: 'Temporary test checkout'
+    });
+
+    const freshUser = await User.findById(req.user._id).select('-__v');
+    res.json({
+      success: true,
+      creditsAdded: packInfo.credits,
+      pack: packInfo.id,
+      orderId,
+      user: freshUser?.toPublicJSON?.() || null
+    });
+  } catch (error) {
+    console.error('[Credits] Demo checkout error:', error.message);
+    res.status(500).json({ error: 'Error completing test payment.' });
   }
 });
 

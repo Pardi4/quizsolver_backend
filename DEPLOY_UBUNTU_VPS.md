@@ -172,6 +172,43 @@ Dodaj:
 
 ## 12. Update aplikacji
 
+PM2 jest skonfigurowany tak, aby przy starcie lub `pm2 restart quizsolver` wykonać automatyczny deploy:
+
+1. `git fetch` i aktualizacja backendu z GitHuba,
+2. `npm ci --omit=dev` w backendzie,
+3. `git fetch` i aktualizacja frontendu z GitHuba,
+4. `npm ci` w frontendzie,
+5. `npm run build` w frontendzie,
+6. uruchomienie `server.js`.
+
+Domyślnie używana jest strategia:
+
+```env
+PM2_GIT_STRATEGY=hard
+```
+
+To oznacza, że tracked files zmienione lokalnie na VPS zostaną nadpisane wersją z GitHuba. Plik `.env` jest ignorowany przez Git i zostaje na serwerze. Jeżeli chcesz bezpieczniejszy tryb bez nadpisywania lokalnych zmian, ustaw:
+
+```env
+PM2_GIT_STRATEGY=ff-only
+```
+
+Możesz też tymczasowo wyłączyć auto deploy:
+
+```env
+PM2_AUTO_UPDATE=false
+```
+
+Standardowy update od teraz:
+
+```bash
+cd /var/www/quizsolver/backend
+pm2 restart quizsolver
+pm2 logs quizsolver
+```
+
+Ręczna wersja awaryjna:
+
 ```bash
 # 1. Update backendu
 cd /var/www/quizsolver/backend
