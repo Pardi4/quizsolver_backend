@@ -10,7 +10,6 @@
       color-scheme: dark;
       --bg: #030712;
       --panel: #0f172a;
-      --panel-2: #111827;
       --text: #f8fafc;
       --muted: #94a3b8;
       --border: rgba(148, 163, 184, 0.22);
@@ -33,10 +32,10 @@
       color: var(--text);
     }
     main {
-      width: min(100%, 520px);
+      width: min(100%, 560px);
       border: 1px solid var(--border);
       border-radius: 18px;
-      background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(17, 24, 39, 0.88));
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.9));
       box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
       overflow: hidden;
     }
@@ -61,7 +60,7 @@
     }
     h1 {
       margin: 0;
-      font-size: clamp(1.8rem, 8vw, 2.6rem);
+      font-size: clamp(1.8rem, 8vw, 2.55rem);
       line-height: 1.05;
     }
     p {
@@ -76,6 +75,7 @@
       margin-top: 1.25rem;
     }
     .summary div {
+      min-width: 0;
       padding: 0.85rem;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -85,7 +85,7 @@
       display: block;
       color: var(--muted);
       font-size: 0.72rem;
-      font-weight: 700;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.06em;
     }
@@ -95,6 +95,11 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 0.55fr;
+      gap: 0.75rem;
     }
     label {
       display: grid;
@@ -110,7 +115,7 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 0 0.9rem;
-      background: rgba(2, 6, 23, 0.6);
+      background: rgba(2, 6, 23, 0.62);
       color: var(--text);
       outline: none;
     }
@@ -160,10 +165,10 @@
     .error {
       min-height: 1.4rem;
       color: #fb7185;
-      font-weight: 700;
+      font-weight: 800;
     }
-    @media (max-width: 520px) {
-      .summary, .actions {
+    @media (max-width: 560px) {
+      .summary, .actions, .field-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -173,8 +178,8 @@
   <main>
     <header>
       <span class="badge">Test payments</span>
-      <h1>Tymczasowa płatność testowa</h1>
-      <p>Wpisz dowolne dane. Ten ekran jest tylko do testów i po kliknięciu dopisuje kredyty do zalogowanego konta.</p>
+      <h1>Tymczasowa platnosc testowa</h1>
+      <p>Wpisz dowolne dane karty. Ten ekran jest tylko do testow i po kliknieciu dopisuje kredyty do zalogowanego konta.</p>
       <div class="summary">
         <div><span>Pakiet</span><strong id="packName">-</strong></div>
         <div><span>Kredyty</span><strong id="credits">-</strong></div>
@@ -188,23 +193,33 @@
         <input id="email" autocomplete="email" placeholder="test@example.com">
       </label>
       <label>
+        Imie i nazwisko na karcie
+        <input autocomplete="cc-name" placeholder="Jan Kowalski">
+      </label>
+      <label>
         Numer karty
         <input inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242">
       </label>
-      <label>
-        CVC
-        <input inputmode="numeric" autocomplete="cc-csc" placeholder="123">
-      </label>
+      <div class="field-grid">
+        <label>
+          Data waznosci
+          <input inputmode="numeric" autocomplete="cc-exp" placeholder="12 / 30">
+        </label>
+        <label>
+          CVC
+          <input inputmode="numeric" autocomplete="cc-csc" placeholder="123">
+        </label>
+      </div>
       <p class="error" id="error"></p>
-      <button id="payButton" type="submit">Zapłać testowo i dodaj kredyty</button>
+      <button id="payButton" type="submit">Zaplac testowo i dodaj kredyty</button>
     </form>
 
     <section class="success" id="successBox">
-      <strong id="successTitle">Kredyty dodane.</strong>
+      <strong>Kredyty dodane.</strong>
       <p id="successText"></p>
       <div class="actions">
-        <a class="button" href="/pl/credits">Wróć do kredytów</a>
-        <a class="button secondary" href="/pl/dashboard">Otwórz panel</a>
+        <a class="button" href="/pl/credits">Wroc do kredytow</a>
+        <a class="button secondary" href="/pl/dashboard">Otworz panel</a>
       </div>
     </section>
   </main>
@@ -235,12 +250,12 @@
       error.textContent = '';
 
       if (!token) {
-        error.textContent = 'Brak zalogowanej sesji. Wróć na stronę i zaloguj się ponownie.';
+        error.textContent = 'Brak zalogowanej sesji. Wroc na strone i zaloguj sie ponownie.';
         return;
       }
 
       button.disabled = true;
-      button.textContent = 'Dodawanie kredytów...';
+      button.textContent = 'Dodawanie kredytow...';
 
       try {
         const response = await fetch('/api/credits/demo-complete', {
@@ -253,17 +268,17 @@
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Nie udało się dodać kredytów.');
+          throw new Error(data.error || 'Nie udalo sie dodac kredytow.');
         }
 
         document.getElementById('successText').textContent =
-          `Dodano ${data.creditsAdded} kredytów. Aktualne saldo: ${data.user?.credits ?? 'odśwież konto'}.`;
+          `Dodano ${data.creditsAdded} kredytow. Aktualne saldo: ${data.user?.credits ?? 'odswiez konto'}.`;
         document.getElementById('successBox').style.display = 'block';
         document.getElementById('checkoutForm').style.display = 'none';
       } catch (err) {
-        error.textContent = err.message || 'Błąd testowej płatności.';
+        error.textContent = err.message || 'Blad testowej platnosci.';
         button.disabled = false;
-        button.textContent = 'Zapłać testowo i dodaj kredyty';
+        button.textContent = 'Zaplac testowo i dodaj kredyty';
       }
     });
   </script>

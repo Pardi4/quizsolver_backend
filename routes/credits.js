@@ -14,11 +14,50 @@ const PACKS = {
   pro:     { id: 'pro',     name: '2000 Credits', credits: 2000, price: 9.99, planEnv: 'WHOP_PLAN_2000' }
 };
 
-function demoPaymentsEnabled() {
-  return !process.env.WHOP_API_KEY
-    || process.env.WHOP_API_KEY.includes('XXXXXXX')
-    || process.env.DEMO_PAYMENTS === 'true'
-    || process.env.TEST_PAYMENTS === 'true';
+function envFlag(name) {
+  return String(process.env[name] || '').toLowerCase() === 'true';
+}
+
+function envDisabled(name) {
+  return String(process.env[name] || '').toLowerCase() === 'false';
+}
+
+function looksPlaceholder(value) {
+  return !value || /xxxx|placeholder|changeme|todo/i.test(String(value));
+}
+
+function realPaymentsEnabled() {
+  return envFlag('REAL_PAYMENTS') || envFlag('WHOP_PAYMENTS');
+}
+
+function testPaymentsEnabled() {
+  if (envFlag('DEMO_PAYMENTS') || envFlag('TEST_PAYMENTS')) return true;
+  if (envDisabled('DEMO_PAYMENTS') || envDisabled('TEST_PAYMENTS')) return false;
+
+  // Temporary default: keep the project in test checkout mode until real
+  // payments are explicitly enabled on the VPS.
+  return !realPaymentsEnabled();
+}
+
+function hasWhopConfig(packInfo) {
+  return !looksPlaceholder(process.env.WHOP_API_KEY) && !looksPlaceholder(process.env[packInfo.planEnv]);
+}
+
+function testCheckoutUrl(req, pack, packInfo) {
+  const siteUrl = (process.env.PUBLIC_SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  return `${siteUrl}/demo-checkout.html?pack=${pack}&credits=${packInfo.credits}&price=${packInfo.price}&userId=${req.user._id}&email=${encodeURIComponent(req.user.email)}`;
+}
+
+function testCheckoutResponse(req, pack, packInfo, reason = 'test') {
+  return {
+    success: true,
+    checkoutUrl: testCheckoutUrl(req, pack, packInfo),
+    pack: packInfo.id,
+    credits: packInfo.credits,
+    test: true,
+    demo: true,
+    reason
+  };
 }
 
 router.get('/packs', (req, res) => {
@@ -59,18 +98,16 @@ router.post('/buy', async (req, res) => {
 
     const packInfo = PACKS[pack];
 
-    // Demo mode: use test checkout page
-    if (demoPaymentsEnabled()) {
-      const siteUrl = (process.env.PUBLIC_SITE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
-      const checkoutUrl = `${siteUrl}/demo-checkout.html?pack=${pack}&credits=${packInfo.credits}&price=${packInfo.price}&userId=${req.user._id}&email=${encodeURIComponent(req.user.email)}`;
-      return res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits, demo: true });
+    if (testPaymentsEnabled()) {
+      return res.json(testCheckoutResponse(req, pack, packInfo, 'test-payments-enabled'));
     }
 
     const apiKey = process.env.WHOP_API_KEY;
     const planId = process.env[packInfo.planEnv];
 
-    if (!apiKey || !planId || planId.includes('XXXXXXX')) {
-      return res.status(503).json({ error: 'Payment not configured. Contact admin.' });
+    if (!hasWhopConfig(packInfo)) {
+      console.warn('[Credits] Whop is not fully configured, using test checkout.');
+      return res.json(testCheckoutResponse(req, pack, packInfo, 'whop-not-configured'));
     }
 
     const response = await fetch('https://api.whop.com/api/v1/checkout_configurations', {
@@ -94,9 +131,7 @@ router.post('/buy', async (req, res) => {
     if (!response.ok) {
       const errText = await response.text();
       console.error('[Credits] Whop error:', response.status, errText.substring(0, 300));
-
-      const checkoutUrl = `https://whop.com/quizsolver/?utm_source=app&pack=${pack}&email=${encodeURIComponent(req.user.email)}`;
-      return res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits, fallback: true });
+      return res.json(testCheckoutResponse(req, pack, packInfo, 'whop-error'));
     }
 
     const data = await response.json();
@@ -105,22 +140,26 @@ router.post('/buy', async (req, res) => {
     res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits });
   } catch (error) {
     console.error('[Credits] Buy error:', error.message);
+    const packInfo = PACKS[req.body?.pack];
+    if (packInfo) {
+      return res.json(testCheckoutResponse(req, req.body.pack, packInfo, 'checkout-error'));
+    }
     res.status(500).json({ error: 'Error creating checkout.' });
   }
 });
 
 router.post('/demo-complete', async (req, res) => {
   try {
-    if (!demoPaymentsEnabled()) {
-      return res.status(403).json({ error: 'Test payments are disabled.' });
-    }
-
     const { pack } = req.body || {};
     if (!pack || !PACKS[pack]) {
       return res.status(400).json({ error: 'Invalid credit top-up.' });
     }
 
     const packInfo = PACKS[pack];
+    if (!testPaymentsEnabled() && hasWhopConfig(packInfo)) {
+      return res.status(403).json({ error: 'Test payments are disabled.' });
+    }
+
     const orderId = `demo_${req.user._id}_${pack}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     await Purchase.recordPurchase(req.user._id, packInfo.id, packInfo.credits, {
