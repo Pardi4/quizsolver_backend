@@ -60,6 +60,50 @@ function safeRedirectPath(value) {
   return value.substring(0, 300);
 }
 
+function allowedChromeExtensionIds() {
+  return String(process.env.CHROME_EXTENSION_IDS || process.env.CHROME_EXTENSION_ID || '')
+    .split(',')
+    .map(id => id.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function parseExtensionRedirect(value) {
+  if (!value || typeof value !== 'string') return '';
+  try {
+    const url = new URL(value);
+    const isChromeIdentityRedirect = url.protocol === 'https:'
+      && /^[a-p]{32}\.chromiumapp\.org$/i.test(url.hostname);
+    if (!isChromeIdentityRedirect) return '';
+    return {
+      id: url.hostname.replace(/\.chromiumapp\.org$/i, '').toLowerCase(),
+      url: value.substring(0, 500)
+    };
+  } catch {
+    return '';
+  }
+}
+
+function safeExtensionRedirect(value) {
+  const parsed = parseExtensionRedirect(value);
+  if (!parsed) return '';
+  const allowedIds = allowedChromeExtensionIds();
+  if (allowedIds.length > 0 && !allowedIds.includes(parsed.id)) return '';
+  if (process.env.NODE_ENV === 'production' && allowedIds.length === 0) return '';
+  return parsed.url;
+}
+
+function extensionTokenRedirect(baseUrl, token) {
+  const url = new URL(baseUrl);
+  url.hash = new URLSearchParams({ token }).toString();
+  return url.toString();
+}
+
+function extensionErrorRedirect(baseUrl, error) {
+  const url = new URL(baseUrl);
+  url.hash = new URLSearchParams({ error }).toString();
+  return url.toString();
+}
+
 async function issueVerificationCode(user) {
   const code = generateCode();
   user.emailVerificationCodeHash = hashCode(code);
@@ -324,8 +368,14 @@ router.get('/google/start', authLimiter, (req, res) => {
   if (!clientId) return res.status(503).send('Google login is not configured.');
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${SITE_URL}/api/auth/google/callback`;
   const redirect = safeRedirectPath(req.query.redirect || '/dashboard');
+  const rawExtensionRedirect = req.query.extensionRedirect;
+  const extensionRedirect = safeExtensionRedirect(rawExtensionRedirect);
+  const attemptedExtensionRedirect = parseExtensionRedirect(rawExtensionRedirect);
+  if (rawExtensionRedirect && attemptedExtensionRedirect && !extensionRedirect) {
+    return res.redirect(extensionErrorRedirect(attemptedExtensionRedirect.url, 'extension_not_configured'));
+  }
   const state = generateToken(`google:${crypto.randomBytes(12).toString('hex')}`, true);
-  const statePayload = Buffer.from(JSON.stringify({ state, redirect })).toString('base64url');
+  const statePayload = Buffer.from(JSON.stringify({ state, redirect, extensionRedirect })).toString('base64url');
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -347,9 +397,11 @@ router.get('/google/callback', async (req, res) => {
     const code = String(req.query.code || '');
     if (!code) throw new Error('Missing Google code.');
     let redirect = '/dashboard';
+    let extensionRedirect = '';
     try {
       const state = JSON.parse(Buffer.from(String(req.query.state || ''), 'base64url').toString('utf8'));
       redirect = safeRedirectPath(state.redirect);
+      extensionRedirect = safeExtensionRedirect(state.extensionRedirect);
     } catch {}
 
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -394,6 +446,9 @@ router.get('/google/callback', async (req, res) => {
     user.resetFreeCreditsIfNeeded();
     await user.save();
     const token = generateToken(user._id, true);
+    if (extensionRedirect) {
+      return res.redirect(extensionTokenRedirect(extensionRedirect, token));
+    }
     res.set('Cache-Control', 'no-store').type('html').send(tokenLandingHtml(token, redirect));
   } catch (error) {
     const message = encodeURIComponent(error.message || 'Google login failed.');

@@ -23,7 +23,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   paymentProvider: {
     type: String,
-    enum: ['whop', 'manual', 'free', 'referral', 'demo'],
+    enum: ['whop', 'manual', 'free', 'referral'],
     default: 'whop'
   },
   externalOrderId: String,

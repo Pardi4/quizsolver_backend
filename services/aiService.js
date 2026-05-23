@@ -64,20 +64,23 @@ function imageUrlFromBase64(base64, mimeType) {
   return `data:${mimeType};base64,${base64}`;
 }
 
+const QUIZ_SOLVER_SYSTEM_PREFIX = [
+  'You are QuizSolver Answer Engine.',
+  'Solve normalized quiz payloads from websites. The payload may include text, options, rows, matching items, and an image.',
+  'Use the option text, question wording, and image when present. Return only the required machine-readable answer.',
+  'Never include explanation, markdown, labels, letters like A/B/C, or extra words.'
+].join('\n');
+
+const OUTPUT_CONTRACTS = {
+  checkbox: 'Type checkbox means multiple answers may be correct. Return every correct zero-based option index, comma-separated, in ascending order. Example: 0,2,3. If exactly one option is correct, return one index only.',
+  matching: 'Type matching means each item must be matched to one option/dropdown value. Return a JSON array of zero-based option indices, one number per item, in item order. Example: [2,0,1].',
+  matrix: 'Type matrix means each row must choose one column. Return a JSON array of zero-based column indices, one number per row, in row order. Example: [1,0,3].',
+  text: 'Type text means free-text answer. Return the shortest useful final answer only. No final period. If the question asks what an acronym stands for, return only the expanded phrase in lowercase unless proper nouns require capitals.',
+  radio: 'Type radio means exactly one answer is correct. Return the single zero-based option index. Example: 2.'
+};
+
 function getSystemMessage(type) {
-  if (type === 'checkbox') {
-    return 'You answer quiz questions. Return ONLY correct zero-based option numbers separated by commas. Example: 0,2,3. No words. If unsure, still choose the best options.';
-  }
-  if (type === 'matching') {
-    return 'You answer matching/dropdown quiz questions. Return ONLY a JSON array of zero-based option numbers, one number for each item, in item order. Example: [2,0,1]. No words.';
-  }
-  if (type === 'matrix') {
-    return 'You answer matrix/grid quiz questions. Return ONLY a JSON array of zero-based column numbers, one number for each row, in row order. Example: [1,0,3]. No words.';
-  }
-  if (type === 'text') {
-    return 'You answer quiz questions. Return ONLY the final answer in the shortest useful form. No explanation, no markdown, no lead-in sentence, no final period. If the question asks what an acronym stands for, return only the expanded phrase in lowercase unless proper nouns require capitals. Example question: what is html? Example answer: hypertext markup language.';
-  }
-  return 'You answer quiz questions. Return ONLY the correct zero-based option number. Example: 2. No words. If unsure, still choose the best option.';
+  return `${QUIZ_SOLVER_SYSTEM_PREFIX}\nOutput contract:\n${OUTPUT_CONTRACTS[type] || OUTPUT_CONTRACTS.radio}`;
 }
 
 function buildUserPrompt(textOrQuestion, optionsArg) {
@@ -86,31 +89,52 @@ function buildUserPrompt(textOrQuestion, optionsArg) {
     : { text: textOrQuestion, options: optionsArg };
   const text = question.text || '';
   const options = Array.isArray(question.options) ? question.options : [];
+  const type = question.type || (options.length ? 'radio' : 'text');
+  const imageContext = [question.imageAlt, question.imageCaption].filter(Boolean).join(' | ');
 
-  if (question.type === 'matching') {
+  const header = [
+    'QUIZSOLVER_PAYLOAD_V3',
+    `TYPE: ${type}`,
+    `HAS_IMAGE: ${question.imageUrl ? 'yes' : 'no'}`,
+    `OPTION_COUNT: ${options.length}`
+  ];
+  if (imageContext) header.push(`IMAGE_CONTEXT: ${imageContext}`);
+
+  if (type === 'matching') {
     const prompts = Array.isArray(question.prompts) ? question.prompts : [];
     return [
+      ...header,
+      `ITEM_COUNT: ${prompts.length}`,
+      'QUESTION:',
       text,
-      'Items:',
+      'ITEMS:',
       ...prompts.map((prompt, i) => `${i}. ${prompt}`),
-      'Options:',
+      'OPTIONS:',
       ...options.map((option, i) => `${i}. ${option}`)
     ].join('\n');
   }
 
-  if (question.type === 'matrix') {
+  if (type === 'matrix') {
     const rows = Array.isArray(question.rows) ? question.rows : [];
     return [
+      ...header,
+      `ROW_COUNT: ${rows.length}`,
+      'QUESTION:',
       text,
-      'Rows:',
+      'ROWS:',
       ...rows.map((row, i) => `${i}. ${row}`),
-      'Columns:',
+      'COLUMNS:',
       ...options.map((option, i) => `${i}. ${option}`)
     ].join('\n');
   }
 
-  if (!options || options.length === 0) return text;
-  return text + '\n' + options.map((o, i) => `${i}. ${o}`).join('\n');
+  return [
+    ...header,
+    type === 'checkbox' ? 'SELECTION_MODE: multiple_correct_allowed' : 'SELECTION_MODE: single_correct',
+    'QUESTION:',
+    text,
+    ...(options.length ? ['OPTIONS:', ...options.map((o, i) => `${i}. ${o}`)] : [])
+  ].join('\n');
 }
 
 function getMaxTokens(type) {
@@ -211,10 +235,17 @@ function parseAnswer(raw, type, options, expectedCount = null) {
 
   if (type === 'checkbox') {
     if (text === '') return [];
-    const indices = [...new Set(text
-      .split(/[,\s;]+/)
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => !isNaN(n) && n >= 0 && (!options || n < options.length)))];
+    let parsed = null;
+    const bracketMatch = text.match(/\[[^\]]*\]/);
+    if (bracketMatch) {
+      try { parsed = JSON.parse(bracketMatch[0]); } catch {}
+    }
+    const rawIndices = Array.isArray(parsed)
+      ? parsed.map(item => typeof item === 'number' ? item : Number(item?.answer ?? item?.option ?? item))
+      : (text.match(/\d+/g) || []).map(s => parseInt(s, 10));
+    const indices = [...new Set(rawIndices
+      .filter(n => Number.isInteger(n) && n >= 0 && (!options || n < options.length)))]
+      .sort((a, b) => a - b);
     if (indices.length === 0) {
       throw new AIError('INVALID_RESPONSE', `Cannot parse checkbox answer: "${raw}"`);
     }
@@ -237,7 +268,7 @@ function parseAnswer(raw, type, options, expectedCount = null) {
   return idx;
 }
 
-const HARD_QUESTION_PATTERN = /\b(image|photo|picture|diagram|chart|graph|table|screenshot|calculate|equation|formula|select all|choose all|all that apply|multiple answers|obraz|zdjec|grafik|wykres|diagram|tabela|rysun|oblicz|wzor|zaznacz|wybierz wszystkie|wielokrot)\b/i;
+const HARD_QUESTION_PATTERN = /\b(image|photo|picture|diagram|chart|graph|table|screenshot|calculate|equation|formula|select all|choose all|all that apply|multiple answers|multiple correct|obraz|zdjec|grafik|wykres|diagram|tabela|rysun|oblicz|wzor|zaznacz|wybierz wszystkie|kilka odpowiedzi|wiele odpowiedzi|wielokrot)\b/i;
 
 function normalizeSearchText(value) {
   return String(value || '')

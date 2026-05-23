@@ -160,15 +160,24 @@ app.use(helmet({
   } : false
 }));
 
+function allowedOrigins() {
+  const configured = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const extensionIds = String(process.env.CHROME_EXTENSION_IDS || process.env.CHROME_EXTENSION_ID || process.env.EXTENSION_ID || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean);
+  for (const id of extensionIds) configured.push(`chrome-extension://${id}`);
+  return [...new Set(configured)];
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (origin.startsWith('chrome-extension://')) return callback(null, true);
     if (!IS_PRODUCTION && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
       return callback(null, true);
     }
 
-    const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const allowed = allowedOrigins();
     if (allowed.includes(origin)) return callback(null, true);
     if (IS_PRODUCTION) return callback(new Error('CORS: origin not allowed'));
     return callback(null, true);

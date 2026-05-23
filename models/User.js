@@ -52,7 +52,7 @@ const userSchema = new mongoose.Schema({
   },
   freeCreditsLastReset: {
     type: String,
-    default: ''
+    default: () => new Date().toISOString().slice(0, 7)
   },
   failedLoginAttempts: { type: Number, default: 0 },
   lockedUntil: { type: Date, default: null },
@@ -102,6 +102,10 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 userSchema.methods.resetFreeCreditsIfNeeded = function() {
   const currentMonth = new Date().toISOString().slice(0, 7);
+  if (!this.freeCreditsLastReset) {
+    this.freeCreditsLastReset = currentMonth;
+    return false;
+  }
   if (this.freeCreditsLastReset !== currentMonth) {
     const freeCredits = parseInt(process.env.FREE_MONTHLY_CREDITS) || 10;
     this.credits += freeCredits;

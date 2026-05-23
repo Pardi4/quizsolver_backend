@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const { authMiddleware } = require('../middleware/auth');
 const { quizLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/User');
@@ -33,6 +34,12 @@ function validateQuestionData(q) {
   if (q.imageUrl !== undefined && q.imageUrl !== null && q.imageUrl !== '') {
     if (typeof q.imageUrl !== 'string') return 'Image URL must be a string.';
     if (q.imageUrl.length > MAX_IMAGE_DATA_URL_LENGTH) return 'Image too large.';
+  }
+  for (const key of ['imageAlt', 'imageCaption']) {
+    if (q[key] !== undefined && q[key] !== null && q[key] !== '') {
+      if (typeof q[key] !== 'string') return `${key} must be a string.`;
+      if (q[key].length > 500) return `${key} too long (max 500 chars).`;
+    }
   }
   if (q.options) {
     if (!Array.isArray(q.options)) return 'Options must be an array.';
@@ -75,6 +82,8 @@ function normalizeQuestionPayload(questionData) {
   questionData.options = questionData.options?.map(sanitizeText);
   questionData.prompts = questionData.prompts?.map(sanitizeText).filter(Boolean);
   questionData.rows = questionData.rows?.map(sanitizeText).filter(Boolean);
+  questionData.imageAlt = sanitizeText(questionData.imageAlt || '').substring(0, 500);
+  questionData.imageCaption = sanitizeText(questionData.imageCaption || '').substring(0, 500);
 
   if (!questionData.text && questionData.imageUrl) {
     questionData.text = 'Question shown in image';
@@ -791,8 +800,13 @@ router.post('/share', async (req, res) => {
       return res.status(400).json({ error: 'Select at least one question.' });
     if (noteIds.length > 50)
       return res.status(400).json({ error: 'Max 50 questions per shared quiz.' });
+    const cleanNoteIds = noteIds.map(id => String(id || '').trim()).filter(Boolean);
+    if (cleanNoteIds.length !== noteIds.length || cleanNoteIds.some(id => !mongoose.Types.ObjectId.isValid(id))) {
+      return res.status(400).json({ error: 'Invalid note id.' });
+    }
 
-    const notes = await StudyNote.find({ _id: { $in: noteIds }, user: req.user._id }).lean();
+    const foundNotes = await StudyNote.find({ _id: { $in: cleanNoteIds }, user: req.user._id }).lean();
+    const notes = orderedNotesByIds(foundNotes, cleanNoteIds);
     if (notes.length === 0) return res.status(404).json({ error: 'No matching notes found.' });
 
     const shared = await SharedQuiz.create({
