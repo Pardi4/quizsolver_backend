@@ -223,7 +223,7 @@ router.get('/support/messages', async (req, res) => {
     const status = String(req.query.status || '').substring(0, 20);
     const query = status && ['open', 'pending', 'closed'].includes(status) ? { status } : {};
     const messages = await SupportMessage.find(query)
-      .sort({ receivedAt: -1 })
+      .sort({ updatedAt: -1 })
       .limit(150)
       .populate('replies.adminUser', 'email displayName')
       .lean();
@@ -237,6 +237,7 @@ router.get('/support/messages', async (req, res) => {
         subject: m.subject,
         text: m.text,
         html: m.html,
+        providerMessageId: m.providerMessageId,
         source: m.source,
         status: m.status,
         isRead: m.isRead,
@@ -244,11 +245,13 @@ router.get('/support/messages', async (req, res) => {
         repliedAt: m.repliedAt,
         replies: (m.replies || []).map(r => ({
           id: r._id,
-          admin: r.adminUser?.displayName || r.adminUser?.email || 'Admin',
+          admin: r.adminUser?.displayName || r.adminUser?.email || r.fromEmail || 'Customer',
           fromEmail: r.fromEmail,
           toEmail: r.toEmail,
           subject: r.subject,
           text: r.text,
+          html: r.html,
+          providerMessageId: r.providerMessageId,
           sentAt: r.sentAt,
           delivery: r.delivery,
           error: r.error
@@ -299,6 +302,7 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
       subject: template.subject,
       text,
       html: template.html,
+      providerMessageId: delivery.id || '',
       delivery: delivery.success ? 'sent' : (delivery.disabled ? 'disabled' : 'failed'),
       error
     });

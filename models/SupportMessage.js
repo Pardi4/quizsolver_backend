@@ -7,8 +7,9 @@ const supportReplySchema = new mongoose.Schema({
   subject: { type: String, default: '' },
   text: { type: String, default: '' },
   html: { type: String, default: '' },
+  providerMessageId: { type: String, default: '', index: true },
   sentAt: { type: Date, default: Date.now },
-  delivery: { type: String, enum: ['sent', 'disabled', 'failed'], default: 'sent' },
+  delivery: { type: String, enum: ['sent', 'disabled', 'failed', 'received'], default: 'sent' },
   error: { type: String, default: '' }
 }, { _id: true });
 
@@ -20,7 +21,7 @@ const supportMessageSchema = new mongoose.Schema({
   text: { type: String, default: '', maxlength: 20000 },
   html: { type: String, default: '', maxlength: 50000 },
   providerMessageId: { type: String, default: '', index: true },
-  source: { type: String, enum: ['cloudflare-email-worker', 'contact-form', 'manual'], default: 'cloudflare-email-worker' },
+  source: { type: String, enum: ['cloudflare-email-worker', 'cloudflare-worker-preview', 'contact-form', 'manual'], default: 'cloudflare-email-worker' },
   status: { type: String, enum: ['open', 'pending', 'closed'], default: 'open', index: true },
   isRead: { type: Boolean, default: false, index: true },
   replies: [supportReplySchema],
