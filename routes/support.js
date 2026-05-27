@@ -44,6 +44,50 @@ function parseRawHeaders(raw) {
   return headers;
 }
 
+function decodeBasicHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#039;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code) || 32));
+}
+
+function stripQuotedReply(value) {
+  let text = decodeBasicHtmlEntities(value)
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+
+  const splitPatterns = [
+    /\s+W dniu [\s\S]{0,500}? napisał\(a\):[\s\S]*$/i,
+    /\s+Dnia [\s\S]{0,500}? napisał\(a\):[\s\S]*$/i,
+    /\s+On [A-Z][a-z]{2,9},? [\s\S]{0,500}? wrote:[\s\S]*$/i,
+    /\n\s*-{2,}\s*Original Message\s*-{2,}[\s\S]*$/i,
+    /\n\s*Od:\s*["']?QuizSolver["']?\s*<support@getquizsolver\.com>[\s\S]*$/i,
+    /\s+Temat:\s*Re:\s*[\s\S]{0,250}?Data:\s*[\s\S]*$/i,
+    /\s+Support reply\s+QuizSolver support has replied[\s\S]*$/i,
+    /\s+QuizSolver support has replied[\s\S]*$/i,
+    /\s+Original subject:\s*[\s\S]*$/i
+  ];
+
+  for (const pattern of splitPatterns) {
+    text = text.replace(pattern, '').trim();
+  }
+
+  text = text
+    .split('\n')
+    .filter(line => !line.trim().startsWith('>'))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
 function normalizeSource(value) {
   const source = clean(value || 'cloudflare-email-worker', 80);
   return ['cloudflare-email-worker', 'cloudflare-worker-preview', 'contact-form', 'manual'].includes(source)
@@ -108,7 +152,8 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
     }
     const looksLikeReply = /^(\s*(re|fw|fwd)\s*:)/i.test(subject) || replyIds.length > 0;
     const existingThread = await findThread({ fromEmail, subject, messageIds: replyIds, looksLikeReply });
-    const safeText = text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const rawSafeText = text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const safeText = stripQuotedReply(rawSafeText) || rawSafeText;
     const safeHtml = html || `<p>${escapeHtml(safeText).replace(/\n/g, '<br>')}</p>`;
 
     if (existingThread) {

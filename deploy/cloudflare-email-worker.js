@@ -85,10 +85,19 @@ function stripHtml(html = '') {
 
 function trimQuotedReply(text = '') {
   return String(text)
-    .split(/\nOn .+ wrote:\n/i)[0]
-    .split(/\nW dniu .+ napisał\(a\):\n/i)[0]
-    .split(/\n-+Original Message-+/i)[0]
-    .split(/\nOd: .+\nWysłano:/i)[0]
+    .replace(/\s+W dniu [\s\S]{0,500}? napisał\(a\):[\s\S]*$/i, '')
+    .replace(/\s+Dnia [\s\S]{0,500}? napisał\(a\):[\s\S]*$/i, '')
+    .replace(/\s+On [A-Z][a-z]{2,9},? [\s\S]{0,500}? wrote:[\s\S]*$/i, '')
+    .replace(/\n\s*-{2,}\s*Original Message\s*-{2,}[\s\S]*$/i, '')
+    .replace(/\n\s*Od:\s*["']?QuizSolver["']?\s*<support@getquizsolver\.com>[\s\S]*$/i, '')
+    .replace(/\s+Temat:\s*Re:\s*[\s\S]{0,250}?Data:\s*[\s\S]*$/i, '')
+    .replace(/\s+Support reply\s+QuizSolver support has replied[\s\S]*$/i, '')
+    .replace(/\s+QuizSolver support has replied[\s\S]*$/i, '')
+    .replace(/\s+Original subject:\s*[\s\S]*$/i, '')
+    .split('\n')
+    .filter(line => !line.trim().startsWith('>'))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
