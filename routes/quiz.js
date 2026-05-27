@@ -142,6 +142,13 @@ function imageUpdatesFromBody(body = {}) {
   return updates;
 }
 
+function statusForAIError(error) {
+  if (error.type === 'AI_TIMEOUT') return 504;
+  if (error.type === 'MODEL_ERROR') return 502;
+  if (error.type === 'IMAGE_FETCH' || error.type === 'INVALID_RESPONSE') return 422;
+  return 500;
+}
+
 function escapeRegex(text) {
   return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -497,7 +504,7 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
     });
   } catch (error) {
     console.error('[Quiz] FocusScan error:', error.type || 'UNKNOWN', error.message);
-    const status = error.type === 'AI_TIMEOUT' ? 504 : 500;
+    const status = statusForAIError(error);
     res.status(status).json({ error: error.message || 'FocusScan processing error.', type: error.type });
   }
 });
@@ -554,7 +561,7 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
 
   } catch (error) {
     console.error('[Quiz] Solve error:', error.type || 'UNKNOWN', error.message);
-    const status = error.type === 'AI_TIMEOUT' ? 504 : 500;
+    const status = statusForAIError(error);
     res.status(status).json({ error: error.message || 'AI processing error.', type: error.type });
   }
 });

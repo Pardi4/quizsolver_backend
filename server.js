@@ -338,11 +338,22 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  if (IS_PRODUCTION) {
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
+  const status = Number(err.status || err.statusCode || 500);
+  const safeStatus = status >= 400 && status < 600 ? status : 500;
+  const isApi = req.path.startsWith('/api/');
   console.error('[Server]', err.message);
-  return res.status(500).json({ error: err.message });
+
+  if (IS_PRODUCTION) {
+    if (isApi) {
+      const canExpose = safeStatus < 500 || err.expose === true;
+      return res.status(safeStatus).json({
+        error: canExpose ? err.message : 'Server error while processing API request.',
+        type: err.type || 'SERVER_ERROR'
+      });
+    }
+    return res.status(safeStatus).json({ error: 'Internal server error.' });
+  }
+  return res.status(safeStatus).json({ error: err.message, type: err.type });
 });
 
 async function seedAdmin() {
