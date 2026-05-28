@@ -1,8 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
+const requestIp = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+
 const userKeyGenerator = (req) => {
   if (req.user && req.user._id) return `user_${req.user._id}`;
-  return req.ip || req.connection.remoteAddress || 'unknown';
+  return requestIp(req);
 };
 
 const generalLimiter = rateLimit({
@@ -11,7 +13,7 @@ const generalLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || 'unknown',
+  keyGenerator: requestIp,
 });
 
 const authLimiter = rateLimit({
@@ -20,7 +22,7 @@ const authLimiter = rateLimit({
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || 'unknown',
+  keyGenerator: requestIp,
 });
 
 const quizLimiter = rateLimit({
@@ -49,7 +51,7 @@ const adminLimiter = rateLimit({
   message: { error: 'Admin rate limit exceeded.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || 'unknown',
+  keyGenerator: requestIp,
 });
 
 module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter };

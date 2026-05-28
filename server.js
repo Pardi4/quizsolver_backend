@@ -160,8 +160,18 @@ app.use(helmet({
   } : false
 }));
 
-function allowedOrigins() {
+function configuredOrigins() {
+  const defaults = [
+    PUBLIC_SITE_URL,
+    'https://getquizsolver.com',
+    'https://www.getquizsolver.com'
+  ];
   const configured = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return [...new Set([...defaults, ...configured])];
+}
+
+function allowedOrigins() {
+  const configured = configuredOrigins();
   const extensionIds = String(process.env.CHROME_EXTENSION_IDS || process.env.CHROME_EXTENSION_ID || process.env.EXTENSION_ID || '')
     .split(',')
     .map(id => id.trim())
@@ -170,16 +180,33 @@ function allowedOrigins() {
   return [...new Set(configured)];
 }
 
+function chromeExtensionOriginId(origin = '') {
+  const match = String(origin).match(/^chrome-extension:\/\/([a-p]{32})$/i);
+  return match ? match[1] : '';
+}
+
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return true;
+  if (!IS_PRODUCTION && (origin.includes('localhost') || origin.includes('127.0.0.1'))) return true;
+  if (allowedOrigins().includes(origin)) return true;
+
+  const extensionId = chromeExtensionOriginId(origin);
+  const allowDevExtensions = process.env.ALLOW_DEV_EXTENSION_ORIGINS === 'true';
+  return !!extensionId && allowDevExtensions;
+}
+
+function corsBlockedError(origin) {
+  const error = new Error(`CORS origin not allowed: ${origin || 'unknown'}`);
+  error.status = 403;
+  error.type = 'CORS_ORIGIN_BLOCKED';
+  error.expose = true;
+  return error;
+}
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (!IS_PRODUCTION && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
-      return callback(null, true);
-    }
-
-    const allowed = allowedOrigins();
-    if (allowed.includes(origin)) return callback(null, true);
-    if (IS_PRODUCTION) return callback(new Error('CORS: origin not allowed'));
+    if (isAllowedCorsOrigin(origin)) return callback(null, true);
+    if (IS_PRODUCTION) return callback(corsBlockedError(origin));
     return callback(null, true);
   },
   credentials: true
@@ -341,7 +368,7 @@ app.use((err, req, res, next) => {
   const status = Number(err.status || err.statusCode || 500);
   const safeStatus = status >= 400 && status < 600 ? status : 500;
   const isApi = req.path.startsWith('/api/');
-  console.error('[Server]', err.message);
+  console.error('[Server]', req.method, req.originalUrl, safeStatus, err.type || err.code || 'ERROR', err.message);
 
   if (IS_PRODUCTION) {
     if (isApi) {
@@ -386,10 +413,8 @@ function createAdminServer() {
   adminApp.use(helmet({ contentSecurityPolicy: false }));
   adminApp.use(cors({
     origin: (origin, callback) => {
-      if (!origin || !IS_PRODUCTION) return callback(null, true);
-      const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-      if (allowed.includes(origin)) return callback(null, true);
-      callback(new Error('CORS blocked'));
+      if (isAllowedCorsOrigin(origin) || !IS_PRODUCTION) return callback(null, true);
+      callback(corsBlockedError(origin));
     },
     credentials: true
   }));
