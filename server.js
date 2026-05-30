@@ -29,66 +29,73 @@ const ANGULAR_BROWSER_DIR = path.join(__dirname, '..', 'frontend', 'dist', 'angu
 const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
 const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
 
-const PAGE_ROUTES = {
-  home: { en: '/', pl: '/pl' },
-  dashboard: { en: '/dashboard', pl: '/pl/dashboard' },
-  quiz: { en: '/quiz', pl: '/pl/quiz' },
-  demo: { en: '/demo', pl: '/pl/demo' },
-  credits: { en: '/credits', pl: '/pl/credits' },
-  admin: { en: '/admin', pl: '/admin' },
-  privacy: { en: '/privacy', pl: '/pl/privacy' },
-  success: { en: '/success', pl: '/pl/success' },
-  notFound: { en: '/404', pl: '/pl/404' },
-  quizSolverAi: { en: '/quiz-solver-ai', pl: '/pl/quiz-solver-ai' },
-  testportal: { en: '/testportal-quiz-solver', pl: '/pl/testportal-quiz-solver' },
-  moodle: { en: '/moodle-quiz-solver', pl: '/pl/moodle-quiz-solver' },
-  canvas: { en: '/canvas-quiz-solver', pl: '/pl/canvas-quiz-solver' },
-  googleForms: { en: '/google-forms-quiz-solver', pl: '/pl/google-forms-quiz-solver' },
-  microsoftForms: { en: '/microsoft-forms-quiz-solver', pl: '/pl/microsoft-forms-quiz-solver' },
-  blackboard: { en: '/blackboard-quiz-solver', pl: '/pl/blackboard-quiz-solver' },
-  quizlet: { en: '/quizlet-solver', pl: '/pl/quizlet-solver' },
-  socrative: { en: '/socrative-quiz-solver', pl: '/pl/socrative-quiz-solver' },
-  kahoot: { en: '/kahoot-ai-bot', pl: '/pl/kahoot-ai-bot' },
-  quizizz: { en: '/quizizz-solver', pl: '/pl/quizizz-solver' }
+const SUPPORTED_LOCALES = [
+  { code: 'en', prefix: '', htmlLang: 'en' },
+  { code: 'pl', prefix: '/pl', htmlLang: 'pl' },
+  { code: 'de', prefix: '/de', htmlLang: 'de' },
+  { code: 'es', prefix: '/es', htmlLang: 'es' },
+  { code: 'fr', prefix: '/fr', htmlLang: 'fr' },
+  { code: 'it', prefix: '/it', htmlLang: 'it' },
+  { code: 'uk', prefix: '/uk', htmlLang: 'uk' }
+];
+const LOCALE_CODES = SUPPORTED_LOCALES.map(locale => locale.code);
+
+const PAGE_SLUGS = {
+  home: '',
+  dashboard: 'dashboard',
+  quiz: 'quiz',
+  demo: 'demo',
+  credits: 'credits',
+  admin: 'admin',
+  privacy: 'privacy',
+  success: 'success',
+  notFound: '404',
+  quizSolverAi: 'quiz-solver-ai',
+  testportal: 'testportal-quiz-solver',
+  moodle: 'moodle-quiz-solver',
+  canvas: 'canvas-quiz-solver',
+  googleForms: 'google-forms-quiz-solver',
+  microsoftForms: 'microsoft-forms-quiz-solver',
+  blackboard: 'blackboard-quiz-solver',
+  quizlet: 'quizlet-solver',
+  socrative: 'socrative-quiz-solver',
+  kahoot: 'kahoot-ai-bot',
+  quizizz: 'quizizz-solver'
 };
+
+function routeRecord(slug) {
+  return Object.fromEntries(SUPPORTED_LOCALES.map(locale => {
+    if (!slug) return [locale.code, locale.code === 'en' ? '/' : locale.prefix];
+    return [locale.code, `${locale.prefix}/${slug}`.replace(/\/+/g, '/')];
+  }));
+}
+
+const PAGE_ROUTES = Object.fromEntries(
+  Object.entries(PAGE_SLUGS).map(([pageKey, slug]) => [pageKey, routeRecord(slug)])
+);
+PAGE_ROUTES.admin = Object.fromEntries(SUPPORTED_LOCALES.map(locale => [locale.code, '/admin']));
 
 const ANGULAR_ROUTE_PATHS = Array.from(new Set(
   Object.values(PAGE_ROUTES).flatMap(route => Object.values(route))
 ));
 
-const INDEXED_ROUTES = [
-  PAGE_ROUTES.home.en,
-  PAGE_ROUTES.home.pl,
-  PAGE_ROUTES.quiz.en,
-  PAGE_ROUTES.quiz.pl,
-  PAGE_ROUTES.demo.en,
-  PAGE_ROUTES.demo.pl,
-  PAGE_ROUTES.credits.en,
-  PAGE_ROUTES.credits.pl,
-  PAGE_ROUTES.quizSolverAi.en,
-  PAGE_ROUTES.quizSolverAi.pl,
-  PAGE_ROUTES.testportal.en,
-  PAGE_ROUTES.testportal.pl,
-  PAGE_ROUTES.moodle.en,
-  PAGE_ROUTES.moodle.pl,
-  PAGE_ROUTES.canvas.en,
-  PAGE_ROUTES.canvas.pl,
-  PAGE_ROUTES.googleForms.en,
-  PAGE_ROUTES.googleForms.pl,
-  PAGE_ROUTES.microsoftForms.en,
-  PAGE_ROUTES.microsoftForms.pl,
-  PAGE_ROUTES.blackboard.en,
-  PAGE_ROUTES.blackboard.pl,
-  PAGE_ROUTES.quizlet.en,
-  PAGE_ROUTES.quizlet.pl,
-  PAGE_ROUTES.socrative.en,
-  PAGE_ROUTES.socrative.pl,
-  PAGE_ROUTES.kahoot.en,
-  PAGE_ROUTES.kahoot.pl,
-  PAGE_ROUTES.quizizz.en,
-  PAGE_ROUTES.quizizz.pl,
-  PAGE_ROUTES.privacy.en,
-  PAGE_ROUTES.privacy.pl
+const INDEXED_PAGE_KEYS = [
+  'home',
+  'quiz',
+  'demo',
+  'credits',
+  'quizSolverAi',
+  'testportal',
+  'moodle',
+  'canvas',
+  'googleForms',
+  'microsoftForms',
+  'blackboard',
+  'quizlet',
+  'socrative',
+  'kahoot',
+  'quizizz',
+  'privacy'
 ];
 
 const STATIC_OPTIONS = {
@@ -255,13 +262,28 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
   return true;
 }
 
+function localeFromPath(routePath = '') {
+  const firstSegment = String(routePath).split('/').filter(Boolean)[0];
+  return LOCALE_CODES.includes(firstSegment) ? firstSegment : 'en';
+}
+
+function routePriority(route) {
+  if (Object.values(PAGE_ROUTES.home).includes(route)) return '1.0';
+  if (route.includes('kahoot-ai-bot') || route.includes('quiz-solver-ai') || route.includes('testportal-quiz-solver') || route.includes('google-forms-quiz-solver')) return '0.9';
+  if (route.includes('privacy')) return '0.4';
+  return '0.8';
+}
+
 function robotsTxt() {
+  const privateRoutes = [
+    '/admin',
+    ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.dashboard[locale.code]),
+    ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.success[locale.code])
+  ];
   return [
     'User-agent: *',
     'Allow: /',
-    'Disallow: /admin',
-    'Disallow: /dashboard',
-    'Disallow: /pl/dashboard',
+    ...Array.from(new Set(privateRoutes)).map(route => `Disallow: ${route}`),
     '',
     `Sitemap: ${PUBLIC_SITE_URL}/sitemap.xml`,
     ''
@@ -269,13 +291,27 @@ function robotsTxt() {
 }
 
 function sitemapXml() {
-  const urls = INDEXED_ROUTES
-    .map(route => {
+  const lastmod = process.env.SITEMAP_LASTMOD || new Date().toISOString().slice(0, 10);
+  const urls = INDEXED_PAGE_KEYS
+    .flatMap(pageKey => SUPPORTED_LOCALES.map(locale => ({ pageKey, locale, route: PAGE_ROUTES[pageKey][locale.code] })))
+    .map(({ pageKey, route }) => {
       const loc = `${PUBLIC_SITE_URL}${route === '/' ? '/' : route}`;
-      return `  <url><loc>${loc}</loc><changefreq>weekly</changefreq><priority>${route === '/' || route === '/pl' ? '1.0' : '0.8'}</priority></url>`;
+      const alternates = SUPPORTED_LOCALES
+        .map(locale => `    <xhtml:link rel="alternate" hreflang="${locale.htmlLang}" href="${PUBLIC_SITE_URL}${PAGE_ROUTES[pageKey][locale.code] === '/' ? '/' : PAGE_ROUTES[pageKey][locale.code]}"/>`)
+        .join('\n');
+      return [
+        '  <url>',
+        `    <loc>${loc}</loc>`,
+        alternates,
+        `    <xhtml:link rel="alternate" hreflang="x-default" href="${PUBLIC_SITE_URL}${PAGE_ROUTES[pageKey].en === '/' ? '/' : PAGE_ROUTES[pageKey].en}"/>`,
+        `    <lastmod>${lastmod}</lastmod>`,
+        '    <changefreq>weekly</changefreq>',
+        `    <priority>${routePriority(route)}</priority>`,
+        '  </url>'
+      ].join('\n');
     })
     .join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls}\n</urlset>`;
 }
 
 app.use('/api/webhook', webhookRoutes);
@@ -326,21 +362,34 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 app.get('/index.html', (req, res) => res.redirect(301, '/'));
-app.get('/pl/', (req, res) => sendAngularPage(req, res, '/pl'));
+SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
+  app.get(`${locale.prefix}/`, (req, res) => res.redirect(301, locale.prefix));
+});
 app.get('/pricing', (req, res) => res.redirect(301, '/#pricing'));
-app.get('/pl/pricing', (req, res) => res.redirect(301, '/pl/#pricing'));
+SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
+  app.get(`${locale.prefix}/pricing`, (req, res) => res.redirect(301, `${locale.prefix}#pricing`));
+});
 app.get('/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
-app.get('/pl/download', (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
+SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
+  app.get(`${locale.prefix}/download`, (req, res) => res.redirect(302, CHROME_WEB_STORE_URL));
+});
 app.get('/onboarding', (req, res) => res.redirect(301, '/demo'));
-app.get('/pl/onboarding', (req, res) => res.redirect(301, '/pl/demo'));
+SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
+  app.get(`${locale.prefix}/onboarding`, (req, res) => res.redirect(301, `${locale.prefix}/demo`));
+});
 app.get('/ai-quiz-solver', (req, res) => res.redirect(301, '/quiz-solver-ai'));
-app.get('/pl/ai-quiz-solver', (req, res) => res.redirect(301, '/pl/quiz-solver-ai'));
+SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
+  app.get(`${locale.prefix}/ai-quiz-solver`, (req, res) => res.redirect(301, `${locale.prefix}/quiz-solver-ai`));
+});
 app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
 app.get('/quiz.html', (req, res) => res.redirect(301, '/quiz'));
 app.get('/success.html', (req, res) => res.redirect(301, '/success'));
 app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
 app.get('/admin-app.js', (req, res) => res.status(404).json({ error: 'Admin panel is served by Angular.' }));
-app.get('/quiz/shared/:token', (req, res) => sendAngularPage(req, res, '/quiz'));
+app.get(SUPPORTED_LOCALES.map(locale => `${locale.prefix}/quiz/shared/:token`.replace(/\/+/g, '/')), (req, res) => {
+  const locale = localeFromPath(req.path);
+  sendAngularPage(req, res, PAGE_ROUTES.quiz[locale]);
+});
 
 
 if (HAS_ANGULAR_BUILD) {
@@ -350,7 +399,7 @@ if (HAS_ANGULAR_BUILD) {
 app.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
 
 app.get(ANGULAR_ROUTE_PATHS, (req, res) => {
-  const routePath = req.path === '/pl/' ? '/pl' : req.path;
+  const routePath = req.path;
   const statusCode = routePath.endsWith('/404') || routePath === '/404' ? 404 : 200;
   sendAngularPage(req, res, routePath, statusCode);
 });
@@ -360,8 +409,8 @@ app.use((req, res) => {
     return res.status(404).json({ error: 'Endpoint not found.' });
   }
 
-  const locale = req.path.startsWith('/pl/') || req.path === '/pl' ? 'pl' : 'en';
-  sendAngularPage(req, res, locale === 'pl' ? '/pl/404' : '/404', 404);
+  const locale = localeFromPath(req.path);
+  sendAngularPage(req, res, PAGE_ROUTES.notFound[locale] || PAGE_ROUTES.notFound.en, 404);
 });
 
 app.use((err, req, res, next) => {
