@@ -26,7 +26,10 @@ const purchaseSchema = new mongoose.Schema({
     enum: ['whop', 'manual', 'free', 'referral'],
     default: 'whop'
   },
-  externalOrderId: String,
+  externalOrderId: {
+    type: String,
+    default: undefined
+  },
   grantedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -38,19 +41,32 @@ const purchaseSchema = new mongoose.Schema({
   }
 });
 
+purchaseSchema.index(
+  { externalOrderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { externalOrderId: { $type: 'string' } }
+  }
+);
+
 purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, details = {}) {
   const User = require('./User');
 
-  const purchase = await this.create({
+  const purchaseData = {
     userId,
     pack,
     credits,
     priceUsd: details.priceUsd || 0,
     paymentProvider: details.paymentProvider || 'whop',
-    externalOrderId: details.externalOrderId || null,
     grantedBy: details.grantedBy || null,
     grantReason: details.grantReason || null
-  });
+  };
+
+  if (details.externalOrderId) {
+    purchaseData.externalOrderId = String(details.externalOrderId);
+  }
+
+  const purchase = await this.create(purchaseData);
 
   const user = await User.findById(userId);
   if (user) {

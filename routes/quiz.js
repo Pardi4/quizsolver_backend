@@ -644,7 +644,7 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     }
 
     if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true });
+      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
     }
 
     const explanation = await callExplanationAI(text, options, answer, type, req.body.explanationLanguage || 'auto', { prompts, rows });
@@ -688,7 +688,7 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     }
 
     if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true });
+      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
     }
 
     const followUp = await callFollowUpAI({
