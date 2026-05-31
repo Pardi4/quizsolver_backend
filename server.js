@@ -76,7 +76,9 @@ const PAGE_ROUTES = Object.fromEntries(
 PAGE_ROUTES.admin = Object.fromEntries(SUPPORTED_LOCALES.map(locale => [locale.code, '/admin']));
 
 const ANGULAR_ROUTE_PATHS = Array.from(new Set(
-  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route))
+  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route).flatMap(pageRoute => (
+    pageRoute === '/' ? ['/'] : [pageRoute, `${pageRoute}/`]
+  )))
 ));
 
 const INDEXED_PAGE_KEYS = [
@@ -100,6 +102,7 @@ const INDEXED_PAGE_KEYS = [
 
 const STATIC_OPTIONS = {
   index: false,
+  redirect: false,
   etag: true,
   maxAge: IS_PRODUCTION ? '30d' : 0,
   setHeaders: (res, filePath) => {
@@ -362,9 +365,6 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 app.get('/index.html', (req, res) => res.redirect(301, '/'));
-SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
-  app.get(`${locale.prefix}/`, (req, res) => res.redirect(301, locale.prefix));
-});
 app.get('/pricing', (req, res) => res.redirect(301, '/#pricing'));
 SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
   app.get(`${locale.prefix}/pricing`, (req, res) => res.redirect(301, `${locale.prefix}#pricing`));
