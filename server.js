@@ -107,6 +107,9 @@ const STATIC_OPTIONS = {
   maxAge: IS_PRODUCTION ? '30d' : 0,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    if (/[\\\/](?:favicon|logo|logo-512|logo-wordmark|og-image)\.(?:ico|svg|png)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+    }
   }
 };
 
