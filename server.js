@@ -400,9 +400,26 @@ app.get(SUPPORTED_LOCALES.map(locale => `${locale.prefix}/quiz/shared/:token`.re
   sendAngularPage(req, res, PAGE_ROUTES.quiz[locale]);
 });
 
-app.get(ANGULAR_TRAILING_SLASH_PATHS, (req, res) => {
+app.get(ANGULAR_TRAILING_SLASH_PATHS, (req, res, next) => {
   const queryIndex = req.originalUrl.indexOf('?');
   const pathPart = queryIndex === -1 ? req.originalUrl : req.originalUrl.slice(0, queryIndex);
+  if (!pathPart.endsWith('/')) {
+    return next();
+  }
+
+  // If this corresponds to a physical directory in the prerendered build,
+  // do NOT redirect it to prevent infinite loops with Nginx / static hosting.
+  const cleanPath = req.path.replace(/^\/+/, '').replace(/\/+$/, '');
+  const physicalDir = path.join(ANGULAR_BROWSER_DIR, cleanPath);
+  try {
+    const stats = fs.statSync(physicalDir);
+    if (stats.isDirectory()) {
+      return next();
+    }
+  } catch (e) {
+    // Directory does not exist, safe to redirect
+  }
+
   const query = queryIndex === -1 ? '' : req.originalUrl.slice(queryIndex);
   res.redirect(301, `${pathPart.replace(/\/+$/, '')}${query}`);
 });
