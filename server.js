@@ -63,6 +63,7 @@ const PAGE_SLUGS = {
   kahoot: 'kahoot-ai-bot',
   quizizz: 'quizizz-solver',
   blog: 'blog',
+  blogCategory: 'blog/category/:category',
   blogPost: 'blog/:slug'
 };
 
@@ -286,6 +287,7 @@ function localeFromPath(routePath = '') {
 function routePriority(route) {
   if (Object.values(PAGE_ROUTES.home).includes(route)) return '1.0';
   if (route.includes('kahoot-ai-bot') || route.includes('quiz-solver-ai') || route.includes('testportal-quiz-solver') || route.includes('google-forms-quiz-solver')) return '0.9';
+  if (route.includes('/blog/category/')) return '0.75';
   if (route.includes('/blog/')) return '0.7';
   if (route.includes('privacy')) return '0.4';
   return '0.8';
@@ -309,6 +311,10 @@ function blogPosts() {
     console.warn('[Sitemap] Could not read blog posts:', error.message);
     return [];
   }
+}
+
+function blogCategories(posts) {
+  return [...new Set(posts.map(post => post.category).filter(Boolean))];
 }
 
 function robotsTxt() {
@@ -350,6 +356,33 @@ function sitemapXml() {
     .join('\n');
 
   const posts = blogPosts();
+  const categoryUrls = blogCategories(posts)
+    .flatMap(category => SUPPORTED_LOCALES.map(locale => ({ category, locale })))
+    .map(({ category, locale }) => {
+      const route = PAGE_ROUTES.blogCategory[locale.code].replace(':category', category);
+      const loc = `${PUBLIC_SITE_URL}${route}`;
+      const newestPost = posts
+        .filter(post => post.category === category && post.locale === locale.code)
+        .sort((a, b) => String(b.dateModified || b.datePublished).localeCompare(String(a.dateModified || a.datePublished)))[0];
+      const alternates = SUPPORTED_LOCALES
+        .map(item => {
+          const candidateRoute = PAGE_ROUTES.blogCategory[item.code].replace(':category', category);
+          return `    <xhtml:link rel="alternate" hreflang="${item.htmlLang}" href="${PUBLIC_SITE_URL}${candidateRoute}"/>`;
+        })
+        .join('\n');
+      const defaultRoute = PAGE_ROUTES.blogCategory.en.replace(':category', category);
+      return [
+        '  <url>',
+        `    <loc>${xmlEscape(loc)}</loc>`,
+        alternates,
+        `    <xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(`${PUBLIC_SITE_URL}${defaultRoute}`)}"/>`,
+        `    <lastmod>${xmlEscape(newestPost?.dateModified || newestPost?.datePublished || lastmod)}</lastmod>`,
+        '    <changefreq>weekly</changefreq>',
+        `    <priority>${routePriority(route)}</priority>`,
+        '  </url>'
+      ].join('\n');
+    })
+    .join('\n');
   const blogUrls = posts
     .map(post => {
       const route = PAGE_ROUTES.blogPost[post.locale].replace(':slug', post.slug);
@@ -379,7 +412,7 @@ function sitemapXml() {
     })
     .join('\n');
 
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${[pageUrls, blogUrls].filter(Boolean).join('\n')}\n</urlset>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${[pageUrls, categoryUrls, blogUrls].filter(Boolean).join('\n')}\n</urlset>`;
 }
 
 app.use('/api/webhook', webhookRoutes);
