@@ -75,6 +75,12 @@ const PAGE_ROUTES = Object.fromEntries(
 );
 PAGE_ROUTES.admin = Object.fromEntries(SUPPORTED_LOCALES.map(locale => [locale.code, '/admin']));
 
+const ANGULAR_CANONICAL_ROUTE_PATHS = Array.from(new Set(
+  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route))
+));
+const ANGULAR_TRAILING_SLASH_PATHS = ANGULAR_CANONICAL_ROUTE_PATHS
+  .filter(route => route !== '/' && !route.endsWith('/'))
+  .map(route => `${route}/`);
 const ANGULAR_ROUTE_PATHS = Array.from(new Set(
   Object.values(PAGE_ROUTES).flatMap(route => Object.values(route).flatMap(pageRoute => (
     pageRoute === '/' ? ['/'] : [pageRoute, `${pageRoute}/`]
@@ -392,6 +398,13 @@ app.get('/admin-app.js', (req, res) => res.status(404).json({ error: 'Admin pane
 app.get(SUPPORTED_LOCALES.map(locale => `${locale.prefix}/quiz/shared/:token`.replace(/\/+/g, '/')), (req, res) => {
   const locale = localeFromPath(req.path);
   sendAngularPage(req, res, PAGE_ROUTES.quiz[locale]);
+});
+
+app.get(ANGULAR_TRAILING_SLASH_PATHS, (req, res) => {
+  const queryIndex = req.originalUrl.indexOf('?');
+  const pathPart = queryIndex === -1 ? req.originalUrl : req.originalUrl.slice(0, queryIndex);
+  const query = queryIndex === -1 ? '' : req.originalUrl.slice(queryIndex);
+  res.redirect(301, `${pathPart.replace(/\/+$/, '')}${query}`);
 });
 
 
