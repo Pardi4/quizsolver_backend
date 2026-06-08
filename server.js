@@ -415,6 +415,32 @@ function sitemapXml() {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${[pageUrls, categoryUrls, blogUrls].filter(Boolean).join('\n')}\n</urlset>`;
 }
 
+function extensionAuthCallbackHtml() {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>QuizSolver extension login</title>
+    <style>
+      body{margin:0;min-height:100vh;display:grid;place-items:center;background:#030712;color:#f8fafc;font-family:Inter,Arial,sans-serif}
+      main{width:min(420px,calc(100% - 40px));padding:30px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(15,23,42,.92);box-shadow:0 24px 70px rgba(0,0,0,.34);text-align:center}
+      .mark{width:48px;height:48px;margin:0 auto 18px;border-radius:14px;background:linear-gradient(135deg,#06b6d4,#8b5cf6);display:grid;place-items:center;font-weight:900}
+      h1{margin:0 0 10px;font-size:22px;line-height:1.2}
+      p{margin:0;color:#cbd5e1;line-height:1.6}
+    </style>
+  </head>
+  <body>
+    <main id="qs-extension-auth">
+      <div class="mark">QS</div>
+      <h1>Finishing extension sign in...</h1>
+      <p>You can close this tab if it does not close automatically.</p>
+    </main>
+  </body>
+</html>`;
+}
+
 app.use('/api/webhook', webhookRoutes);
 app.use(['/api/quiz/solve', '/api/quiz/solve-batch', '/api/quiz/solve-snapshot'], express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '80kb' }));
@@ -450,6 +476,11 @@ app.get('/api/stats/public', async (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', timestamp: new Date().toISOString() });
+});
+
+app.get('/extension-auth/callback', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(extensionAuthCallbackHtml());
 });
 
 app.get('/robots.txt', (req, res) => {
