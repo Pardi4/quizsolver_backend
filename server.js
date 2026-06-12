@@ -29,6 +29,10 @@ const ANGULAR_BROWSER_DIR = path.join(__dirname, '..', 'frontend', 'dist', 'angu
 const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
 const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
 const BLOG_POSTS_FILE = path.join(__dirname, '..', 'frontend', 'src', 'app', 'blog-posts.json');
+const ADMIN_CONFIG_FILE = path.join(__dirname, '..', 'frontend', 'src', 'app', 'admin-config.json');
+const ADMIN_PANEL_ROUTE_PATH = readAdminPanelRoutePath();
+const ADMIN_PANEL_URL = `/${ADMIN_PANEL_ROUTE_PATH}`;
+const LEGACY_ADMIN_PATHS = ['/admin', '/admin/', '/admin.html', '/admin-app.js'];
 
 const SUPPORTED_LOCALES = [
   { code: 'en', prefix: '', htmlLang: 'en' },
@@ -47,7 +51,6 @@ const PAGE_SLUGS = {
   quiz: 'quiz',
   demo: 'demo',
   credits: 'credits',
-  admin: 'admin',
   privacy: 'privacy',
   success: 'success',
   notFound: '404',
@@ -77,18 +80,24 @@ function routeRecord(slug) {
 const PAGE_ROUTES = Object.fromEntries(
   Object.entries(PAGE_SLUGS).map(([pageKey, slug]) => [pageKey, routeRecord(slug)])
 );
-PAGE_ROUTES.admin = Object.fromEntries(SUPPORTED_LOCALES.map(locale => [locale.code, '/admin']));
 
 const ANGULAR_CANONICAL_ROUTE_PATHS = Array.from(new Set(
-  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route))
+  [
+    ...Object.values(PAGE_ROUTES).flatMap(route => Object.values(route)),
+    ADMIN_PANEL_URL
+  ]
 ));
 const ANGULAR_TRAILING_SLASH_PATHS = ANGULAR_CANONICAL_ROUTE_PATHS
   .filter(route => route !== '/' && !route.endsWith('/'))
   .map(route => `${route}/`);
 const ANGULAR_ROUTE_PATHS = Array.from(new Set(
-  Object.values(PAGE_ROUTES).flatMap(route => Object.values(route).flatMap(pageRoute => (
-    pageRoute === '/' ? ['/'] : [pageRoute, `${pageRoute}/`]
-  )))
+  [
+    ...Object.values(PAGE_ROUTES).flatMap(route => Object.values(route).flatMap(pageRoute => (
+      pageRoute === '/' ? ['/'] : [pageRoute, `${pageRoute}/`]
+    ))),
+    ADMIN_PANEL_URL,
+    `${ADMIN_PANEL_URL}/`
+  ]
 ));
 
 const INDEXED_PAGE_KEYS = [
@@ -117,6 +126,12 @@ const STATIC_OPTIONS = {
   etag: true,
   maxAge: IS_PRODUCTION ? '30d' : 0,
   setHeaders: (res, filePath) => {
+    const normalizedFilePath = String(filePath || '').replace(/\\/g, '/');
+    if (normalizedFilePath.includes(`/browser/${ADMIN_PANEL_ROUTE_PATH}/`)) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      return;
+    }
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
     if (/[\\\/](?:favicon|logo|logo-512|logo-wordmark|og-image)\.(?:ico|svg|png)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
@@ -127,9 +142,38 @@ const STATIC_OPTIONS = {
 app.set('trust proxy', 1);
 connectDB();
 
+function normalizeAdminRoutePath(value) {
+  const routePath = String(value || '').trim().replace(/^\/+|\/+$/g, '');
+  return /^[a-z0-9][a-z0-9-]{8,80}$/i.test(routePath) ? routePath : 'qs-console-851-c4f9';
+}
+
+function readAdminPanelRoutePath() {
+  try {
+    const config = JSON.parse(fs.readFileSync(ADMIN_CONFIG_FILE, 'utf8'));
+    return normalizeAdminRoutePath(config.panelPath);
+  } catch {
+    return normalizeAdminRoutePath('');
+  }
+}
+
+function normalizeRequestPath(routePath = '') {
+  const normalized = String(routePath || '/').split('?')[0].replace(/\/+$/, '');
+  return normalized || '/';
+}
+
+function isLegacyAdminPath(routePath = '') {
+  const normalized = normalizeRequestPath(routePath);
+  return normalized === '/admin' || normalized === '/admin.html' || normalized === '/admin-app.js';
+}
+
+function isAdminPanelPath(routePath = '') {
+  return normalizeRequestPath(routePath) === ADMIN_PANEL_URL;
+}
+
 function cleanPublicPageUrl(req) {
   if (req.path.startsWith('/api/') || req.path === '/api') return req.originalUrl;
   if (req.path === '/extension-auth/callback') return req.originalUrl;
+  if (isLegacyAdminPath(req.path)) return req.originalUrl;
 
   const queryIndex = req.originalUrl.indexOf('?');
   const rawPath = queryIndex === -1 ? req.originalUrl : req.originalUrl.slice(0, queryIndex);
@@ -297,9 +341,12 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
     }
   }
 
-  const noStore = /(?:dashboard|success|404|admin|quiz|credits)/.test(routePath);
+  const privateRoute = isAdminPanelPath(routePath) || isLegacyAdminPath(routePath);
+  const noStore = privateRoute || /(?:dashboard|success|404|quiz|credits)/.test(routePath);
+  const noindex = privateRoute || /(?:dashboard|success|404)/.test(routePath);
 
   res.status(statusCode);
+  if (noindex) res.set('X-Robots-Tag', 'noindex, nofollow');
   res.set('Cache-Control', noStore ? 'no-store' : 'public, max-age=300, stale-while-revalidate=86400');
   res.sendFile(filePath);
   return true;
@@ -343,9 +390,16 @@ function blogCategories(posts) {
   return [...new Set(posts.map(post => post.category).filter(Boolean))];
 }
 
+function categoryHasPosts(posts, category, locale) {
+  return posts.some(post => post.category === category && post.locale === locale.code);
+}
+
+function categoryLocales(posts, category) {
+  return SUPPORTED_LOCALES.filter(locale => categoryHasPosts(posts, category, locale));
+}
+
 function robotsTxt() {
   const privateRoutes = [
-    '/admin',
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.dashboard[locale.code]),
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.success[locale.code])
   ];
@@ -383,20 +437,22 @@ function sitemapXml() {
 
   const posts = blogPosts();
   const categoryUrls = blogCategories(posts)
-    .flatMap(category => SUPPORTED_LOCALES.map(locale => ({ category, locale })))
+    .flatMap(category => categoryLocales(posts, category).map(locale => ({ category, locale })))
     .map(({ category, locale }) => {
       const route = PAGE_ROUTES.blogCategory[locale.code].replace(':category', category);
       const loc = `${PUBLIC_SITE_URL}${route}`;
+      const localesWithCategoryPosts = categoryLocales(posts, category);
+      const defaultLocale = localesWithCategoryPosts.find(item => item.code === 'en') || localesWithCategoryPosts[0] || locale;
       const newestPost = posts
         .filter(post => post.category === category && post.locale === locale.code)
         .sort((a, b) => String(b.dateModified || b.datePublished).localeCompare(String(a.dateModified || a.datePublished)))[0];
-      const alternates = SUPPORTED_LOCALES
+      const alternates = localesWithCategoryPosts
         .map(item => {
           const candidateRoute = PAGE_ROUTES.blogCategory[item.code].replace(':category', category);
           return `    <xhtml:link rel="alternate" hreflang="${item.htmlLang}" href="${PUBLIC_SITE_URL}${candidateRoute}"/>`;
         })
         .join('\n');
-      const defaultRoute = PAGE_ROUTES.blogCategory.en.replace(':category', category);
+      const defaultRoute = PAGE_ROUTES.blogCategory[defaultLocale.code].replace(':category', category);
       return [
         '  <url>',
         `    <loc>${xmlEscape(loc)}</loc>`,
@@ -476,7 +532,7 @@ app.use('/api/', generalLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/quiz', quizPublicRoutes);
 app.use('/api/quiz', quizRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/support', supportRoutes);
 
@@ -539,8 +595,14 @@ SUPPORTED_LOCALES.filter(locale => locale.code !== 'en').forEach(locale => {
 app.get('/privacy.html', (req, res) => res.redirect(301, '/privacy'));
 app.get('/quiz.html', (req, res) => res.redirect(301, '/quiz'));
 app.get('/success.html', (req, res) => res.redirect(301, '/success'));
-app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
-app.get('/admin-app.js', (req, res) => res.status(404).json({ error: 'Admin panel is served by Angular.' }));
+app.get(LEGACY_ADMIN_PATHS, (req, res) => {
+  const locale = localeFromPath(req.path);
+  sendAngularPage(req, res, PAGE_ROUTES.notFound[locale] || PAGE_ROUTES.notFound.en, 404);
+});
+app.get(`${ADMIN_PANEL_URL}/`, (req, res) => res.redirect(301, ADMIN_PANEL_URL));
+app.get(ADMIN_PANEL_URL, (req, res) => {
+  sendAngularPage(req, res, ADMIN_PANEL_URL);
+});
 app.get(SUPPORTED_LOCALES.map(locale => `${locale.prefix}/quiz/shared/:token`.replace(/\/+/g, '/')), (req, res) => {
   const locale = localeFromPath(req.path);
   sendAngularPage(req, res, PAGE_ROUTES.quiz[locale]);
@@ -646,10 +708,16 @@ function createAdminServer() {
   }
   adminApp.use(express.static(path.join(__dirname, 'public'), STATIC_OPTIONS));
 
-  adminApp.get(['/', '/admin'], (req, res) => sendAngularPage(req, res, '/admin'));
+  adminApp.get(LEGACY_ADMIN_PATHS, (req, res) => {
+    sendAngularPage(req, res, PAGE_ROUTES.notFound.en, 404);
+  });
+  adminApp.get(`${ADMIN_PANEL_URL}/`, (req, res) => res.redirect(301, ADMIN_PANEL_URL));
+  adminApp.get(ADMIN_PANEL_URL, (req, res) => {
+    sendAngularPage(req, res, ADMIN_PANEL_URL);
+  });
   adminApp.use((req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found.' });
-    return sendAngularPage(req, res, '/admin', 404);
+    return sendAngularPage(req, res, PAGE_ROUTES.notFound.en, 404);
   });
 
   return adminApp;
