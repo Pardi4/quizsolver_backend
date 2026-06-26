@@ -83,7 +83,7 @@ Najwazniejsze pola:
 - `OPENAI_API_KEY` - klucz do AI.
 - `EXTENSION_ID` - ID rozszerzenia Chrome.
 - `ADMIN_EMAIL` i `ADMIN_PASSWORD` - dane admina.
-- `WHOP_*` - wypelnij, jesli platnosci maja dzialac od razu.
+- `LEMONSQUEEZY_*` - wypelnij, jesli platnosci za kredyty maja dzialac od razu.
 
 Sekret JWT mozesz wygenerowac tak:
 

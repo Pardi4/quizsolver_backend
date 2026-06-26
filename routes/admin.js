@@ -12,6 +12,8 @@ const router = express.Router();
 router.use(authMiddleware);
 router.use(adminOnly);
 
+const paidProviders = ['lemonsqueezy', 'whop'];
+
 function auditLog(adminUser, action, details = {}) {
   console.log(`[AUDIT] ${JSON.stringify({ ts: new Date().toISOString(), admin: adminUser.email, action, ...details })}`);
 }
@@ -31,7 +33,7 @@ router.get('/stats', async (req, res) => {
     const totalCreditsAgg = await User.aggregate([{ $group: { _id: null, total: { $sum: '$credits' } } }]);
     const totalCreditsInSystem = totalCreditsAgg[0]?.total || 0;
 
-    const revenueAgg = await Purchase.aggregate([{ $match: { paymentProvider: 'whop' } }, { $group: { _id: null, total: { $sum: '$priceUsd' } } }]);
+    const revenueAgg = await Purchase.aggregate([{ $match: { paymentProvider: { $in: paidProviders } } }, { $group: { _id: null, total: { $sum: '$priceUsd' } } }]);
     const totalRevenue = revenueAgg[0]?.total || 0;
 
     const today = new Date();
@@ -40,7 +42,7 @@ router.get('/stats', async (req, res) => {
 
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthRevenueAgg = await Purchase.aggregate([
-      { $match: { paymentProvider: 'whop', createdAt: { $gte: thisMonth } } },
+      { $match: { paymentProvider: { $in: paidProviders }, createdAt: { $gte: thisMonth } } },
       { $group: { _id: null, total: { $sum: '$priceUsd' } } }
     ]);
     const monthRevenue = monthRevenueAgg[0]?.total || 0;

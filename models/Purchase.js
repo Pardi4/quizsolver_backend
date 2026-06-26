@@ -23,8 +23,8 @@ const purchaseSchema = new mongoose.Schema({
   },
   paymentProvider: {
     type: String,
-    enum: ['whop', 'manual', 'free', 'referral'],
-    default: 'whop'
+    enum: ['lemonsqueezy', 'whop', 'manual', 'free', 'referral'],
+    default: 'lemonsqueezy'
   },
   externalOrderId: {
     type: String,
@@ -57,7 +57,7 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
     pack,
     credits,
     priceUsd: details.priceUsd || 0,
-    paymentProvider: details.paymentProvider || 'whop',
+    paymentProvider: details.paymentProvider || 'lemonsqueezy',
     grantedBy: details.grantedBy || null,
     grantReason: details.grantReason || null
   };

@@ -3,175 +3,203 @@ const crypto = require('crypto');
 const { webhookLimiter } = require('../middleware/rateLimiter');
 const Purchase = require('../models/Purchase');
 const User = require('../models/User');
+const { packFromCredits, packFromLemonVariantId } = require('../config/creditPacks');
 
 const router = express.Router();
 
-router.use(express.raw({ type: 'application/json', limit: '10kb' }));
+router.use(express.raw({ type: 'application/json', limit: '100kb' }));
 router.use(webhookLimiter);
 
-const PACK_MAP = {
-  100: { pack: 'starter', credits: 100, price: 1.99 },
-  500: { pack: 'popular', credits: 500, price: 4.99 },
-  2000: { pack: 'pro', credits: 2000, price: 9.99 }
-};
+function timingSafeEqualHex(a, b) {
+  const left = Buffer.from(String(a || ''), 'utf8');
+  const right = Buffer.from(String(b || ''), 'utf8');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
 
-function verifyWhopSignature(rawBody, signature, secret) {
-  if (!secret || !signature) return false;
+function verifyLemonSignature(rawBody, signature, secret) {
+  if (!secret || !signature || !rawBody) return false;
+  const digest = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  return timingSafeEqualHex(digest, signature);
+}
 
+function parseJsonBody(rawBody) {
   try {
-    const parts = signature.split(',');
-    let timestamp = '';
-    let sig = '';
-
-    for (const part of parts) {
-      const [key, value] = part.split('=');
-      if (key === 't') timestamp = value;
-      if (key === 'v1') sig = value;
-    }
-
-    if (!timestamp || !sig) {
-      const hmac = crypto.createHmac('sha256', secret);
-      const digest = hmac.update(rawBody).digest('hex');
-      return crypto.timingSafeEqual(
-        Buffer.from(digest, 'utf8'),
-        Buffer.from(signature, 'utf8')
-      );
-    }
-
-    const payload = `${timestamp}.${rawBody}`;
-    const expectedSig = crypto
-      .createHmac('sha256', secret)
-      .update(payload)
-      .digest('hex');
-
-    return crypto.timingSafeEqual(
-      Buffer.from(expectedSig, 'utf8'),
-      Buffer.from(sig, 'utf8')
-    );
+    return JSON.parse(rawBody.toString('utf8'));
   } catch {
-    return false;
+    return null;
   }
 }
 
-router.post('/payment', async (req, res) => {
-  try {
-    const secret = process.env.WHOP_WEBHOOK_SECRET;
-    const signature = req.headers['whop-signature'] || req.headers['x-signature'] || req.headers['webhook-signature'] || '';
-    const rawBody = req.body.toString();
+function centsToUsd(value) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) && amount > 0 ? amount / 100 : 0;
+}
 
+function eventName(payload) {
+  return payload?.meta?.event_name || payload?.event_name || payload?.type || '';
+}
+
+function customData(payload) {
+  return payload?.meta?.custom_data
+    || payload?.data?.attributes?.custom_data
+    || payload?.data?.attributes?.checkout_data?.custom
+    || {};
+}
+
+function orderAttributes(payload) {
+  return payload?.data?.attributes || {};
+}
+
+function orderId(payload) {
+  return payload?.data?.id || orderAttributes(payload).order_id || orderAttributes(payload).identifier || '';
+}
+
+function orderVariantId(attributes) {
+  return attributes.first_order_item?.variant_id
+    || attributes.variant_id
+    || attributes.product_variant_id
+    || attributes.order_item?.variant_id
+    || '';
+}
+
+function orderEmail(attributes, custom) {
+  return String(
+    custom.email
+    || attributes.user_email
+    || attributes.customer_email
+    || attributes.email
+    || ''
+  ).trim().toLowerCase();
+}
+
+function orderTotalUsd(attributes, packInfo) {
+  return centsToUsd(attributes.total_usd)
+    || centsToUsd(attributes.subtotal_usd)
+    || centsToUsd(attributes.total)
+    || packInfo?.price
+    || 0;
+}
+
+function resolvePack(payload) {
+  const custom = customData(payload);
+  const attributes = orderAttributes(payload);
+
+  const customPack = String(custom.pack || '').trim();
+  const customCredits = parseInt(custom.credits, 10);
+
+  if (customPack && Number.isFinite(customCredits) && customCredits > 0) {
+    return {
+      id: customPack,
+      credits: customCredits,
+      price: 0
+    };
+  }
+
+  const byCredits = packFromCredits(customCredits);
+  if (byCredits) return byCredits;
+
+  const byVariant = packFromLemonVariantId(orderVariantId(attributes));
+  if (byVariant) return byVariant;
+
+  const amountUsd = orderTotalUsd(attributes, null);
+  if (amountUsd >= 9) return { id: 'pro', credits: 2000, price: 9.99 };
+  if (amountUsd >= 4) return { id: 'popular', credits: 500, price: 4.99 };
+  if (amountUsd >= 1) return { id: 'starter', credits: 100, price: 1.99 };
+  return null;
+}
+
+async function findTargetUser(payload) {
+  const custom = customData(payload);
+  const attributes = orderAttributes(payload);
+
+  if (custom.user_id) {
+    const user = await User.findById(custom.user_id);
+    if (user) return user;
+  }
+
+  const email = orderEmail(attributes, custom);
+  return email ? User.findOne({ email }) : null;
+}
+
+async function grantReferralBonus(targetUser, credits) {
+  if (!targetUser.referredBy) return;
+
+  const referrer = await User.findById(targetUser.referredBy);
+  if (!referrer) return;
+
+  const bonus = Math.max(1, Math.floor(credits * 0.05));
+  await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
+    priceUsd: 0,
+    paymentProvider: 'referral',
+    grantReason: `Referral bonus (5%) from ${targetUser.email}`
+  });
+  console.log(`[Webhook] Referral 5% bonus: +${bonus} credits to ${referrer.email}`);
+}
+
+router.post('/lemonsqueezy', async (req, res) => {
+  const rawBody = req.body;
+  const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
+  const signature = req.headers['x-signature'] || '';
+
+  try {
     if (!secret) {
-      console.error('[Webhook] WHOP_WEBHOOK_SECRET is not configured!');
+      console.error('[LemonSqueezy] LEMONSQUEEZY_WEBHOOK_SECRET is not configured.');
       return res.status(500).json({ error: 'Webhook configuration error.' });
     }
 
-    if (!signature || !verifyWhopSignature(rawBody, signature, secret)) {
-      console.warn('[Webhook] Invalid or missing signature');
+    if (!verifyLemonSignature(rawBody, signature, secret)) {
+      console.warn('[LemonSqueezy] Invalid or missing webhook signature.');
       return res.status(400).json({ error: 'Invalid signature.' });
     }
 
-    const event = JSON.parse(rawBody);
+    const payload = parseJsonBody(rawBody);
+    if (!payload) return res.status(400).json({ error: 'Invalid JSON.' });
 
-    const action = event.action || event.event || event.type || '';
-    const data = event.data || event;
+    const action = eventName(payload);
+    const attributes = orderAttributes(payload);
+    const lemonOrderId = orderId(payload);
+    const externalOrderId = lemonOrderId ? `lemonsqueezy:${lemonOrderId}` : '';
 
-    console.log(`[Webhook] Event: ${action}`);
+    console.log(`[LemonSqueezy] Event: ${action}${externalOrderId ? ` (${externalOrderId})` : ''}`);
 
-    if (action === 'payment.completed' || action === 'payment_completed' || action === 'order_created' || action === 'membership.went_valid') {
-      const metadata = data.metadata || data.custom_data || data.meta?.custom_data || {};
-      const userId = metadata.user_id || metadata.userId;
-      const creditsStr = metadata.credits;
-      const packName = metadata.pack;
-      const paymentId = data.id || data.payment_id || data.order_id || '';
-
-      if (paymentId) {
-        const existingPurchase = await Purchase.findOne({ externalOrderId: String(paymentId) });
-        if (existingPurchase) {
-          console.log(`[Webhook] Duplicate ignored: ${paymentId}`);
-          return res.status(200).json({ received: true });
-        }
-      }
-
-      let credits = parseInt(creditsStr) || 0;
-      let pack = packName || 'starter';
-
-      if (!credits && PACK_MAP[pack]) {
-        credits = PACK_MAP[pack].credits;
-      }
-
-      if (!credits) {
-        const amount = data.final_amount || data.amount || data.total || 0;
-        const amountUsd = typeof amount === 'number' ? (amount > 100 ? amount / 100 : amount) : 0;
-
-        if (amountUsd >= 9) { credits = 2000; pack = 'pro'; }
-        else if (amountUsd >= 4) { credits = 500; pack = 'popular'; }
-        else if (amountUsd >= 1) { credits = 100; pack = 'starter'; }
-      }
-
-      if (!credits) {
-        console.warn('[Webhook] Cannot determine credits from event');
-        return res.status(200).json({ received: true });
-      }
-
-      let targetUser = null;
-
-      if (userId) {
-        targetUser = await User.findById(userId);
-      }
-
-      if (!targetUser) {
-        const email = (data.email || data.user_email || data.customer_email || '').toLowerCase().trim();
-        if (email) {
-          targetUser = await User.findOne({ email });
-        }
-      }
-
-      if (!targetUser) {
-        console.error('[Webhook] User not found');
-        return res.status(200).json({ received: true });
-      }
-
-      await Purchase.recordPurchase(targetUser._id, pack, credits, {
-        priceUsd: (data.final_amount || data.amount || 0) / 100,
-        paymentProvider: 'whop',
-        externalOrderId: String(paymentId)
-      });
-
-      if (targetUser.referredBy) {
-        const referrer = await User.findById(targetUser.referredBy);
-        if (referrer) {
-          const bonus = Math.max(1, Math.floor(credits * 0.05));
-          await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
-            priceUsd: 0,
-            paymentProvider: 'referral',
-            grantReason: `Referral bonus (5%) from ${targetUser.email}`
-          });
-          console.log(`[Webhook] Referral 5% bonus: +${bonus} credits to ${referrer.email}`);
-        }
-      }
-
-      console.log(`[Webhook] +${credits} credits for ${targetUser.email} (${paymentId})`);
+    if (action !== 'order_created') {
+      return res.status(200).json({ received: true, ignored: true });
     }
 
-    if (action === 'payment.refunded' || action === 'order_refunded' || action === 'charge.refunded') {
-      const paymentId = String(data.id || data.payment_id || '');
-      const purchase = await Purchase.findOne({ externalOrderId: paymentId });
-      if (purchase) {
-        const user = await User.findById(purchase.userId);
-        if (user) {
-          user.credits = Math.max(0, user.credits - purchase.credits);
-          await user.save();
-          console.log(`[Webhook] Refund: -${purchase.credits} from ${user.email}`);
-        }
+    if (externalOrderId) {
+      const existingPurchase = await Purchase.findOne({ externalOrderId });
+      if (existingPurchase) {
+        console.log(`[LemonSqueezy] Duplicate ignored: ${externalOrderId}`);
+        return res.status(200).json({ received: true, duplicate: true });
       }
     }
 
-    res.status(200).json({ received: true });
+    const packInfo = resolvePack(payload);
+    if (!packInfo?.credits || !packInfo.id) {
+      console.warn('[LemonSqueezy] Cannot determine credit pack from order.');
+      return res.status(200).json({ received: true, ignored: true });
+    }
+
+    const targetUser = await findTargetUser(payload);
+    if (!targetUser) {
+      console.error('[LemonSqueezy] User not found for completed order.');
+      return res.status(200).json({ received: true, ignored: true });
+    }
+
+    await Purchase.recordPurchase(targetUser._id, packInfo.id, packInfo.credits, {
+      priceUsd: orderTotalUsd(attributes, packInfo),
+      paymentProvider: 'lemonsqueezy',
+      externalOrderId
+    });
+
+    await grantReferralBonus(targetUser, packInfo.credits);
+
+    console.log(`[LemonSqueezy] +${packInfo.credits} credits for ${targetUser.email}`);
+    return res.status(200).json({ received: true });
   } catch (error) {
-    console.error('[Webhook] Error:', error.message);
-    res.status(200).json({ received: true });
+    console.error('[LemonSqueezy] Error:', error.message);
+    return res.status(200).json({ received: true });
   }
 });
-
-
 
 module.exports = router;

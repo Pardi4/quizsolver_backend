@@ -3,22 +3,21 @@ const { authMiddleware } = require('../middleware/auth');
 const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
 const User = require('../models/User');
+const { CREDIT_PACKS } = require('../config/creditPacks');
 
 const router = express.Router();
 router.use(authMiddleware);
 
-const PACKS = {
-  starter: { id: 'starter', name: '100 Credits', credits: 100, price: 1.99, planEnv: 'WHOP_PLAN_100' },
-  popular: { id: 'popular', name: '500 Credits', credits: 500, price: 4.99, planEnv: 'WHOP_PLAN_500' },
-  pro:     { id: 'pro',     name: '2000 Credits', credits: 2000, price: 9.99, planEnv: 'WHOP_PLAN_2000' }
-};
+const PACKS = CREDIT_PACKS;
 
 function looksPlaceholder(value) {
   return !value || /xxxx|placeholder|changeme|todo/i.test(String(value));
 }
 
-function hasWhopConfig(packInfo) {
-  return !looksPlaceholder(process.env.WHOP_API_KEY) && !looksPlaceholder(process.env[packInfo.planEnv]);
+function hasLemonSqueezyConfig(packInfo) {
+  return !looksPlaceholder(process.env.LEMONSQUEEZY_API_KEY)
+    && !looksPlaceholder(process.env.LEMONSQUEEZY_STORE_ID)
+    && !looksPlaceholder(process.env[packInfo.lemonVariantEnv]);
 }
 
 router.get('/packs', (req, res) => {
@@ -59,40 +58,83 @@ router.post('/buy', async (req, res) => {
 
     const packInfo = PACKS[pack];
 
-    const apiKey = process.env.WHOP_API_KEY;
-    const planId = process.env[packInfo.planEnv];
+    const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+    const storeId = String(process.env.LEMONSQUEEZY_STORE_ID || '').trim();
+    const variantId = String(process.env[packInfo.lemonVariantEnv] || '').trim();
 
-    if (!hasWhopConfig(packInfo)) {
-      console.warn('[Credits] Whop is not fully configured.');
+    if (!hasLemonSqueezyConfig(packInfo)) {
+      console.warn('[Credits] Lemon Squeezy is not fully configured.');
       return res.status(503).json({ error: 'Payments are not configured yet.' });
     }
 
-    const response = await fetch('https://api.whop.com/api/v1/checkout_configurations', {
+    const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
+
+    const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
       },
       body: JSON.stringify({
-        plan_id: planId,
-        metadata: {
-          user_id: req.user._id.toString(),
-          pack: pack,
-          credits: packInfo.credits.toString(),
-          email: req.user.email
-        },
-        redirect_url: process.env.CHECKOUT_SUCCESS_URL || 'https://quizsolver.us/success',
+        data: {
+          type: 'checkouts',
+          attributes: {
+            product_options: {
+              redirect_url: successUrl,
+              receipt_button_text: 'Open QuizSolver',
+              receipt_link_url: successUrl,
+              receipt_thank_you_note: 'Thanks for your purchase. Your QuizSolver credits will be added to your account automatically.',
+              enabled_variants: [Number(variantId)]
+            },
+            checkout_options: {
+              embed: false,
+              media: true,
+              logo: true,
+              desc: true,
+              discount: true
+            },
+            checkout_data: {
+              email: req.user.email,
+              name: req.user.displayName || '',
+              custom: {
+                user_id: req.user._id.toString(),
+                pack: packInfo.id,
+                credits: String(packInfo.credits),
+                email: req.user.email
+              }
+            }
+          },
+          relationships: {
+            store: {
+              data: {
+                type: 'stores',
+                id: storeId
+              }
+            },
+            variant: {
+              data: {
+                type: 'variants',
+                id: variantId
+              }
+            }
+          }
+        }
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('[Credits] Whop error:', response.status, errText.substring(0, 300));
+      console.error('[Credits] Lemon Squeezy error:', response.status, errText.substring(0, 300));
       return res.status(502).json({ error: 'Payment provider error. Try again later.' });
     }
 
     const data = await response.json();
-    const checkoutUrl = data.url || data.checkout_url || data.data?.url || `https://whop.com/checkout/${planId}`;
+    const checkoutUrl = data.data?.attributes?.url || data.url || data.checkout_url;
+    if (!checkoutUrl) {
+      console.error('[Credits] Lemon Squeezy checkout response missing URL.');
+      return res.status(502).json({ error: 'Payment provider error. Try again later.' });
+    }
 
     res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits });
   } catch (error) {
