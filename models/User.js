@@ -145,7 +145,10 @@ userSchema.methods.getRemaining = function() {
   return this.credits;
 };
 
-userSchema.methods.useCredits = function(count = 1) {
+userSchema.methods.useCredits = function(count = 1, options = {}) {
+  if (!options.allowDirect) {
+    throw new Error('Direct credit deduction is disabled. Use the guarded CreditUsage flow for billable actions.');
+  }
   if (this.role === 'admin') {
     this.stats.totalQuestionsSolved += count;
     return;

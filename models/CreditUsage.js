@@ -31,8 +31,7 @@ const creditUsageSchema = new mongoose.Schema({
   },
   dedupeExpiresAt: {
     type: Date,
-    required: true,
-    index: true
+    required: true
   },
   chargedAt: {
     type: Date,
@@ -41,6 +40,5 @@ const creditUsageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 creditUsageSchema.index({ user: 1, action: 1, questionHash: 1 });
-creditUsageSchema.index({ dedupeExpiresAt: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
 
 module.exports = mongoose.model('CreditUsage', creditUsageSchema);

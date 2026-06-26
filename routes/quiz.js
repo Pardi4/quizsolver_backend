@@ -299,29 +299,25 @@ async function saveStudyNote(userId, cachedAnswer, body, updates = {}) {
 }
 
 function creditDedupeKey(userId, action, questionHash) {
-  return `${userId}:${action}:${questionHash}`;
+  return `${userId}:question:${questionHash}`;
 }
 
-async function hasRecentCreditUsage(userId, action, questionHash) {
+async function hasCreditUsage(userId, action, questionHash) {
   if (!userId || !questionHash) return false;
-  const now = new Date();
   const usage = await CreditUsage.exists({
-    dedupeKey: creditDedupeKey(userId, action, questionHash),
-    dedupeExpiresAt: { $gt: now }
+    dedupeKey: creditDedupeKey(userId, action, questionHash)
   });
   return !!usage;
 }
 
 async function shouldChargeForQuestion(userId, action, questionHash, activityField = 'lastSeenAt') {
   if (!userId || !questionHash) return true;
-  const since = new Date(Date.now() - CREDIT_DEDUPE_WINDOW_MS);
-  const checks = [hasRecentCreditUsage(userId, action, questionHash)];
+  const checks = [hasCreditUsage(userId, action, questionHash)];
 
-  if (activityField) {
+  if (activityField !== false) {
     checks.push(StudyNote.exists({
       user: userId,
-      questionHash,
-      [activityField]: { $gte: since }
+      questionHash
     }));
   }
 
@@ -364,22 +360,6 @@ async function claimCreditUsage(userId, action, questionHash, count = 1) {
     if (error.code !== 11000) throw error;
   }
 
-  const usage = await CreditUsage.findOneAndUpdate(
-    { dedupeKey, dedupeExpiresAt: { $lte: now } },
-    {
-      $set: {
-        user: userId,
-        action,
-        questionHash,
-        credits: count,
-        dedupeExpiresAt,
-        chargedAt: now
-      }
-    },
-    { new: true }
-  );
-
-  if (usage) return { shouldCharge: true, usage };
   return { shouldCharge: false, duplicate: true };
 }
 
@@ -925,14 +905,7 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
 
     const questionData = { text, options, type, prompts, rows };
     const questionHash = CachedAnswer.generateHash(questionData);
-    const followUpHash = CachedAnswer.generateHash({
-      text: `${text}\nFollow-up:${prompt}\n${previousExplanation}`,
-      options,
-      type,
-      prompts,
-      rows
-    });
-    const chargeCredits = await shouldChargeForQuestion(user._id, 'follow-up', followUpHash, null);
+    const chargeCredits = await shouldChargeForQuestion(user._id, 'follow-up', questionHash, null);
 
     let responseUser = user;
     if (chargeCredits) {
@@ -960,7 +933,7 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation: followUp });
 
     if (chargeCredits) {
-      const creditCharge = await chargeCreditOnce(user, 'follow-up', followUpHash);
+      const creditCharge = await chargeCreditOnce(user, 'follow-up', questionHash);
       if (creditCharge.error) {
         return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
       }
