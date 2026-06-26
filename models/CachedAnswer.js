@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 const { cleanQuizText } = require('../utils/textSanitizer');
+const { cacheSafeQuestionText, isQuestionChromeOnly } = require('../utils/questionTextGuard');
 
 const cachedAnswerSchema = new mongoose.Schema({
   questionHash: {
@@ -64,9 +65,10 @@ cachedAnswerSchema.statics.generateImageFingerprint = imageFingerprint;
 
 cachedAnswerSchema.statics.generateHash = function(questionData) {
   const sortedOptions = [...(questionData.options || [])].map(normalizeOption).sort();
+  const normalizedText = cacheSafeQuestionText(questionData.text).toLowerCase().replace(/\s+/g, ' ');
 
   const normalized = JSON.stringify({
-    text: cleanQuizText(questionData.text).toLowerCase().replace(/\s+/g, ' '),
+    text: normalizedText,
     options: sortedOptions,
     prompts: [...(questionData.prompts || [])].map(normalizeOption),
     rows: [...(questionData.rows || [])].map(normalizeOption),
@@ -77,6 +79,10 @@ cachedAnswerSchema.statics.generateHash = function(questionData) {
 };
 
 cachedAnswerSchema.statics.findCached = async function(questionData) {
+  if (isQuestionChromeOnly(questionData?.text) && !imageFingerprint(questionData)) {
+    return null;
+  }
+
   const hash = this.generateHash(questionData);
   const cached = await this.findOne({ questionHash: hash });
   if (cached) {
@@ -112,13 +118,18 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
 };
 
 cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
+  if (isQuestionChromeOnly(questionData?.text) && !imageFingerprint(questionData)) {
+    return null;
+  }
+
   const hash = this.generateHash(questionData);
+  const displayQuestionText = cacheSafeQuestionText(questionData.cacheQuestionText || questionData.text || '');
   try {
     return await this.findOneAndUpdate(
       { questionHash: hash },
       {
         $set: {
-          questionText: cleanQuizText(questionData.cacheQuestionText || questionData.text || '').substring(0, 500),
+          questionText: displayQuestionText.substring(0, 500),
           questionType: questionData.type,
           options: (questionData.options || []).map(o => cleanQuizText(o).substring(0, 200)),
           prompts: (questionData.prompts || []).map(o => cleanQuizText(o).substring(0, 200)),

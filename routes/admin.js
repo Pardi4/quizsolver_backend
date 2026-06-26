@@ -470,9 +470,35 @@ router.delete('/users/:userId', async (req, res) => {
 
 router.get('/cache/stats', async (req, res) => {
   try {
-    const totalCached = await CachedAnswer.countDocuments();
-    const topHits = await CachedAnswer.find().sort({ hitCount: -1 }).limit(10).select('questionText questionType hitCount options prompts rows answer createdAt lastUsedAt');
-    res.json({ success: true, totalCached, topHits });
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const search = String(req.query.q || '').trim().substring(0, 120);
+    const query = search
+      ? { questionText: new RegExp(escapeRegExp(search), 'i') }
+      : {};
+
+    const [totalCached, totalMatching, topHits] = await Promise.all([
+      CachedAnswer.countDocuments(),
+      CachedAnswer.countDocuments(query),
+      CachedAnswer.find(query)
+        .sort({ hitCount: -1, lastUsedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select('questionText questionType hitCount options prompts rows answer createdAt lastUsedAt')
+    ]);
+
+    res.json({
+      success: true,
+      totalCached,
+      totalMatching,
+      topHits,
+      pagination: {
+        page,
+        limit,
+        total: totalMatching,
+        pages: Math.max(1, Math.ceil(totalMatching / limit))
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching cache stats.' });
   }
@@ -485,6 +511,26 @@ router.delete('/cache/clear', async (req, res) => {
     res.json({ success: true, deleted: result.deletedCount });
   } catch (error) {
     res.status(500).json({ error: 'Error clearing cache.' });
+  }
+});
+
+router.delete('/cache/:cacheId', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.cacheId)) {
+      return res.status(400).json({ error: 'Invalid cache id.' });
+    }
+
+    const cacheEntry = await CachedAnswer.findByIdAndDelete(req.params.cacheId);
+    if (!cacheEntry) return res.status(404).json({ error: 'Cache entry not found.' });
+
+    auditLog(req.user, 'CACHE_ENTRY_DELETE', {
+      cacheId: cacheEntry._id.toString(),
+      questionHash: cacheEntry.questionHash,
+      hitCount: cacheEntry.hitCount
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Error deleting cache entry.' });
   }
 });
 

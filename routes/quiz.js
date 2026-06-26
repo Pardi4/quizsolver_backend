@@ -10,6 +10,7 @@ const CreditUsage = require('../models/CreditUsage');
 const QuizSession = require('../models/QuizSession');
 const SharedQuiz = require('../models/SharedQuiz');
 const { cleanQuizText } = require('../utils/textSanitizer');
+const { stripQuestionChrome, isQuestionChromeOnly } = require('../utils/questionTextGuard');
 
 const router = express.Router();
 
@@ -81,12 +82,22 @@ function sanitizeText(text) {
 }
 
 function normalizeQuestionPayload(questionData) {
-  questionData.text = sanitizeText(questionData.text);
+  const rawText = sanitizeText(questionData.text);
   questionData.options = questionData.options?.map(sanitizeText);
   questionData.prompts = questionData.prompts?.map(sanitizeText).filter(Boolean);
   questionData.rows = questionData.rows?.map(sanitizeText).filter(Boolean);
   questionData.imageAlt = sanitizeText(questionData.imageAlt || '').substring(0, 500);
   questionData.imageCaption = sanitizeText(questionData.imageCaption || '').substring(0, 500);
+
+  if (rawText && isQuestionChromeOnly(rawText)) {
+    if (questionData.imageUrl || questionData.imageAlt || questionData.imageCaption) {
+      questionData.text = questionData.imageAlt || questionData.imageCaption || 'Question shown in image';
+    } else {
+      return 'Could not detect the actual question text. Only quiz metadata was captured.';
+    }
+  } else {
+    questionData.text = stripQuestionChrome(rawText) || rawText;
+  }
 
   if (!questionData.text && questionData.imageUrl) {
     questionData.text = 'Question shown in image';
@@ -840,12 +851,14 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
     const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const user = req.user;
+    const questionData = { text, options, type, prompts, rows };
+    const cleanupErr = normalizeQuestionPayload(questionData);
+    if (cleanupErr) return res.status(400).json({ error: cleanupErr });
 
-    if (!text || answer === undefined) {
+    if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
 
-    const questionData = { text, options, type, prompts, rows };
     const questionHash = CachedAnswer.generateHash(questionData);
 
     const chargeCredits = await shouldChargeForQuestion(user._id, 'explain', questionHash, 'lastExplainedAt');
@@ -859,7 +872,14 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
       responseUser = spendCheck.user || user;
     }
 
-    const explanation = await callExplanationAI(text, options, answer, type, req.body.explanationLanguage || 'auto', { prompts, rows });
+    const explanation = await callExplanationAI(
+      questionData.text,
+      questionData.options || [],
+      answer,
+      questionData.type,
+      req.body.explanationLanguage || 'auto',
+      { prompts: questionData.prompts || [], rows: questionData.rows || [] }
+    );
     let cachedDoc = await CachedAnswer.findOne({ questionHash });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation });
@@ -898,12 +918,14 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     const prompt = sanitizeText(String(req.body.prompt || 'Explain more.')).substring(0, 500);
     const previousExplanation = sanitizeText(String(req.body.previousExplanation || '')).substring(0, 1200);
     const user = req.user;
+    const questionData = { text, options, type, prompts, rows };
+    const cleanupErr = normalizeQuestionPayload(questionData);
+    if (cleanupErr) return res.status(400).json({ error: cleanupErr });
 
-    if (!text || answer === undefined) {
+    if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
 
-    const questionData = { text, options, type, prompts, rows };
     const questionHash = CachedAnswer.generateHash(questionData);
     const chargeCredits = await shouldChargeForQuestion(user._id, 'follow-up', questionHash, null);
 
@@ -917,15 +939,15 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     }
 
     const followUp = await callFollowUpAI({
-      text,
-      options,
+      text: questionData.text,
+      options: questionData.options || [],
       answer,
-      type,
+      type: questionData.type,
       prompt,
       previousExplanation,
       explanationLanguage: req.body.explanationLanguage || 'auto',
-      prompts,
-      rows
+      prompts: questionData.prompts || [],
+      rows: questionData.rows || []
     });
 
     let cachedDoc = await CachedAnswer.findOne({ questionHash });
