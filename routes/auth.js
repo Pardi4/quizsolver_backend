@@ -22,6 +22,21 @@ function sanitizeDisplayName(name) {
   return name.replace(/<[^>]*>/g, '').trim().substring(0, 50);
 }
 
+function sanitizeExtensionUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`.substring(0, 500);
+  } catch {
+    return String(url).split('?')[0].split('#')[0].substring(0, 500);
+  }
+}
+
+function sanitizeHeartbeatToken(value, maxLength = 50) {
+  return String(value || '').replace(/[^a-z0-9_.:-]/gi, '').substring(0, maxLength);
+}
+
 function validatePassword(password) {
   if (!password || typeof password !== 'string') return 'Password is required.';
   if (password.length < 8) return 'Password must be at least 8 characters.';
@@ -501,6 +516,23 @@ router.get('/me', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+router.post('/extension-heartbeat', authMiddleware, async (req, res) => {
+  try {
+    req.user.extensionLastSeenAt = new Date();
+    req.user.extensionLastSeenReason = sanitizeHeartbeatToken(req.body?.reason || 'heartbeat');
+    req.user.extensionLastSeenUrl = sanitizeExtensionUrl(req.body?.url || '');
+    req.user.extensionLastSeenPlatform = sanitizeHeartbeatToken(req.body?.platform || '', 80);
+    await req.user.save();
+
+    res.json({
+      success: true,
+      extensionLastSeenAt: req.user.extensionLastSeenAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Could not update extension activity.' });
   }
 });
 

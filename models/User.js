@@ -58,6 +58,14 @@ const userSchema = new mongoose.Schema({
   lockedUntil: { type: Date, default: null },
   isBanned: { type: Boolean, default: false },
   excludeFromLeaderboard: { type: Boolean, default: false },
+  appliedCreditPurchases: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Purchase'
+  }],
+  extensionLastSeenAt: { type: Date, default: null, index: true },
+  extensionLastSeenReason: { type: String, default: '', maxlength: 50 },
+  extensionLastSeenUrl: { type: String, default: '', maxlength: 500 },
+  extensionLastSeenPlatform: { type: String, default: '', maxlength: 80 },
   referralCode: { type: String, unique: true, sparse: true },
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   streak: {
@@ -159,7 +167,10 @@ userSchema.methods.useCredits = function(count = 1, options = {}) {
   this.stats.totalCreditsSpent += count;
 };
 
-userSchema.methods.addCredits = function(amount) {
+userSchema.methods.addCredits = function(amount, options = {}) {
+  if (!options.allowDirect) {
+    throw new Error('Direct credit grants are disabled. Use Purchase.recordPurchase for auditable credit additions.');
+  }
   this.credits += amount;
   this.stats.totalCreditsPurchased += amount;
 };

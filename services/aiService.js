@@ -68,6 +68,7 @@ const QUIZ_SOLVER_SYSTEM_PREFIX = [
   'You are QuizSolver Answer Engine.',
   'Solve normalized quiz payloads from websites. The payload may include text, options, rows, matching items, and an image.',
   'Use the option text, question wording, and image when present. Return only the required machine-readable answer.',
+  'If the payload does not contain a real answerable question, return exactly: null',
   'Never include explanation, markdown, labels, letters like A/B/C, or extra words.'
 ].join('\n');
 
@@ -215,6 +216,10 @@ function parseAnswer(raw, type, options, expectedCount = null) {
     .replace(/```$/i, '')
     .trim();
 
+  if (/^null$/i.test(text)) {
+    throw new AIError('QUESTION_RETRY_NEEDED', 'AI could not identify a real answerable question.');
+  }
+
   if (/^(uncertain|unknown|not sure|nie wiem|niepewne)\b/i.test(text)) {
     throw new AIError('INVALID_RESPONSE', `Uncertain AI response: "${raw}"`);
   }
@@ -355,10 +360,11 @@ async function requestChatCompletion(body) {
 
     return response.choices[0]?.message?.content?.trim() || '';
   } catch (err) {
-    if (err.status === 408 || err.message.includes('timeout')) {
+    const message = String(err?.message || '');
+    if (err?.status === 408 || message.includes('timeout')) {
       throw new AIError('AI_TIMEOUT', 'AI request timed out (30s).');
     }
-    throw new AIError('MODEL_ERROR', err.message);
+    throw new AIError('MODEL_ERROR', message || 'AI request failed.');
   }
 }
 

@@ -30,7 +30,7 @@ const cachedAnswerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     required: true
   },
-  hitCount: { type: Number, default: 1 },
+  hitCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   lastUsedAt: { type: Date, default: Date.now }
 });
@@ -106,9 +106,8 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
             if (newIdx !== -1) newIndices.push(newIdx);
           }
         }
-        if (['matching', 'matrix'].includes(questionData.type) && newIndices.length === cached.answer.length) return newIndices;
+        if (newIndices.length === cached.answer.length) return newIndices;
         if (['matching', 'matrix'].includes(questionData.type)) return cached.answer;
-        if (newIndices.length > 0) return newIndices;
       }
     }
 
@@ -123,7 +122,11 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
   }
 
   const hash = this.generateHash(questionData);
-  const displayQuestionText = cacheSafeQuestionText(questionData.cacheQuestionText || questionData.text || '');
+  const displayQuestionText = (
+    cacheSafeQuestionText(questionData.cacheQuestionText || questionData.text || '') ||
+    cleanQuizText(questionData.imageCaption || questionData.imageAlt || questionData.text || '') ||
+    (imageFingerprint(questionData) ? 'Image question' : 'Question')
+  );
   try {
     return await this.findOneAndUpdate(
       { questionHash: hash },
@@ -147,9 +150,10 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
       { upsert: true, new: true }
     );
   } catch (error) {
-    if (error.code !== 11000) {
-      console.error('[Cache] Save error:', error.message);
+    if (error.code === 11000) {
+      return this.findOne({ questionHash: hash });
     }
+    console.error('[Cache] Save error:', error.message);
     return null;
   }
 };

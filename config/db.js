@@ -39,6 +39,14 @@ async function ensureCreditUsageIndexes() {
     { user: 1, action: 1, questionHash: 1 },
     { name: 'user_1_action_1_questionHash_1', background: true }
   );
+  await collection.createIndex(
+    { status: 1, updatedAt: -1 },
+    { name: 'status_1_updatedAt_-1', background: true }
+  );
+  await collection.createIndex(
+    { charged: 1, chargedAt: -1 },
+    { name: 'charged_1_chargedAt_-1', background: true }
+  );
 }
 
 async function connectDB() {

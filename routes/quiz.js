@@ -10,13 +10,11 @@ const CreditUsage = require('../models/CreditUsage');
 const QuizSession = require('../models/QuizSession');
 const SharedQuiz = require('../models/SharedQuiz');
 const { cleanQuizText } = require('../utils/textSanitizer');
-const { stripQuestionChrome, isQuestionChromeOnly } = require('../utils/questionTextGuard');
+const { stripQuestionChrome, isQuestionChromeOnly, assessQuestionQuality } = require('../utils/questionTextGuard');
 
 const router = express.Router();
 
 router.use(authMiddleware);
-
-const CREDIT_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
 
 const {
   AIError,
@@ -29,10 +27,38 @@ const {
   callFollowUpAI
 } = require('../services/aiService');
 
+function questionRetryNeeded(message, reason = 'low-question-quality') {
+  return {
+    error: message,
+    status: 422,
+    code: 'QUESTION_RETRY_NEEDED',
+    type: 'QUESTION_RETRY_NEEDED',
+    retryable: true,
+    answer: null,
+    reason
+  };
+}
+
+function sendQuestionPayloadError(res, error) {
+  if (error && typeof error === 'object') {
+    const { status = 400, ...body } = error;
+    return res.status(status).json({ success: false, ...body });
+  }
+  return res.status(400).json({ success: false, error });
+}
+
+function serializeQuestionPayloadError(error) {
+  if (error && typeof error === 'object') {
+    const { status, ...body } = error;
+    return body;
+  }
+  return { error };
+}
+
 function validateQuestionData(q) {
-  if (!q || typeof q !== 'object') return 'Missing question data.';
-  if (!q.text || typeof q.text !== 'string') return 'Missing question text.';
-  if (q.text.trim().length < 3) return 'Question text too short.';
+  if (!q || typeof q !== 'object') return questionRetryNeeded('Missing question data.', 'missing-question-data');
+  if (!q.text || typeof q.text !== 'string') return questionRetryNeeded('Missing question text.', 'missing-question-text');
+  if (q.text.trim().length < 3) return questionRetryNeeded('Question text too short.', 'question-text-too-short');
   if (q.text.length > 2000) return 'Question text too long (max 2000 chars).';
   if (q.type && !['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(q.type)) return 'Invalid question type.';
   if (q.imageUrl !== undefined && q.imageUrl !== null && q.imageUrl !== '') {
@@ -81,11 +107,26 @@ function sanitizeText(text) {
   return cleanQuizText(cleaned);
 }
 
+function normalizePayloadTextList(values) {
+  if (!Array.isArray(values)) return values;
+  const seen = new Set();
+  const output = [];
+  for (const value of values) {
+    const text = sanitizeText(value).substring(0, 500);
+    if (!text) continue;
+    const key = text.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(text);
+  }
+  return output;
+}
+
 function normalizeQuestionPayload(questionData) {
   const rawText = sanitizeText(questionData.text);
-  questionData.options = questionData.options?.map(sanitizeText);
-  questionData.prompts = questionData.prompts?.map(sanitizeText).filter(Boolean);
-  questionData.rows = questionData.rows?.map(sanitizeText).filter(Boolean);
+  questionData.options = normalizePayloadTextList(questionData.options);
+  questionData.prompts = normalizePayloadTextList(questionData.prompts);
+  questionData.rows = normalizePayloadTextList(questionData.rows);
   questionData.imageAlt = sanitizeText(questionData.imageAlt || '').substring(0, 500);
   questionData.imageCaption = sanitizeText(questionData.imageCaption || '').substring(0, 500);
 
@@ -93,7 +134,10 @@ function normalizeQuestionPayload(questionData) {
     if (questionData.imageUrl || questionData.imageAlt || questionData.imageCaption) {
       questionData.text = questionData.imageAlt || questionData.imageCaption || 'Question shown in image';
     } else {
-      return 'Could not detect the actual question text. Only quiz metadata was captured.';
+      return questionRetryNeeded(
+        'Could not detect the actual question text. Only quiz metadata was captured.',
+        'quiz-metadata-only'
+      );
     }
   } else {
     questionData.text = stripQuestionChrome(rawText) || rawText;
@@ -104,13 +148,28 @@ function normalizeQuestionPayload(questionData) {
   }
 
   if (!questionData.text) {
-    return 'Question text empty after cleanup.';
+    return questionRetryNeeded('Question text empty after cleanup.', 'question-text-empty-after-cleanup');
+  }
+  if (['radio', 'checkbox'].includes(questionData.type) &&
+    (!Array.isArray(questionData.options) || questionData.options.length < 2)) {
+    return questionRetryNeeded(
+      'Could not detect enough answer options for this question.',
+      'missing-answer-options'
+    );
   }
   if (questionData.type === 'matching' && (!questionData.prompts || questionData.prompts.length === 0)) {
-    return 'Matching question prompts empty after cleanup.';
+    return questionRetryNeeded('Matching question prompts empty after cleanup.', 'missing-matching-prompts');
   }
   if (questionData.type === 'matrix' && (!questionData.rows || questionData.rows.length === 0)) {
-    return 'Matrix question rows empty after cleanup.';
+    return questionRetryNeeded('Matrix question rows empty after cleanup.', 'missing-matrix-rows');
+  }
+
+  const quality = assessQuestionQuality(questionData.text, questionData);
+  if (!quality.ok) {
+    return questionRetryNeeded(
+      'Could not detect a reliable question. Retrying page extraction may fix this.',
+      quality.reason
+    );
   }
 
   return null;
@@ -157,10 +216,25 @@ function imageUpdatesFromBody(body = {}) {
 }
 
 function statusForAIError(error) {
+  if (error.type === 'QUESTION_RETRY_NEEDED') return 422;
   if (error.type === 'AI_TIMEOUT') return 504;
   if (error.type === 'MODEL_ERROR') return 502;
   if (error.type === 'IMAGE_FETCH' || error.type === 'INVALID_RESPONSE') return 422;
   return 500;
+}
+
+function aiErrorResponse(error) {
+  if (error.type === 'QUESTION_RETRY_NEEDED') {
+    return {
+      success: false,
+      error: error.message || 'Question needs to be parsed again.',
+      type: 'QUESTION_RETRY_NEEDED',
+      code: 'QUESTION_RETRY_NEEDED',
+      retryable: true,
+      answer: null
+    };
+  }
+  return { error: error.message || 'AI processing error.', type: error.type };
 }
 
 function escapeRegex(text) {
@@ -309,6 +383,15 @@ async function saveStudyNote(userId, cachedAnswer, body, updates = {}) {
   });
 }
 
+async function saveStudyNoteBestEffort(userId, cachedAnswer, body, updates = {}) {
+  try {
+    return await saveStudyNote(userId, cachedAnswer, body, updates);
+  } catch (error) {
+    console.warn('[StudyNote] Could not save solved question history:', error.message);
+    return null;
+  }
+}
+
 function creditDedupeKey(userId, action, questionHash) {
   return `${userId}:question:${questionHash}`;
 }
@@ -353,7 +436,6 @@ async function userCanSpend(user, count = 1) {
 
 async function claimCreditUsage(userId, action, questionHash, count = 1) {
   const now = new Date();
-  const dedupeExpiresAt = new Date(now.getTime() + CREDIT_DEDUPE_WINDOW_MS);
   const dedupeKey = creditDedupeKey(userId, action, questionHash);
 
   try {
@@ -363,8 +445,10 @@ async function claimCreditUsage(userId, action, questionHash, count = 1) {
       questionHash,
       dedupeKey,
       credits: count,
-      dedupeExpiresAt,
-      chargedAt: now
+      status: 'claimed',
+      charged: false,
+      claimedAt: now,
+      chargedAt: null
     });
     return { shouldCharge: true, usage };
   } catch (error) {
@@ -372,6 +456,24 @@ async function claimCreditUsage(userId, action, questionHash, count = 1) {
   }
 
   return { shouldCharge: false, duplicate: true };
+}
+
+async function markCreditUsage(usage, update = {}) {
+  if (!usage?._id) return;
+  try {
+    await CreditUsage.updateOne({ _id: usage._id }, { $set: update });
+  } catch (error) {
+    console.warn('[Credits] Could not update credit usage status:', error.message);
+  }
+}
+
+async function releaseCreditUsage(usage) {
+  if (!usage?._id) return;
+  try {
+    await CreditUsage.deleteOne({ _id: usage._id });
+  } catch (error) {
+    console.warn('[Credits] Could not release credit usage claim:', error.message);
+  }
 }
 
 async function chargeCreditOnce(user, action, questionHash, options = {}) {
@@ -389,15 +491,20 @@ async function chargeCreditOnce(user, action, questionHash, options = {}) {
       adminUser.stats.totalQuestionsSolved += count;
       if (options.updateStreak) adminUser.updateStreak();
       await adminUser.save();
+      await markCreditUsage(claim.usage, {
+        status: 'waived',
+        charged: false,
+        waivedReason: 'admin'
+      });
       return { charged: false, user: adminUser };
     }
-    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    await releaseCreditUsage(claim.usage);
     return { error: 'User not found.', status: 404 };
   }
 
   const spendCheck = await userCanSpend(user, count);
   if (!spendCheck.allowed) {
-    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    await releaseCreditUsage(claim.usage);
     return { error: 'No credits remaining.', status: 429, remaining: spendCheck.user?.getRemaining?.() || 0 };
   }
 
@@ -414,16 +521,46 @@ async function chargeCreditOnce(user, action, questionHash, options = {}) {
   );
 
   if (!chargedUser) {
-    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    await releaseCreditUsage(claim.usage);
     return { error: 'No credits remaining.', status: 429, remaining: 0 };
   }
 
+  await markCreditUsage(claim.usage, {
+    status: 'charged',
+    charged: true,
+    chargedAt: new Date()
+  });
+
   if (options.updateStreak) {
-    chargedUser.updateStreak();
-    await chargedUser.save();
+    try {
+      chargedUser.updateStreak();
+      await chargedUser.save();
+    } catch (error) {
+      console.warn('[Credits] Streak update failed after charge:', error.message);
+    }
   }
 
   return { charged: true, user: chargedUser };
+}
+
+function creditErrorResponse(creditCharge) {
+  return {
+    status: creditCharge.status || 500,
+    body: {
+      error: creditCharge.error,
+      limitReached: creditCharge.status === 429,
+      remaining: creditCharge.remaining || 0
+    }
+  };
+}
+
+async function chargeIfNeeded(user, action, questionHash, shouldCharge, options = {}) {
+  if (!shouldCharge) return { ok: true, user };
+  const creditCharge = await chargeCreditOnce(user, action, questionHash, options);
+  if (creditCharge.error) {
+    return { ok: false, ...creditErrorResponse(creditCharge) };
+  }
+  return { ok: true, user: creditCharge.user || user, charged: creditCharge.charged };
 }
 
 function remainingFor(user) {
@@ -601,19 +738,17 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
     if (cached !== null) {
       const cachedDoc = await CachedAnswer.findOne({ questionHash });
       const answer = await normalizeCachedAnswer(cachedDoc, cached, 'text');
-      const studyNote = await saveStudyNote(user._id, cachedDoc, {
+      const chargeResult = await chargeIfNeeded(user, 'solve-snapshot', questionHash, chargeCredits, { updateStreak: true });
+      if (!chargeResult.ok) {
+        return res.status(chargeResult.status).json(chargeResult.body);
+      }
+      responseUser = chargeResult.user || responseUser;
+      const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, {
         ...req.body,
         url: req.body.sourceUrl,
         platform: req.body.platform || 'focusscan',
         questionImageBase64: imageData
       });
-      if (chargeCredits) {
-        const creditCharge = await chargeCreditOnce(user, 'solve-snapshot', questionHash, { updateStreak: true });
-        if (creditCharge.error) {
-          return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-        }
-        responseUser = creditCharge.user || responseUser;
-      }
       return res.json({
         success: true,
         answer,
@@ -630,20 +765,17 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       ...snapshotQuestionData,
       cacheQuestionText: solved.extractedQuestion
     }, solved.answer);
-    const studyNote = await saveStudyNote(user._id, cachedDoc, {
+    const chargeResult = await chargeIfNeeded(user, 'solve-snapshot', questionHash, chargeCredits, { updateStreak: true });
+    if (!chargeResult.ok) {
+      return res.status(chargeResult.status).json(chargeResult.body);
+    }
+    responseUser = chargeResult.user || responseUser;
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, {
       ...req.body,
       url: req.body.sourceUrl,
       platform: req.body.platform || 'focusscan',
       questionImageBase64: imageData
     });
-
-    if (chargeCredits) {
-      const creditCharge = await chargeCreditOnce(user, 'solve-snapshot', questionHash, { updateStreak: true });
-      if (creditCharge.error) {
-        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-      }
-      responseUser = creditCharge.user || responseUser;
-    }
 
     res.json({
       success: true,
@@ -667,10 +799,10 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     const user = req.user;
 
     const err = validateQuestionData(questionData);
-    if (err) return res.status(400).json({ error: err });
+    if (err) return sendQuestionPayloadError(res, err);
 
     const cleanupErr = normalizeQuestionPayload(questionData);
-    if (cleanupErr) return res.status(400).json({ error: cleanupErr });
+    if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 
     const questionHash = CachedAnswer.generateHash(questionData);
 
@@ -689,14 +821,12 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     if (cached !== null) {
       const cachedDoc = await CachedAnswer.findOne({ questionHash });
       const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
-      const studyNote = await saveStudyNote(user._id, cachedDoc, req.body);
-      if (chargeCredits) {
-        const creditCharge = await chargeCreditOnce(user, 'solve', questionHash, { updateStreak: true });
-        if (creditCharge.error) {
-          return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-        }
-        responseUser = creditCharge.user || responseUser;
+      const chargeResult = await chargeIfNeeded(user, 'solve', questionHash, chargeCredits, { updateStreak: true });
+      if (!chargeResult.ok) {
+        return res.status(chargeResult.status).json(chargeResult.body);
       }
+      responseUser = chargeResult.user || responseUser;
+      const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body);
       return res.json({
         success: true,
         answer,
@@ -709,14 +839,12 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
 
     const answer = await callAI(questionData);
     const cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
-    const studyNote = await saveStudyNote(user._id, cachedDoc, req.body);
-    if (chargeCredits) {
-      const creditCharge = await chargeCreditOnce(user, 'solve', questionHash, { updateStreak: true });
-      if (creditCharge.error) {
-        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-      }
-      responseUser = creditCharge.user || responseUser;
+    const chargeResult = await chargeIfNeeded(user, 'solve', questionHash, chargeCredits, { updateStreak: true });
+    if (!chargeResult.ok) {
+      return res.status(chargeResult.status).json(chargeResult.body);
     }
+    responseUser = chargeResult.user || responseUser;
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body);
 
     res.json({
       success: true,
@@ -730,7 +858,7 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
   } catch (error) {
     console.error('[Quiz] Solve error:', error.type || 'UNKNOWN', error.message);
     const status = statusForAIError(error);
-    res.status(status).json({ error: error.message || 'AI processing error.', type: error.type });
+    res.status(status).json(aiErrorResponse(error));
   }
 });
 
@@ -786,7 +914,7 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
 
     for (const { questionData, questionHash, chargeCredits, invalidError } of preparedQuestions) {
       if (invalidError) {
-        results.push({ success: false, error: invalidError });
+        results.push({ success: false, ...serializeQuestionPayloadError(invalidError) });
         continue;
       }
 
@@ -795,34 +923,30 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
         if (cached !== null) {
           const cachedDoc = await CachedAnswer.findOne({ questionHash });
           const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
-          const studyNote = await saveStudyNote(user._id, cachedDoc, { ...req.body, questionData });
-          if (chargeCredits) {
-            const creditCharge = await chargeCreditOnce(user, 'solve', questionHash);
-            if (creditCharge.error) {
-              results.push({ success: false, error: creditCharge.error, limitReached: creditCharge.status === 429 });
-              continue;
-            }
-            responseUser = creditCharge.user || responseUser;
+          const chargeResult = await chargeIfNeeded(user, 'solve', questionHash, chargeCredits);
+          if (!chargeResult.ok) {
+            results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
+            continue;
           }
+          responseUser = chargeResult.user || responseUser;
+          const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
           results.push({ success: true, answer, cached: true, noteId: studyNote?._id || null });
           continue;
         }
 
         const answer = await callAI(questionData);
         const cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
-        const studyNote = await saveStudyNote(user._id, cachedDoc, { ...req.body, questionData });
-        if (chargeCredits) {
-          const creditCharge = await chargeCreditOnce(user, 'solve', questionHash);
-          if (creditCharge.error) {
-            results.push({ success: false, error: creditCharge.error, limitReached: creditCharge.status === 429 });
-            continue;
-          }
-          responseUser = creditCharge.user || responseUser;
+        const chargeResult = await chargeIfNeeded(user, 'solve', questionHash, chargeCredits);
+        if (!chargeResult.ok) {
+          results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
+          continue;
         }
+        responseUser = chargeResult.user || responseUser;
+        const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
         results.push({ success: true, answer, cached: false, noteId: studyNote?._id || null });
 
       } catch (qErr) {
-        results.push({ success: false, error: qErr.message, type: qErr.type });
+        results.push({ success: false, ...aiErrorResponse(qErr) });
       }
     }
 
@@ -851,9 +975,10 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
     const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const user = req.user;
-    const questionData = { text, options, type, prompts, rows };
+    const manualSelection = req.body.manualSelection === true || req.body.platform === 'selected-text';
+    const questionData = { text, options, type, prompts, rows, manualSelection };
     const cleanupErr = normalizeQuestionPayload(questionData);
-    if (cleanupErr) return res.status(400).json({ error: cleanupErr });
+    if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 
     if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
@@ -882,15 +1007,12 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     );
     let cachedDoc = await CachedAnswer.findOne({ questionHash });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
-    const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation });
-
-    if (chargeCredits) {
-      const creditCharge = await chargeCreditOnce(user, 'explain', questionHash);
-      if (creditCharge.error) {
-        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-      }
-      responseUser = creditCharge.user || responseUser;
+    const chargeResult = await chargeIfNeeded(user, 'explain', questionHash, chargeCredits);
+    if (!chargeResult.ok) {
+      return res.status(chargeResult.status).json(chargeResult.body);
     }
+    responseUser = chargeResult.user || responseUser;
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, { explanation });
 
     res.json({
       success: true,
@@ -900,7 +1022,8 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
       noteId: studyNote?._id || null
     });
   } catch (error) {
-    res.status(500).json({ error: error.message || 'Explanation error.' });
+    const status = statusForAIError(error);
+    res.status(status).json(aiErrorResponse(error));
   }
 });
 
@@ -918,9 +1041,10 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     const prompt = sanitizeText(String(req.body.prompt || 'Explain more.')).substring(0, 500);
     const previousExplanation = sanitizeText(String(req.body.previousExplanation || '')).substring(0, 1200);
     const user = req.user;
-    const questionData = { text, options, type, prompts, rows };
+    const manualSelection = req.body.manualSelection === true || req.body.platform === 'selected-text';
+    const questionData = { text, options, type, prompts, rows, manualSelection };
     const cleanupErr = normalizeQuestionPayload(questionData);
-    if (cleanupErr) return res.status(400).json({ error: cleanupErr });
+    if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 
     if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
@@ -952,15 +1076,12 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
 
     let cachedDoc = await CachedAnswer.findOne({ questionHash });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
-    const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation: followUp });
-
-    if (chargeCredits) {
-      const creditCharge = await chargeCreditOnce(user, 'follow-up', questionHash);
-      if (creditCharge.error) {
-        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
-      }
-      responseUser = creditCharge.user || responseUser;
+    const chargeResult = await chargeIfNeeded(user, 'follow-up', questionHash, chargeCredits);
+    if (!chargeResult.ok) {
+      return res.status(chargeResult.status).json(chargeResult.body);
     }
+    responseUser = chargeResult.user || responseUser;
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, { explanation: followUp });
 
     res.json({
       success: true,
@@ -970,7 +1091,8 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
       noteId: studyNote?._id || null
     });
   } catch (error) {
-    res.status(500).json({ error: error.message || 'Follow-up error.' });
+    const status = statusForAIError(error);
+    res.status(status).json(aiErrorResponse(error));
   }
 });
 

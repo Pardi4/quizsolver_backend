@@ -121,16 +121,18 @@ async function findTargetUser(payload) {
   return email ? User.findOne({ email }) : null;
 }
 
-async function grantReferralBonus(targetUser, credits) {
+async function grantReferralBonus(targetUser, credits, sourceOrderId = '') {
   if (!targetUser.referredBy) return;
 
   const referrer = await User.findById(targetUser.referredBy);
   if (!referrer) return;
 
   const bonus = Math.max(1, Math.floor(credits * 0.05));
+  const referralSource = sourceOrderId ? String(sourceOrderId) : `user:${targetUser._id}`;
   await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
     priceUsd: 0,
     paymentProvider: 'referral',
+    externalOrderId: `referral:${referrer._id}:${referralSource}`,
     grantReason: `Referral bonus (5%) from ${targetUser.email}`
   });
   console.log(`[Webhook] Referral 5% bonus: +${bonus} credits to ${referrer.email}`);
@@ -169,6 +171,15 @@ router.post('/lemonsqueezy', async (req, res) => {
     if (externalOrderId) {
       const existingPurchase = await Purchase.findOne({ externalOrderId });
       if (existingPurchase) {
+        if (existingPurchase.creditsApplied === false) {
+          await Purchase.recordPurchase(existingPurchase.userId, existingPurchase.pack, existingPurchase.credits, {
+            priceUsd: existingPurchase.priceUsd,
+            paymentProvider: existingPurchase.paymentProvider,
+            externalOrderId
+          });
+          console.log(`[LemonSqueezy] Duplicate recovered unapplied credits: ${externalOrderId}`);
+          return res.status(200).json({ received: true, duplicate: true, recovered: true });
+        }
         console.log(`[LemonSqueezy] Duplicate ignored: ${externalOrderId}`);
         return res.status(200).json({ received: true, duplicate: true });
       }
@@ -186,13 +197,13 @@ router.post('/lemonsqueezy', async (req, res) => {
       return res.status(200).json({ received: true, ignored: true });
     }
 
-    await Purchase.recordPurchase(targetUser._id, packInfo.id, packInfo.credits, {
+    const purchase = await Purchase.recordPurchase(targetUser._id, packInfo.id, packInfo.credits, {
       priceUsd: orderTotalUsd(attributes, packInfo),
       paymentProvider: 'lemonsqueezy',
       externalOrderId
     });
 
-    await grantReferralBonus(targetUser, packInfo.credits);
+    await grantReferralBonus(targetUser, packInfo.credits, externalOrderId || purchase._id);
 
     console.log(`[LemonSqueezy] +${packInfo.credits} credits for ${targetUser.email}`);
     return res.status(200).json({ received: true });

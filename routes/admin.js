@@ -7,6 +7,7 @@ const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
 const SupportMessage = require('../models/SupportMessage');
 const StudyNote = require('../models/StudyNote');
+const CreditUsage = require('../models/CreditUsage');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
 
 const router = express.Router();
@@ -15,6 +16,7 @@ router.use(authMiddleware);
 router.use(adminOnly);
 
 const paidProviders = ['lemonsqueezy', 'whop'];
+const EXTENSION_ACTIVE_WINDOW_MS = 90 * 1000;
 
 function auditLog(adminUser, action, details = {}) {
   console.log(`[AUDIT] ${JSON.stringify({ ts: new Date().toISOString(), admin: adminUser.email, action, ...details })}`);
@@ -26,6 +28,9 @@ function escapeRegExp(value = '') {
 
 function serializeAdminUser(user) {
   if (!user) return null;
+  const extensionLastSeenAt = user.extensionLastSeenAt || null;
+  const extensionLastSeenMs = extensionLastSeenAt ? new Date(extensionLastSeenAt).getTime() : 0;
+  const isExtensionActive = !!extensionLastSeenMs && (Date.now() - extensionLastSeenMs) <= EXTENSION_ACTIVE_WINDOW_MS;
   return {
     id: user._id,
     email: user.email,
@@ -36,6 +41,11 @@ function serializeAdminUser(user) {
     streak: user.streak || {},
     isBanned: !!user.isBanned,
     excludeFromLeaderboard: !!user.excludeFromLeaderboard,
+    isExtensionActive,
+    extensionLastSeenAt,
+    extensionLastSeenReason: user.extensionLastSeenReason || '',
+    extensionLastSeenUrl: user.extensionLastSeenUrl || '',
+    extensionLastSeenPlatform: user.extensionLastSeenPlatform || '',
     createdAt: user.createdAt
   };
 }
@@ -137,15 +147,11 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned excludeFromLeaderboard streak');
+    const users = await User.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned excludeFromLeaderboard streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
-      users: users.map(u => ({
-        ...u.toPublicJSON(),
-        isBanned: u.isBanned,
-        excludeFromLeaderboard: u.excludeFromLeaderboard
-      })),
+      users: users.map(serializeAdminUser),
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
   } catch (error) {
@@ -287,11 +293,42 @@ router.get('/purchases', async (req, res) => {
       purchases: purchases.map(p => ({
         id: p._id, user: p.userId?.email, pack: p.pack, credits: p.credits,
         priceUsd: p.priceUsd, provider: p.paymentProvider, date: p.createdAt,
-        reason: p.grantReason
+        reason: p.grantReason,
+        creditsApplied: p.creditsApplied !== false,
+        creditsAppliedAt: p.creditsAppliedAt || null
       }))
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching purchases.' });
+  }
+});
+
+router.post('/purchases/:purchaseId/apply', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.purchaseId)) {
+      return res.status(400).json({ error: 'Invalid purchase id.' });
+    }
+
+    const purchase = await Purchase.findById(req.params.purchaseId);
+    if (!purchase) return res.status(404).json({ error: 'Purchase not found.' });
+
+    await Purchase.applyCredits(purchase);
+    auditLog(req.user, 'APPLY_PURCHASE_CREDITS', {
+      purchaseId: purchase._id.toString(),
+      userId: String(purchase.userId),
+      credits: purchase.credits
+    });
+
+    res.json({
+      success: true,
+      purchase: {
+        id: purchase._id,
+        creditsApplied: purchase.creditsApplied !== false,
+        creditsAppliedAt: purchase.creditsAppliedAt || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error applying purchase credits.' });
   }
 });
 
@@ -337,7 +374,7 @@ router.get('/support/messages', async (req, res) => {
     const emails = [...new Set(messages.map(m => String(m.fromEmail || '').toLowerCase()).filter(Boolean))];
     const linkedUsers = emails.length
       ? await User.find({ email: { $in: emails } })
-        .select('email displayName role credits stats streak isBanned excludeFromLeaderboard createdAt')
+        .select('email displayName role credits stats streak isBanned excludeFromLeaderboard extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform createdAt')
         .lean()
       : [];
     const usersByEmail = new Map(linkedUsers.map(user => [user.email, serializeAdminUser(user)]));
@@ -531,6 +568,96 @@ router.delete('/cache/:cacheId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Error deleting cache entry.' });
+  }
+});
+
+router.get('/billing/safety', async (req, res) => {
+  try {
+    const chargedMatch = {
+      $or: [
+        { charged: true },
+        { status: 'charged' },
+        { status: { $exists: false }, chargedAt: { $ne: null } }
+      ]
+    };
+    const staleDate = new Date(Date.now() - 15 * 60 * 1000);
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [
+      totalClaims,
+      chargedRecords,
+      waivedRecords,
+      staleClaims,
+      chargedLast24h,
+      duplicateCharges,
+      recentCharges
+    ] = await Promise.all([
+      CreditUsage.countDocuments(),
+      CreditUsage.countDocuments(chargedMatch),
+      CreditUsage.countDocuments({ status: 'waived' }),
+      CreditUsage.countDocuments({ status: 'claimed', createdAt: { $lt: staleDate } }),
+      CreditUsage.countDocuments({ ...chargedMatch, chargedAt: { $gte: dayAgo } }),
+      CreditUsage.aggregate([
+        { $match: chargedMatch },
+        {
+          $group: {
+            _id: { user: '$user', questionHash: '$questionHash' },
+            count: { $sum: 1 },
+            credits: { $sum: '$credits' },
+            actions: { $addToSet: '$action' },
+            firstChargedAt: { $min: '$chargedAt' },
+            lastChargedAt: { $max: '$chargedAt' }
+          }
+        },
+        { $match: { count: { $gt: 1 } } },
+        { $sort: { lastChargedAt: -1 } },
+        { $limit: 25 },
+        { $lookup: { from: 'users', localField: '_id.user', foreignField: '_id', as: 'user' } },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 0,
+            userId: '$_id.user',
+            email: '$user.email',
+            questionHash: '$_id.questionHash',
+            count: 1,
+            credits: 1,
+            actions: 1,
+            firstChargedAt: 1,
+            lastChargedAt: 1
+          }
+        }
+      ]),
+      CreditUsage.find(chargedMatch)
+        .sort({ chargedAt: -1, updatedAt: -1 })
+        .limit(10)
+        .populate('user', 'email')
+        .lean()
+    ]);
+
+    res.json({
+      success: true,
+      billing: {
+        totalClaims,
+        chargedRecords,
+        waivedRecords,
+        staleClaims,
+        chargedLast24h,
+        duplicateGroups: duplicateCharges,
+        recentCharges: recentCharges.map(item => ({
+          id: item._id,
+          email: item.user?.email || 'Unknown user',
+          userId: item.user?._id || item.user,
+          action: item.action,
+          questionHash: item.questionHash,
+          credits: item.credits,
+          chargedAt: item.chargedAt,
+          status: item.status || (item.chargedAt ? 'charged' : 'claimed')
+        }))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching billing safety.' });
   }
 });
 

@@ -29,15 +29,31 @@ const creditUsageSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
-  dedupeExpiresAt: {
+  status: {
+    type: String,
+    enum: ['claimed', 'charged', 'waived'],
+    default: 'claimed',
+    index: true
+  },
+  charged: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  waivedReason: {
+    type: String,
+    default: '',
+    maxlength: 120
+  },
+  claimedAt: {
     type: Date,
-    required: true
+    default: Date.now
   },
   chargedAt: {
     type: Date,
-    default: Date.now
+    default: null
   }
-}, { timestamps: true });
+}, { timestamps: true, autoIndex: false });
 
 creditUsageSchema.index({ user: 1, action: 1, questionHash: 1 });
 
