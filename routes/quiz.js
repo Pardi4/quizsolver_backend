@@ -6,6 +6,7 @@ const { quizLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/User');
 const CachedAnswer = require('../models/CachedAnswer');
 const StudyNote = require('../models/StudyNote');
+const CreditUsage = require('../models/CreditUsage');
 const QuizSession = require('../models/QuizSession');
 const SharedQuiz = require('../models/SharedQuiz');
 const { cleanQuizText } = require('../utils/textSanitizer');
@@ -13,6 +14,8 @@ const { cleanQuizText } = require('../utils/textSanitizer');
 const router = express.Router();
 
 router.use(authMiddleware);
+
+const CREDIT_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
 
 const {
   AIError,
@@ -295,6 +298,147 @@ async function saveStudyNote(userId, cachedAnswer, body, updates = {}) {
   });
 }
 
+function creditDedupeKey(userId, action, questionHash) {
+  return `${userId}:${action}:${questionHash}`;
+}
+
+async function hasRecentCreditUsage(userId, action, questionHash) {
+  if (!userId || !questionHash) return false;
+  const now = new Date();
+  const usage = await CreditUsage.exists({
+    dedupeKey: creditDedupeKey(userId, action, questionHash),
+    dedupeExpiresAt: { $gt: now }
+  });
+  return !!usage;
+}
+
+async function shouldChargeForQuestion(userId, action, questionHash, activityField = 'lastSeenAt') {
+  if (!userId || !questionHash) return true;
+  const since = new Date(Date.now() - CREDIT_DEDUPE_WINDOW_MS);
+  const checks = [hasRecentCreditUsage(userId, action, questionHash)];
+
+  if (activityField) {
+    checks.push(StudyNote.exists({
+      user: userId,
+      questionHash,
+      [activityField]: { $gte: since }
+    }));
+  }
+
+  const [recentUsage, recentActivity] = await Promise.all(checks);
+  return !(recentUsage || recentActivity);
+}
+
+async function userCanSpend(user, count = 1) {
+  if (!count || count <= 0) return { allowed: true, user };
+  if (user.role === 'admin') return { allowed: true, user };
+
+  const freshUser = await User.findById(user._id);
+  if (!freshUser) return { allowed: false, user: null };
+  const reset = freshUser.resetFreeCreditsIfNeeded();
+  if (reset) await freshUser.save();
+
+  return {
+    allowed: freshUser.credits >= count,
+    user: freshUser
+  };
+}
+
+async function claimCreditUsage(userId, action, questionHash, count = 1) {
+  const now = new Date();
+  const dedupeExpiresAt = new Date(now.getTime() + CREDIT_DEDUPE_WINDOW_MS);
+  const dedupeKey = creditDedupeKey(userId, action, questionHash);
+
+  try {
+    const usage = await CreditUsage.create({
+      user: userId,
+      action,
+      questionHash,
+      dedupeKey,
+      credits: count,
+      dedupeExpiresAt,
+      chargedAt: now
+    });
+    return { shouldCharge: true, usage };
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+  }
+
+  const usage = await CreditUsage.findOneAndUpdate(
+    { dedupeKey, dedupeExpiresAt: { $lte: now } },
+    {
+      $set: {
+        user: userId,
+        action,
+        questionHash,
+        credits: count,
+        dedupeExpiresAt,
+        chargedAt: now
+      }
+    },
+    { new: true }
+  );
+
+  if (usage) return { shouldCharge: true, usage };
+  return { shouldCharge: false, duplicate: true };
+}
+
+async function chargeCreditOnce(user, action, questionHash, options = {}) {
+  const count = Math.max(parseInt(options.count, 10) || 1, 1);
+  const claim = await claimCreditUsage(user._id, action, questionHash, count);
+
+  if (!claim.shouldCharge) {
+    const freshUser = await User.findById(user._id);
+    return { charged: false, duplicate: true, user: freshUser || user };
+  }
+
+  if (user.role === 'admin') {
+    const adminUser = await User.findById(user._id);
+    if (adminUser) {
+      adminUser.stats.totalQuestionsSolved += count;
+      if (options.updateStreak) adminUser.updateStreak();
+      await adminUser.save();
+      return { charged: false, user: adminUser };
+    }
+    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    return { error: 'User not found.', status: 404 };
+  }
+
+  const spendCheck = await userCanSpend(user, count);
+  if (!spendCheck.allowed) {
+    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    return { error: 'No credits remaining.', status: 429, remaining: spendCheck.user?.getRemaining?.() || 0 };
+  }
+
+  const chargedUser = await User.findOneAndUpdate(
+    { _id: user._id, role: { $ne: 'admin' }, credits: { $gte: count } },
+    {
+      $inc: {
+        credits: -count,
+        'stats.totalQuestionsSolved': count,
+        'stats.totalCreditsSpent': count
+      }
+    },
+    { new: true }
+  );
+
+  if (!chargedUser) {
+    await CreditUsage.deleteOne({ _id: claim.usage._id });
+    return { error: 'No credits remaining.', status: 429, remaining: 0 };
+  }
+
+  if (options.updateStreak) {
+    chargedUser.updateStreak();
+    await chargedUser.save();
+  }
+
+  return { charged: true, user: chargedUser };
+}
+
+function remainingFor(user) {
+  return user?.getRemaining ? user.getRemaining() : 0;
+}
+
 
 
 async function normalizeCachedAnswer(cachedDoc, answer, type) {
@@ -441,9 +585,6 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
     if (imageData.length > MAX_IMAGE_DATA_URL_LENGTH) {
       return res.status(400).json({ error: 'FocusScan image too large.' });
     }
-    if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
-    }
 
     const imageFingerprint = CachedAnswer.generateImageFingerprint({ imageUrl: imageData });
     const snapshotQuestionData = {
@@ -452,10 +593,22 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       type: 'text',
       imageFingerprint
     };
+    const questionHash = CachedAnswer.generateHash(snapshotQuestionData);
+
+    const chargeCredits = await shouldChargeForQuestion(user._id, 'solve-snapshot', questionHash);
+
+    let responseUser = user;
+    if (chargeCredits) {
+      const spendCheck = await userCanSpend(user, 1);
+      if (!spendCheck.allowed) {
+        return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: spendCheck.user?.getRemaining?.() || 0 });
+      }
+      responseUser = spendCheck.user || user;
+    }
 
     const cached = await CachedAnswer.findCached(snapshotQuestionData);
     if (cached !== null) {
-      const cachedDoc = await CachedAnswer.findOne({ questionHash: CachedAnswer.generateHash(snapshotQuestionData) });
+      const cachedDoc = await CachedAnswer.findOne({ questionHash });
       const answer = await normalizeCachedAnswer(cachedDoc, cached, 'text');
       const studyNote = await saveStudyNote(user._id, cachedDoc, {
         ...req.body,
@@ -463,15 +616,19 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
         platform: req.body.platform || 'focusscan',
         questionImageBase64: imageData
       });
-      user.useCredits(1);
-      user.updateStreak();
-      await user.save();
+      if (chargeCredits) {
+        const creditCharge = await chargeCreditOnce(user, 'solve-snapshot', questionHash, { updateStreak: true });
+        if (creditCharge.error) {
+          return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+        }
+        responseUser = creditCharge.user || responseUser;
+      }
       return res.json({
         success: true,
         answer,
         extractedQuestion: cachedDoc?.questionText || 'FocusScan image question',
         cached: true,
-        remaining: user.getRemaining(),
+        remaining: remainingFor(responseUser),
         studyNoteSaved: !!studyNote,
         noteId: studyNote?._id || null
       });
@@ -489,16 +646,20 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       questionImageBase64: imageData
     });
 
-    user.useCredits(1);
-    user.updateStreak();
-    await user.save();
+    if (chargeCredits) {
+      const creditCharge = await chargeCreditOnce(user, 'solve-snapshot', questionHash, { updateStreak: true });
+      if (creditCharge.error) {
+        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+      }
+      responseUser = creditCharge.user || responseUser;
+    }
 
     res.json({
       success: true,
       answer: solved.answer,
       extractedQuestion: solved.extractedQuestion,
       cached: false,
-      remaining: user.getRemaining(),
+      remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
     });
@@ -520,24 +681,36 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     const cleanupErr = normalizeQuestionPayload(questionData);
     if (cleanupErr) return res.status(400).json({ error: cleanupErr });
 
-    if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
+    const questionHash = CachedAnswer.generateHash(questionData);
+
+    const chargeCredits = await shouldChargeForQuestion(user._id, 'solve', questionHash);
+
+    let responseUser = user;
+    if (chargeCredits) {
+      const spendCheck = await userCanSpend(user, 1);
+      if (!spendCheck.allowed) {
+        return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: spendCheck.user?.getRemaining?.() || 0 });
+      }
+      responseUser = spendCheck.user || user;
     }
 
-    const questionHash = CachedAnswer.generateHash(questionData);
     const cached = await CachedAnswer.findCached(questionData);
     if (cached !== null) {
       const cachedDoc = await CachedAnswer.findOne({ questionHash });
       const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
       const studyNote = await saveStudyNote(user._id, cachedDoc, req.body);
-      user.useCredits(1);
-      user.updateStreak();
-      await user.save();
+      if (chargeCredits) {
+        const creditCharge = await chargeCreditOnce(user, 'solve', questionHash, { updateStreak: true });
+        if (creditCharge.error) {
+          return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+        }
+        responseUser = creditCharge.user || responseUser;
+      }
       return res.json({
         success: true,
         answer,
         cached: true,
-        remaining: user.getRemaining(),
+        remaining: remainingFor(responseUser),
         studyNoteSaved: !!studyNote,
         noteId: studyNote?._id || null
       });
@@ -546,15 +719,19 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     const answer = await callAI(questionData);
     const cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body);
-    user.useCredits(1);
-    user.updateStreak();
-    await user.save();
+    if (chargeCredits) {
+      const creditCharge = await chargeCreditOnce(user, 'solve', questionHash, { updateStreak: true });
+      if (creditCharge.error) {
+        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+      }
+      responseUser = creditCharge.user || responseUser;
+    }
 
     res.json({
       success: true,
       answer,
       cached: false,
-      remaining: user.getRemaining(),
+      remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
     });
@@ -576,32 +753,66 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     if (questions.length > 50)
       return res.status(400).json({ error: 'Max 50 questions per batch.' });
 
-    const remaining = user.getRemaining();
-    if (user.role !== 'admin' && remaining < questions.length) {
+    const chargeHashesInRequest = new Set();
+    const preparedQuestions = [];
+
+    for (const rawQuestionData of questions) {
+      const questionData = { ...(rawQuestionData || {}) };
+      const validErr = validateQuestionData(questionData);
+      if (validErr) {
+        preparedQuestions.push({ invalidError: validErr });
+        continue;
+      }
+
+      const cleanupErr = normalizeQuestionPayload(questionData);
+      if (cleanupErr) {
+        preparedQuestions.push({ invalidError: cleanupErr });
+        continue;
+      }
+
+      const questionHash = CachedAnswer.generateHash(questionData);
+      const chargeCredits = !chargeHashesInRequest.has(questionHash)
+        && await shouldChargeForQuestion(user._id, 'solve', questionHash);
+
+      if (chargeCredits) chargeHashesInRequest.add(questionHash);
+      preparedQuestions.push({ questionData, questionHash, chargeCredits });
+    }
+
+    const creditsNeeded = preparedQuestions.filter(q => q.chargeCredits).length;
+    let responseUser = user;
+    const spendCheck = await userCanSpend(user, creditsNeeded);
+    if (!spendCheck.allowed) {
+      const remaining = spendCheck.user?.getRemaining?.() || 0;
       return res.status(429).json({
-        error: `${remaining} credits left, need ${questions.length}.`,
+        error: `${remaining} credits left, need ${creditsNeeded}.`,
         limitReached: true,
         remaining,
       });
     }
+    responseUser = spendCheck.user || user;
 
     const results = [];
 
-    for (const questionData of questions) {
-      const validErr = validateQuestionData(questionData);
-      if (validErr) { results.push({ success: false, error: validErr }); continue; }
-
-      const cleanupErr = normalizeQuestionPayload(questionData);
-      if (cleanupErr) { results.push({ success: false, error: cleanupErr }); continue; }
+    for (const { questionData, questionHash, chargeCredits, invalidError } of preparedQuestions) {
+      if (invalidError) {
+        results.push({ success: false, error: invalidError });
+        continue;
+      }
 
       try {
-        const questionHash = CachedAnswer.generateHash(questionData);
         const cached = await CachedAnswer.findCached(questionData);
         if (cached !== null) {
           const cachedDoc = await CachedAnswer.findOne({ questionHash });
           const answer = await normalizeCachedAnswer(cachedDoc, cached, questionData.type);
           const studyNote = await saveStudyNote(user._id, cachedDoc, { ...req.body, questionData });
-          user.useCredits(1);
+          if (chargeCredits) {
+            const creditCharge = await chargeCreditOnce(user, 'solve', questionHash);
+            if (creditCharge.error) {
+              results.push({ success: false, error: creditCharge.error, limitReached: creditCharge.status === 429 });
+              continue;
+            }
+            responseUser = creditCharge.user || responseUser;
+          }
           results.push({ success: true, answer, cached: true, noteId: studyNote?._id || null });
           continue;
         }
@@ -609,7 +820,14 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
         const answer = await callAI(questionData);
         const cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
         const studyNote = await saveStudyNote(user._id, cachedDoc, { ...req.body, questionData });
-        user.useCredits(1);
+        if (chargeCredits) {
+          const creditCharge = await chargeCreditOnce(user, 'solve', questionHash);
+          if (creditCharge.error) {
+            results.push({ success: false, error: creditCharge.error, limitReached: creditCharge.status === 429 });
+            continue;
+          }
+          responseUser = creditCharge.user || responseUser;
+        }
         results.push({ success: true, answer, cached: false, noteId: studyNote?._id || null });
 
       } catch (qErr) {
@@ -617,11 +835,15 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
       }
     }
 
-    user.stats.totalQuizzesSolved += 1;
-    user.updateStreak();
-    await user.save();
+    const finalUser = await User.findById(user._id);
+    if (finalUser) {
+      finalUser.stats.totalQuizzesSolved += 1;
+      finalUser.updateStreak();
+      await finalUser.save();
+      responseUser = finalUser;
+    }
 
-    res.json({ success: true, results, remaining: user.getRemaining() });
+    res.json({ success: true, results, remaining: remainingFor(responseUser) });
 
   } catch (error) {
     console.error('[Quiz] Batch error:', error.message);
@@ -643,23 +865,37 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
 
-    if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
+    const questionData = { text, options, type, prompts, rows };
+    const questionHash = CachedAnswer.generateHash(questionData);
+
+    const chargeCredits = await shouldChargeForQuestion(user._id, 'explain', questionHash, 'lastExplainedAt');
+
+    let responseUser = user;
+    if (chargeCredits) {
+      const spendCheck = await userCanSpend(user, 1);
+      if (!spendCheck.allowed) {
+        return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: spendCheck.user?.getRemaining?.() || 0 });
+      }
+      responseUser = spendCheck.user || user;
     }
 
     const explanation = await callExplanationAI(text, options, answer, type, req.body.explanationLanguage || 'auto', { prompts, rows });
-    const questionData = { text, options, type, prompts, rows };
-    let cachedDoc = await CachedAnswer.findOne({ questionHash: CachedAnswer.generateHash(questionData) });
+    let cachedDoc = await CachedAnswer.findOne({ questionHash });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation });
 
-    user.useCredits(1);
-    await user.save();
+    if (chargeCredits) {
+      const creditCharge = await chargeCreditOnce(user, 'explain', questionHash);
+      if (creditCharge.error) {
+        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+      }
+      responseUser = creditCharge.user || responseUser;
+    }
 
     res.json({
       success: true,
       explanation,
-      remaining: user.getRemaining(),
+      remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
     });
@@ -687,8 +923,24 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
 
-    if (!user.canUse(1)) {
-      return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: 0 });
+    const questionData = { text, options, type, prompts, rows };
+    const questionHash = CachedAnswer.generateHash(questionData);
+    const followUpHash = CachedAnswer.generateHash({
+      text: `${text}\nFollow-up:${prompt}\n${previousExplanation}`,
+      options,
+      type,
+      prompts,
+      rows
+    });
+    const chargeCredits = await shouldChargeForQuestion(user._id, 'follow-up', followUpHash, null);
+
+    let responseUser = user;
+    if (chargeCredits) {
+      const spendCheck = await userCanSpend(user, 1);
+      if (!spendCheck.allowed) {
+        return res.status(429).json({ error: 'No credits remaining.', limitReached: true, remaining: spendCheck.user?.getRemaining?.() || 0 });
+      }
+      responseUser = spendCheck.user || user;
     }
 
     const followUp = await callFollowUpAI({
@@ -703,18 +955,22 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
       rows
     });
 
-    const questionData = { text, options, type, prompts, rows };
-    let cachedDoc = await CachedAnswer.findOne({ questionHash: CachedAnswer.generateHash(questionData) });
+    let cachedDoc = await CachedAnswer.findOne({ questionHash });
     if (!cachedDoc) cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
     const studyNote = await saveStudyNote(user._id, cachedDoc, req.body, { explanation: followUp });
 
-    user.useCredits(1);
-    await user.save();
+    if (chargeCredits) {
+      const creditCharge = await chargeCreditOnce(user, 'follow-up', followUpHash);
+      if (creditCharge.error) {
+        return res.status(creditCharge.status || 500).json({ error: creditCharge.error, limitReached: creditCharge.status === 429, remaining: creditCharge.remaining || 0 });
+      }
+      responseUser = creditCharge.user || responseUser;
+    }
 
     res.json({
       success: true,
       followUp,
-      remaining: user.getRemaining(),
+      remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
     });

@@ -1,10 +1,12 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const User = require('../models/User');
 const CachedAnswer = require('../models/CachedAnswer');
 const Purchase = require('../models/Purchase');
 const BugReport = require('../models/BugReport');
 const SupportMessage = require('../models/SupportMessage');
+const StudyNote = require('../models/StudyNote');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
 
 const router = express.Router();
@@ -22,6 +24,61 @@ function escapeRegExp(value = '') {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function serializeAdminUser(user) {
+  if (!user) return null;
+  return {
+    id: user._id,
+    email: user.email,
+    displayName: user.displayName || '',
+    role: user.role,
+    credits: user.role === 'admin' ? 'unlimited' : user.credits,
+    stats: user.stats || {},
+    streak: user.streak || {},
+    isBanned: !!user.isBanned,
+    excludeFromLeaderboard: !!user.excludeFromLeaderboard,
+    createdAt: user.createdAt
+  };
+}
+
+function answerToText(type, options = [], answer, meta = {}) {
+  if (type === 'radio' && Array.isArray(options)) return options[answer] || String(answer);
+  if (type === 'checkbox' && Array.isArray(options) && Array.isArray(answer)) {
+    return answer.map(i => options[i] || String(i)).join(', ');
+  }
+  if ((type === 'matching' || type === 'matrix') && Array.isArray(options) && Array.isArray(answer)) {
+    const labels = type === 'matching' ? (meta.prompts || []) : (meta.rows || []);
+    return answer.map((idx, i) => {
+      const label = labels[i] ? `${labels[i]} -> ` : '';
+      return `${label}${options[idx] || String(idx)}`;
+    }).join('; ');
+  }
+  return String(answer ?? '');
+}
+
+function serializeAdminQuestion(note) {
+  const options = note.options || [];
+  return {
+    id: note._id,
+    cachedAnswerId: note.cachedAnswer?._id || note.cachedAnswer || null,
+    questionHash: note.questionHash,
+    questionText: note.questionText,
+    questionType: note.questionType,
+    options,
+    prompts: note.prompts || [],
+    rows: note.rows || [],
+    answer: note.answer,
+    answerText: answerToText(note.questionType, options, note.answer, { prompts: note.prompts || [], rows: note.rows || [] }),
+    explanation: note.explanation || '',
+    sourceUrl: note.sourceUrl || '',
+    platform: note.platform || '',
+    seenCount: note.seenCount || 0,
+    explainCount: note.explainCount || 0,
+    lastSeenAt: note.lastSeenAt,
+    lastExplainedAt: note.lastExplainedAt,
+    createdAt: note.createdAt
+  };
+}
+
 router.get('/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
@@ -30,6 +87,7 @@ router.get('/stats', async (req, res) => {
     const totalPurchases = await Purchase.countDocuments();
     const totalBugReports = await BugReport.countDocuments();
     const openSupportMessages = await SupportMessage.countDocuments({ status: { $ne: 'closed' } });
+    const unreadSupportMessages = await SupportMessage.countDocuments({ isRead: false });
 
     const totalQuestionsAgg = await User.aggregate([{ $group: { _id: null, total: { $sum: '$stats.totalQuestionsSolved' } } }]);
     const totalQuestions = totalQuestionsAgg[0]?.total || 0;
@@ -61,7 +119,7 @@ router.get('/stats', async (req, res) => {
         totalUsers, adminUsers, cachedAnswers, totalPurchases,
         totalBugReports, totalQuestions, totalCreditsInSystem,
         totalRevenue, todayPurchases, monthRevenue, bannedUsers,
-        openSupportMessages
+        openSupportMessages, unreadSupportMessages
       },
       recentUsers: recentUsers.map(u => u.toPublicJSON())
     });
@@ -92,6 +150,34 @@ router.get('/users', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching users.' });
+  }
+});
+
+router.get('/users/:userId/questions', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user id.' });
+    }
+
+    const notes = await StudyNote.find({ user: userId })
+      .sort({ lastSeenAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('cachedAnswer')
+      .lean();
+
+    const total = await StudyNote.countDocuments({ user: userId });
+
+    res.json({
+      success: true,
+      questions: notes.map(serializeAdminQuestion),
+      pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching user questions.' });
   }
 });
 
@@ -248,6 +334,13 @@ router.get('/support/messages', async (req, res) => {
       .limit(150)
       .populate('replies.adminUser', 'email displayName')
       .lean();
+    const emails = [...new Set(messages.map(m => String(m.fromEmail || '').toLowerCase()).filter(Boolean))];
+    const linkedUsers = emails.length
+      ? await User.find({ email: { $in: emails } })
+        .select('email displayName role credits stats streak isBanned excludeFromLeaderboard createdAt')
+        .lean()
+      : [];
+    const usersByEmail = new Map(linkedUsers.map(user => [user.email, serializeAdminUser(user)]));
     res.json({
       success: true,
       messages: messages.map(m => ({
@@ -264,6 +357,7 @@ router.get('/support/messages', async (req, res) => {
         isRead: m.isRead,
         receivedAt: m.receivedAt,
         repliedAt: m.repliedAt,
+        linkedUser: usersByEmail.get(String(m.fromEmail || '').toLowerCase()) || null,
         replies: (m.replies || []).map(r => ({
           id: r._id,
           admin: r.adminUser?.displayName || r.adminUser?.email || r.fromEmail || 'Customer',
@@ -347,6 +441,20 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
   }
 });
 
+router.delete('/support/messages/:messageId', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.messageId)) {
+      return res.status(400).json({ error: 'Invalid support message id.' });
+    }
+    const message = await SupportMessage.findByIdAndDelete(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Support message not found.' });
+    auditLog(req.user, 'SUPPORT_DELETE', { messageId: message._id.toString(), from: message.fromEmail });
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Error deleting support message.' });
+  }
+});
+
 router.delete('/users/:userId', async (req, res) => {
   try {
     if (req.params.userId === req.user._id.toString()) return res.status(400).json({ error: 'Cannot delete yourself.' });
@@ -363,7 +471,7 @@ router.delete('/users/:userId', async (req, res) => {
 router.get('/cache/stats', async (req, res) => {
   try {
     const totalCached = await CachedAnswer.countDocuments();
-    const topHits = await CachedAnswer.find().sort({ hitCount: -1 }).limit(10).select('questionText questionType hitCount createdAt lastUsedAt');
+    const topHits = await CachedAnswer.find().sort({ hitCount: -1 }).limit(10).select('questionText questionType hitCount options prompts rows answer createdAt lastUsedAt');
     res.json({ success: true, totalCached, topHits });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching cache stats.' });
