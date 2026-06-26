@@ -117,13 +117,30 @@ function resetPasswordTemplate({ code }) {
 }
 
 function supportReplyTemplate({ message, replyText }) {
+  const safeReplyHtml = escapeHtml(replyText).replace(/\n/g, '<br>');
+  const originalSubject = message.subject || '(No subject)';
+  const originalPreview = String(message.text || '').trim().substring(0, 900);
+  const safeOriginalPreview = originalPreview
+    ? escapeHtml(originalPreview).replace(/\n/g, '<br>')
+    : 'No original message body was captured.';
   const body = `
     <p style="margin:0 0 18px;">Thanks for contacting QuizSolver support. Here is our reply:</p>
-    <div style="white-space:pre-wrap;margin:0 0 20px;padding:18px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#e2e8f0;">${escapeHtml(replyText)}</div>
-    <p style="margin:0;color:#94a3b8;">Original subject: <strong style="color:#cbd5e1;">${escapeHtml(message.subject || '(No subject)')}</strong></p>`;
+    <div style="margin:0 0 22px;padding:20px;border-radius:14px;background:#101827;border:1px solid rgba(6,182,212,.26);color:#f8fafc;font-size:16px;line-height:1.75;">${safeReplyHtml}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 20px;border-collapse:separate;border-spacing:0;background:rgba(255,255,255,.035);border:1px solid rgba(148,163,184,.18);border-radius:14px;overflow:hidden;">
+      <tr>
+        <td style="padding:14px 16px;border-bottom:1px solid rgba(148,163,184,.16);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;font-weight:800;">Original request</td>
+      </tr>
+      <tr>
+        <td style="padding:16px;color:#cbd5e1;font-size:14px;line-height:1.65;">
+          <div style="margin-bottom:10px;"><strong style="color:#f8fafc;">Subject:</strong> ${escapeHtml(originalSubject)}</div>
+          <div>${safeOriginalPreview}</div>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#94a3b8;">Need anything else? Reply directly to this email and the thread will continue with QuizSolver support.</p>`;
   return {
     subject: `Re: ${message.subject || 'QuizSolver support'}`.substring(0, 240),
-    text: `${replyText}\n\nOriginal subject: ${message.subject || '(No subject)'}`,
+    text: `QuizSolver support reply:\n\n${replyText}\n\n---\nOriginal subject: ${originalSubject}\nOriginal message:\n${originalPreview || '(No original message body captured.)'}`,
     html: baseEmail({
       title: 'Support reply',
       preheader: 'QuizSolver support has replied',

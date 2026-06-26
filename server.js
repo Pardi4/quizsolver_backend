@@ -170,6 +170,11 @@ function isAdminPanelPath(routePath = '') {
   return normalizeRequestPath(routePath) === ADMIN_PANEL_URL;
 }
 
+function routeMatchesPage(routePath = '', pageKey = '') {
+  const routes = PAGE_ROUTES[pageKey] ? Object.values(PAGE_ROUTES[pageKey]) : [];
+  return routes.includes(normalizeRequestPath(routePath));
+}
+
 function redirectAdminPanelTrailingSlash(req, res, next) {
   if (req.path !== `${ADMIN_PANEL_URL}/`) return next();
   const queryIndex = req.originalUrl.indexOf('?');
@@ -349,8 +354,9 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
   }
 
   const privateRoute = isAdminPanelPath(routePath) || isLegacyAdminPath(routePath);
-  const noStore = privateRoute || /(?:dashboard|success|404|quiz|credits)/.test(routePath);
-  const noindex = privateRoute || /(?:dashboard|success|404)/.test(routePath);
+  const privatePage = ['dashboard', 'success', 'notFound'].some(pageKey => routeMatchesPage(routePath, pageKey));
+  const noStore = privateRoute || privatePage;
+  const noindex = privateRoute || privatePage;
 
   res.status(statusCode);
   if (noindex) res.set('X-Robots-Tag', 'noindex, nofollow');
@@ -408,7 +414,12 @@ function categoryLocales(posts, category) {
 function robotsTxt() {
   const privateRoutes = [
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.dashboard[locale.code]),
-    ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.success[locale.code])
+    ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.success[locale.code]),
+    ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.notFound[locale.code]),
+    ...LEGACY_ADMIN_PATHS,
+    '/api',
+    '/api/',
+    '/extension-auth/'
   ];
   return [
     'User-agent: *',

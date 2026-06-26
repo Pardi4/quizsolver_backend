@@ -18,6 +18,10 @@ function auditLog(adminUser, action, details = {}) {
   console.log(`[AUDIT] ${JSON.stringify({ ts: new Date().toISOString(), admin: adminUser.email, action, ...details })}`);
 }
 
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 router.get('/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
@@ -223,7 +227,22 @@ router.get('/bug-reports', async (req, res) => {
 router.get('/support/messages', async (req, res) => {
   try {
     const status = String(req.query.status || '').substring(0, 20);
-    const query = status && ['open', 'pending', 'closed'].includes(status) ? { status } : {};
+    const search = String(req.query.q || '').trim().substring(0, 120);
+    const filters = [];
+    if (status && ['open', 'pending', 'closed'].includes(status)) filters.push({ status });
+    if (search) {
+      const pattern = new RegExp(escapeRegExp(search), 'i');
+      filters.push({
+        $or: [
+          { fromEmail: pattern },
+          { fromName: pattern },
+          { subject: pattern },
+          { text: pattern },
+          { source: pattern }
+        ]
+      });
+    }
+    const query = filters.length ? { $and: filters } : {};
     const messages = await SupportMessage.find(query)
       .sort({ updatedAt: -1 })
       .limit(150)
