@@ -67,49 +67,7 @@ function adminOnly(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required.' });
   }
-
-  if (process.env.ADMIN_IP_WHITELIST) {
-    const allowedIPs = process.env.ADMIN_IP_WHITELIST
-      .split(',')
-      .map(normalizeIp)
-      .filter(Boolean);
-    const clientIPs = getRequestIpCandidates(req);
-
-    if (!allowedIPs.some(ip => clientIPs.includes(ip))) {
-      return res.status(403).json({
-        error: 'Access denied from this location.',
-        clientIp: clientIPs[0] || 'unknown'
-      });
-    }
-  }
-
   next();
-}
-
-function normalizeIp(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^::ffff:/, '')
-    .replace(/^\[|\]$/g, '');
-}
-
-function getRequestIpCandidates(req) {
-  const values = [
-    req.headers['cf-connecting-ip'],
-    req.headers['x-real-ip'],
-    req.ip,
-    req.connection?.remoteAddress,
-    req.socket?.remoteAddress
-  ];
-
-  const forwardedFor = String(req.headers['x-forwarded-for'] || '')
-    .split(',')
-    .map(normalizeIp)
-    .filter(Boolean);
-
-  return [...forwardedFor, ...values.map(normalizeIp)]
-    .filter(Boolean)
-    .filter((ip, index, all) => all.indexOf(ip) === index);
 }
 
 function generateToken(userId, rememberMe = true) {

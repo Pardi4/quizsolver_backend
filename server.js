@@ -170,6 +170,13 @@ function isAdminPanelPath(routePath = '') {
   return normalizeRequestPath(routePath) === ADMIN_PANEL_URL;
 }
 
+function redirectAdminPanelTrailingSlash(req, res, next) {
+  if (req.path !== `${ADMIN_PANEL_URL}/`) return next();
+  const queryIndex = req.originalUrl.indexOf('?');
+  const query = queryIndex === -1 ? '' : req.originalUrl.slice(queryIndex);
+  return res.redirect(301, `${ADMIN_PANEL_URL}${query}`);
+}
+
 function cleanPublicPageUrl(req) {
   if (req.path.startsWith('/api/') || req.path === '/api') return req.originalUrl;
   if (req.path === '/extension-auth/callback') return req.originalUrl;
@@ -599,7 +606,7 @@ app.get(LEGACY_ADMIN_PATHS, (req, res) => {
   const locale = localeFromPath(req.path);
   sendAngularPage(req, res, PAGE_ROUTES.notFound[locale] || PAGE_ROUTES.notFound.en, 404);
 });
-app.get(`${ADMIN_PANEL_URL}/`, (req, res) => res.redirect(301, ADMIN_PANEL_URL));
+app.use(redirectAdminPanelTrailingSlash);
 app.get(ADMIN_PANEL_URL, (req, res) => {
   sendAngularPage(req, res, ADMIN_PANEL_URL);
 });
@@ -711,7 +718,7 @@ function createAdminServer() {
   adminApp.get(LEGACY_ADMIN_PATHS, (req, res) => {
     sendAngularPage(req, res, PAGE_ROUTES.notFound.en, 404);
   });
-  adminApp.get(`${ADMIN_PANEL_URL}/`, (req, res) => res.redirect(301, ADMIN_PANEL_URL));
+  adminApp.use(redirectAdminPanelTrailingSlash);
   adminApp.get(ADMIN_PANEL_URL, (req, res) => {
     sendAngularPage(req, res, ADMIN_PANEL_URL);
   });

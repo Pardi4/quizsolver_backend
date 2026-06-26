@@ -1,6 +1,6 @@
 # QuizSolver VPS deploy - Ubuntu 24.04
 
-Cel: publiczna strona i API dzialaja przez `https://getquizsolver.com`, baza MongoDB stoi lokalnie na VPS, a panel admina jest ukryty na `127.0.0.1:40583` i otwierasz go tylko przez tunel SSH.
+Cel: publiczna strona, API i panel admina dzialaja przez `https://getquizsolver.com`, baza MongoDB stoi lokalnie na VPS, a panel admina jest ukryty pod niestandardowym slugiem.
 
 ## 1. DNS
 
@@ -106,7 +106,7 @@ Sprawdzenie:
 
 ```bash
 curl http://127.0.0.1:30583/api/health
-curl http://127.0.0.1:40583/admin
+curl -I http://127.0.0.1:30583/qs-console-851-c4f9
 ```
 
 ## 8. Nginx dla domeny
@@ -119,7 +119,7 @@ nginx -t
 systemctl reload nginx
 ```
 
-Panel admina nie jest dodany do Nginx. To celowe.
+Panel admina jest serwowany przez ten sam backend i Nginx co strona publiczna, ale pod ukryta sciezka.
 
 ## 9. SSL z Cloudflare albo certbot
 
@@ -134,19 +134,13 @@ certbot --nginx -d getquizsolver.com -d www.getquizsolver.com
 
 ## 10. Wejscie do admina
 
-Na swoim komputerze otwierasz tunel:
-
-```bash
-ssh -L 40583:127.0.0.1:40583 root@212.227.31.17
-```
-
-Potem w przegladarce:
+W przegladarce:
 
 ```text
-http://127.0.0.1:40583/admin
+https://getquizsolver.com/qs-console-851-c4f9
 ```
 
-Bez tunelu admin nie powinien byc dostepny z internetu.
+Dostep wymaga konta z rola `admin`.
 
 ## 11. Kopie zapasowe bazy
 
