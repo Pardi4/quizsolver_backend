@@ -89,6 +89,52 @@ function serializeAdminQuestion(note) {
   };
 }
 
+function isChargedCreditUsage(usage = {}) {
+  return usage.charged === true || usage.status === 'charged' || (!!usage.chargedAt && !usage.status);
+}
+
+function creditUsageTime(usage = {}) {
+  return usage.chargedAt || usage.claimedAt || usage.updatedAt || usage.createdAt || null;
+}
+
+function serializeAdminCreditUsage(usage, note, cachedAnswer) {
+  const source = note || cachedAnswer || {};
+  const options = source.options || [];
+  const questionType = source.questionType || '';
+  const answer = source.answer ?? null;
+  const charged = isChargedCreditUsage(usage);
+  return {
+    id: usage._id,
+    userId: usage.user?._id || usage.user || null,
+    email: usage.user?.email || 'Unknown user',
+    displayName: usage.user?.displayName || '',
+    action: usage.action,
+    status: usage.status || (charged ? 'charged' : 'claimed'),
+    charged,
+    credits: usage.credits || 1,
+    creditsCharged: charged ? (usage.credits || 1) : 0,
+    questionHash: usage.questionHash,
+    questionText: source.questionText || 'Question not saved',
+    questionType,
+    options,
+    prompts: source.prompts || [],
+    rows: source.rows || [],
+    answer,
+    answerText: answerToText(questionType, options, answer, { prompts: source.prompts || [], rows: source.rows || [] }),
+    sourceUrl: note?.sourceUrl || '',
+    platform: note?.platform || '',
+    seenCount: note?.seenCount || 0,
+    waivedReason: usage.waivedReason || '',
+    dedupeWindow: usage.dedupeWindow || '',
+    dedupeWindowMs: usage.dedupeWindowMs || 0,
+    claimedAt: usage.claimedAt,
+    chargedAt: usage.chargedAt,
+    createdAt: usage.createdAt,
+    updatedAt: usage.updatedAt,
+    time: creditUsageTime(usage)
+  };
+}
+
 router.get('/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
@@ -641,6 +687,24 @@ router.get('/billing/safety', async (req, res) => {
         .lean()
     ]);
 
+    const duplicateHashes = [...new Set((duplicateCharges || []).map(item => item.questionHash).filter(Boolean))];
+    const duplicateUserIds = [...new Set((duplicateCharges || []).map(item => String(item.userId || '')).filter(Boolean))];
+    const [duplicateNotes, duplicateCachedAnswers] = duplicateHashes.length ? await Promise.all([
+      StudyNote.find({ questionHash: { $in: duplicateHashes }, user: { $in: duplicateUserIds } })
+        .sort({ lastSeenAt: -1 })
+        .select('user questionHash questionText questionType answer options prompts rows sourceUrl platform')
+        .lean(),
+      CachedAnswer.find({ questionHash: { $in: duplicateHashes } })
+        .select('questionHash questionText questionType answer options prompts rows')
+        .lean()
+    ]) : [[], []];
+    const duplicateNotesByUserHash = new Map();
+    for (const note of duplicateNotes) {
+      const key = `${note.user}:${note.questionHash}`;
+      if (!duplicateNotesByUserHash.has(key)) duplicateNotesByUserHash.set(key, note);
+    }
+    const duplicateCacheByHash = new Map(duplicateCachedAnswers.map(item => [item.questionHash, item]));
+
     res.json({
       success: true,
       billing: {
@@ -652,7 +716,18 @@ router.get('/billing/safety', async (req, res) => {
         abortedRecords,
         declinedRecords,
         chargedLast24h,
-        duplicateGroups: duplicateCharges,
+        duplicateGroups: (duplicateCharges || []).map(group => {
+          const key = `${group.userId}:${group.questionHash}`;
+          const source = duplicateNotesByUserHash.get(key) || duplicateCacheByHash.get(group.questionHash) || {};
+          return {
+            ...group,
+            questionText: source.questionText || '',
+            questionType: source.questionType || '',
+            answerText: answerToText(source.questionType, source.options || [], source.answer, { prompts: source.prompts || [], rows: source.rows || [] }),
+            sourceUrl: source.sourceUrl || '',
+            platform: source.platform || ''
+          };
+        }),
         recentCharges: recentCharges.map(item => ({
           id: item._id,
           email: item.user?.email || 'Unknown user',
@@ -667,6 +742,124 @@ router.get('/billing/safety', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching billing safety.' });
+  }
+});
+
+router.get('/billing/usage', async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const status = String(req.query.status || '').trim();
+    const action = String(req.query.action || '').trim();
+    const userId = String(req.query.userId || '').trim();
+    const search = String(req.query.q || '').trim().substring(0, 120);
+    const validStatuses = new Set(['claimed', 'charged', 'waived', 'aborted', 'declined']);
+    const validActions = new Set(['solve', 'solve-snapshot', 'solve-batch', 'explain', 'follow-up']);
+    const query = {};
+
+    if (status && status !== 'all' && validStatuses.has(status)) query.status = status;
+    if (action && action !== 'all' && validActions.has(action)) query.action = action;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) query.user = new mongoose.Types.ObjectId(userId);
+
+    if (search) {
+      const searchRegex = new RegExp(escapeRegExp(search), 'i');
+      const [matchingUsers, matchingNotes, matchingCached] = await Promise.all([
+        User.find({
+          $or: [
+            { email: searchRegex },
+            { displayName: searchRegex }
+          ]
+        }).select('_id').limit(50).lean(),
+        StudyNote.find({ questionText: searchRegex }).select('questionHash').limit(100).lean(),
+        CachedAnswer.find({ questionText: searchRegex }).select('questionHash').limit(100).lean()
+      ]);
+      const userIds = matchingUsers.map(user => user._id);
+      const questionHashes = [...new Set([
+        ...matchingNotes.map(note => note.questionHash),
+        ...matchingCached.map(cache => cache.questionHash)
+      ].filter(Boolean))];
+      const searchFilters = [];
+      if (userIds.length) searchFilters.push({ user: { $in: userIds } });
+      if (questionHashes.length) searchFilters.push({ questionHash: { $in: questionHashes } });
+      if (search.length >= 6) searchFilters.push({ questionHash: searchRegex });
+      if (validActions.has(search)) searchFilters.push({ action: search });
+      if (validStatuses.has(search)) searchFilters.push({ status: search });
+      query.$or = searchFilters.length ? searchFilters : [{ _id: null }];
+    }
+
+    const chargedCondition = {
+      $or: [
+        { charged: true },
+        { status: 'charged' },
+        { status: { $exists: false }, chargedAt: { $ne: null } }
+      ]
+    };
+    const chargedQuery = { $and: [query, chargedCondition] };
+
+    const [total, usageRecords, statusCounts, chargedAgg] = await Promise.all([
+      CreditUsage.countDocuments(query),
+      CreditUsage.find(query)
+        .sort({ chargedAt: -1, claimedAt: -1, updatedAt: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('user', 'email displayName credits role')
+        .lean(),
+      CreditUsage.aggregate([
+        { $match: query },
+        { $group: { _id: '$status', count: { $sum: 1 }, credits: { $sum: '$credits' } } }
+      ]),
+      CreditUsage.aggregate([
+        { $match: chargedQuery },
+        { $group: { _id: null, count: { $sum: 1 }, credits: { $sum: '$credits' } } }
+      ])
+    ]);
+
+    const questionHashes = [...new Set(usageRecords.map(item => item.questionHash).filter(Boolean))];
+    const userIds = [...new Set(usageRecords.map(item => String(item.user?._id || item.user || '')).filter(Boolean))];
+    const [notes, cachedAnswers] = questionHashes.length ? await Promise.all([
+      StudyNote.find({ questionHash: { $in: questionHashes }, user: { $in: userIds } })
+        .sort({ lastSeenAt: -1 })
+        .select('user questionHash questionText questionType options prompts rows answer sourceUrl platform seenCount lastSeenAt')
+        .lean(),
+      CachedAnswer.find({ questionHash: { $in: questionHashes } })
+        .select('questionHash questionText questionType options prompts rows answer hitCount lastUsedAt')
+        .lean()
+    ]) : [[], []];
+
+    const notesByUserHash = new Map();
+    for (const note of notes) {
+      const key = `${note.user}:${note.questionHash}`;
+      if (!notesByUserHash.has(key)) notesByUserHash.set(key, note);
+    }
+    const cacheByHash = new Map(cachedAnswers.map(item => [item.questionHash, item]));
+    const statusSummary = statusCounts.reduce((acc, item) => {
+      const key = item._id || 'unknown';
+      acc[key] = { count: item.count || 0, credits: item.credits || 0 };
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      usage: usageRecords.map(item => {
+        const key = `${item.user?._id || item.user}:${item.questionHash}`;
+        return serializeAdminCreditUsage(item, notesByUserHash.get(key), cacheByHash.get(item.questionHash));
+      }),
+      summary: {
+        total,
+        chargedRecords: chargedAgg[0]?.count || 0,
+        chargedCredits: chargedAgg[0]?.credits || 0,
+        status: statusSummary
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit))
+      }
+    });
+  } catch (error) {
+    console.error('[Admin] Billing usage error:', error.message);
+    res.status(500).json({ error: 'Error fetching credit usage.' });
   }
 });
 
