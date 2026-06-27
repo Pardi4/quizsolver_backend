@@ -587,7 +587,10 @@ router.get('/billing/safety', async (req, res) => {
       totalClaims,
       chargedRecords,
       waivedRecords,
+      activeClaims,
       staleClaims,
+      abortedRecords,
+      declinedRecords,
       chargedLast24h,
       duplicateCharges,
       recentCharges
@@ -595,7 +598,10 @@ router.get('/billing/safety', async (req, res) => {
       CreditUsage.countDocuments(),
       CreditUsage.countDocuments(chargedMatch),
       CreditUsage.countDocuments({ status: 'waived' }),
+      CreditUsage.countDocuments({ status: 'claimed', createdAt: { $gte: staleDate } }),
       CreditUsage.countDocuments({ status: 'claimed', createdAt: { $lt: staleDate } }),
+      CreditUsage.countDocuments({ status: 'aborted' }),
+      CreditUsage.countDocuments({ status: 'declined' }),
       CreditUsage.countDocuments({ ...chargedMatch, chargedAt: { $gte: dayAgo } }),
       CreditUsage.aggregate([
         { $match: chargedMatch },
@@ -641,7 +647,10 @@ router.get('/billing/safety', async (req, res) => {
         totalClaims,
         chargedRecords,
         waivedRecords,
+        activeClaims,
         staleClaims,
+        abortedRecords,
+        declinedRecords,
         chargedLast24h,
         duplicateGroups: duplicateCharges,
         recentCharges: recentCharges.map(item => ({

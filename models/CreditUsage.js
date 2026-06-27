@@ -24,6 +24,15 @@ const creditUsageSchema = new mongoose.Schema({
     unique: true,
     index: true
   },
+  dedupeWindow: {
+    type: String,
+    default: '',
+    index: true
+  },
+  dedupeWindowMs: {
+    type: Number,
+    default: 0
+  },
   credits: {
     type: Number,
     default: 1,
@@ -31,7 +40,7 @@ const creditUsageSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['claimed', 'charged', 'waived'],
+    enum: ['claimed', 'charged', 'waived', 'aborted', 'declined'],
     default: 'claimed',
     index: true
   },

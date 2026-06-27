@@ -40,6 +40,10 @@ async function ensureCreditUsageIndexes() {
     { name: 'user_1_action_1_questionHash_1', background: true }
   );
   await collection.createIndex(
+    { user: 1, action: 1, questionHash: 1, createdAt: -1 },
+    { name: 'user_1_action_1_questionHash_1_createdAt_-1', background: true }
+  );
+  await collection.createIndex(
     { status: 1, updatedAt: -1 },
     { name: 'status_1_updatedAt_-1', background: true }
   );
