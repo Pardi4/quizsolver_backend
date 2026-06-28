@@ -133,8 +133,8 @@ const STATIC_OPTIONS = {
       return;
     }
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
-    if (/[\\\/](?:favicon|logo|logo-512|logo-wordmark|og-image)\.(?:ico|svg|png)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+    if (/[\\\/](?:favicon|logo|logo-96|logo-512|logo-wordmark|og-image)\.(?:ico|svg|png|webp|avif)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
     }
   }
 };
@@ -244,8 +244,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      fontSrc: ["'self'", 'data:'],
       // Angular prerender output contains inline hydration scripts and a CSS onload handler.
       scriptSrc: ["'self'", "'unsafe-inline'"],
       scriptSrcAttr: ["'unsafe-inline'"],

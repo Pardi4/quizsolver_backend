@@ -143,6 +143,7 @@ router.get('/stats', async (req, res) => {
     const cachedAnswers = await CachedAnswer.countDocuments();
     const totalPurchases = await Purchase.countDocuments();
     const totalBugReports = await BugReport.countDocuments();
+    const unreadBugReports = await BugReport.countDocuments({ $and: [{ isRead: false }, { isRead: { $exists: true } }] });
     const openSupportMessages = await SupportMessage.countDocuments({ status: { $ne: 'closed' } });
     const unreadSupportMessages = await SupportMessage.countDocuments({ isRead: false });
 
@@ -174,7 +175,7 @@ router.get('/stats', async (req, res) => {
       success: true,
       stats: {
         totalUsers, adminUsers, cachedAnswers, totalPurchases,
-        totalBugReports, totalQuestions, totalCreditsInSystem,
+        totalBugReports, unreadBugReports, totalQuestions, totalCreditsInSystem,
         totalRevenue, todayPurchases, monthRevenue, bannedUsers,
         openSupportMessages, unreadSupportMessages
       },
@@ -381,16 +382,65 @@ router.post('/purchases/:purchaseId/apply', async (req, res) => {
 
 router.get('/bug-reports', async (req, res) => {
   try {
-    const reports = await BugReport.find().sort({ createdAt: -1 }).limit(100).populate('userId', 'email');
+    const reports = await BugReport.find().sort({ createdAt: -1 }).limit(100).populate('userId', 'email').lean();
     res.json({
       success: true,
       reports: reports.map(r => ({
         id: r._id, user: r.userId?.email, url: r.url,
-        description: r.description, date: r.createdAt
+        description: r.description, userAgent: r.userAgent || '',
+        isRead: r.isRead !== false, readAt: r.readAt || null,
+        date: r.createdAt
       }))
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching bug reports.' });
+  }
+});
+
+router.post('/bug-reports/mark-all-read', async (req, res) => {
+  try {
+    const now = new Date();
+    const result = await BugReport.updateMany(
+      { $and: [{ isRead: false }, { isRead: { $exists: true } }] },
+      { $set: { isRead: true, readAt: now, readBy: req.user._id } }
+    );
+    auditLog(req.user, 'BUG_REPORTS_MARK_ALL_READ', { modified: result.modifiedCount || 0 });
+    res.json({ success: true, modified: result.modifiedCount || 0 });
+  } catch (error) {
+    res.status(500).json({ error: 'Error updating bug reports.' });
+  }
+});
+
+router.patch('/bug-reports/:reportId', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.reportId)) {
+      return res.status(400).json({ error: 'Invalid bug report id.' });
+    }
+
+    const patch = {};
+    if (typeof req.body.isRead === 'boolean') {
+      patch.isRead = req.body.isRead;
+      patch.readAt = req.body.isRead ? new Date() : null;
+      patch.readBy = req.body.isRead ? req.user._id : null;
+    }
+    if (!Object.keys(patch).length) {
+      return res.status(400).json({ error: 'No valid bug report fields to update.' });
+    }
+
+    const report = await BugReport.findByIdAndUpdate(
+      req.params.reportId,
+      { $set: patch },
+      { new: true }
+    );
+    if (!report) return res.status(404).json({ error: 'Bug report not found.' });
+
+    auditLog(req.user, 'BUG_REPORT_UPDATE', {
+      reportId: report._id.toString(),
+      isRead: !!report.isRead
+    });
+    res.json({ success: true, report: { id: report._id, isRead: !!report.isRead, readAt: report.readAt || null } });
+  } catch (error) {
+    res.status(500).json({ error: 'Error updating bug report.' });
   }
 });
 

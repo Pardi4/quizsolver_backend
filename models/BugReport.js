@@ -17,6 +17,20 @@ const bugReportSchema = new mongoose.Schema({
     maxlength: 1000
   },
   userAgent: String,
+  isRead: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  readAt: {
+    type: Date,
+    default: null
+  },
+  readBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
