@@ -14,6 +14,7 @@ const adminRoutes = require('./routes/admin');
 const creditsRoutes = require('./routes/credits');
 const webhookRoutes = require('./routes/webhook');
 const supportRoutes = require('./routes/support');
+const parserRoutes = require('./routes/parser');
 
 const User = require('./models/User');
 
@@ -553,6 +554,7 @@ app.use('/api/quiz', quizRoutes);
 app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/parser', parserRoutes);
 
 app.get('/api/stats/public', async (req, res) => {
   try {
