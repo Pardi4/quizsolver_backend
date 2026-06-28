@@ -18,6 +18,18 @@ router.use(adminOnly);
 const paidProviders = ['lemonsqueezy', 'whop'];
 const EXTENSION_ACTIVE_WINDOW_MS = 90 * 1000;
 const CREDIT_DUPLICATE_REVIEW_WINDOW_MS = 10 * 60 * 1000;
+const USER_SORTS = {
+  createdAt_desc: { createdAt: -1, _id: -1 },
+  createdAt_asc: { createdAt: 1, _id: 1 },
+  credits_desc: { role: 1, credits: -1, createdAt: -1, _id: -1 },
+  credits_asc: { role: -1, credits: 1, createdAt: -1, _id: -1 },
+  lastOnline_desc: { extensionLastSeenAt: -1, createdAt: -1, _id: -1 },
+  lastOnline_asc: { extensionLastSeenAt: 1, createdAt: 1, _id: 1 },
+  questions_desc: { 'stats.totalQuestionsSolved': -1, createdAt: -1, _id: -1 },
+  questions_asc: { 'stats.totalQuestionsSolved': 1, createdAt: 1, _id: 1 },
+  streak_desc: { 'streak.current': -1, createdAt: -1, _id: -1 },
+  streak_asc: { 'streak.current': 1, createdAt: 1, _id: 1 }
+};
 
 function auditLog(adminUser, action, details = {}) {
   console.log(`[AUDIT] ${JSON.stringify({ ts: new Date().toISOString(), admin: adminUser.email, action, ...details })}`);
@@ -188,19 +200,21 @@ router.get('/stats', async (req, res) => {
 
 router.get('/users', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
     const search = (req.query.search || '').substring(0, 100);
+    const requestedSort = String(req.query.sort || 'createdAt_desc').substring(0, 50);
+    const sort = USER_SORTS[requestedSort] ? requestedSort : 'createdAt_desc';
     const query = search ? { $or: [
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned excludeFromLeaderboard streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned excludeFromLeaderboard streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
       users: users.map(serializeAdminUser),
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total, pages: Math.ceil(total / limit), sort }
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching users.' });

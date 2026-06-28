@@ -85,6 +85,13 @@ const userSchema = new mongoose.Schema({
   }
 });
 
+userSchema.index({ createdAt: -1 });
+userSchema.index({ role: 1, credits: -1, createdAt: -1 });
+userSchema.index({ role: -1, credits: 1, createdAt: -1 });
+userSchema.index({ extensionLastSeenAt: -1, createdAt: -1 });
+userSchema.index({ 'stats.totalQuestionsSolved': -1, createdAt: -1 });
+userSchema.index({ 'streak.current': -1, createdAt: -1 });
+
 userSchema.pre('save', async function(next) {
   if (!this.isModified('passwordHash') || !this.passwordHash) return next();
   try {
