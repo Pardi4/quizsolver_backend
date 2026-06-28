@@ -16,6 +16,28 @@ const bugReportSchema = new mongoose.Schema({
     default: '',
     maxlength: 1000
   },
+  platform: {
+    type: String,
+    default: '',
+    maxlength: 80,
+    index: true
+  },
+  parserDiagnostics: {
+    outcome: { type: String, default: '', maxlength: 40 },
+    confidence: { type: Number, default: 0, min: 0, max: 1 },
+    reason: { type: String, default: '', maxlength: 240 },
+    questionCount: { type: Number, default: 0 },
+    optionCount: { type: Number, default: 0 },
+    attemptedTypes: { type: [String], default: [] }
+  },
+  parserSnapshot: {
+    title: { type: String, default: '', maxlength: 180 },
+    bodyText: { type: String, default: '', maxlength: 8000 },
+    htmlSnippet: { type: String, default: '', maxlength: 12000 },
+    questionTexts: { type: [String], default: [] },
+    optionsSample: { type: [String], default: [] },
+    selectorSummary: { type: mongoose.Schema.Types.Mixed, default: {} }
+  },
   userAgent: String,
   isRead: {
     type: Boolean,
@@ -36,5 +58,7 @@ const bugReportSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+bugReportSchema.index({ platform: 1, createdAt: -1 });
 
 module.exports = mongoose.model('BugReport', bugReportSchema);

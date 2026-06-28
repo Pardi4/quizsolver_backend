@@ -8,6 +8,7 @@ const BugReport = require('../models/BugReport');
 const SupportMessage = require('../models/SupportMessage');
 const StudyNote = require('../models/StudyNote');
 const CreditUsage = require('../models/CreditUsage');
+const ParserEvent = require('../models/ParserEvent');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
 
 const router = express.Router();
@@ -145,6 +146,31 @@ function serializeAdminCreditUsage(usage, note, cachedAnswer) {
     createdAt: usage.createdAt,
     updatedAt: usage.updatedAt,
     time: creditUsageTime(usage)
+  };
+}
+
+function serializeParserEvent(event) {
+  return {
+    id: event._id,
+    email: event.userId?.email || 'Unknown user',
+    userId: event.userId?._id || event.userId || null,
+    eventType: event.eventType,
+    outcome: event.outcome,
+    platform: event.platform || 'universal',
+    detectorPlatform: event.detectorPlatform || '',
+    url: event.url || '',
+    hostname: event.hostname || '',
+    confidence: Number(event.confidence || 0),
+    reason: event.reason || '',
+    questionCount: event.questionCount || 0,
+    supportedQuestionCount: event.supportedQuestionCount || 0,
+    optionCount: event.optionCount || 0,
+    attemptedTypes: event.attemptedTypes || [],
+    questionTypes: event.questionTypes || [],
+    parserVersion: event.parserVersion || '',
+    extensionVersion: event.extensionVersion || '',
+    snapshot: event.snapshot || {},
+    createdAt: event.createdAt
   };
 }
 
@@ -402,6 +428,9 @@ router.get('/bug-reports', async (req, res) => {
       reports: reports.map(r => ({
         id: r._id, user: r.userId?.email, url: r.url,
         description: r.description, userAgent: r.userAgent || '',
+        platform: r.platform || '',
+        parserDiagnostics: r.parserDiagnostics || {},
+        parserSnapshot: r.parserSnapshot || {},
         isRead: r.isRead !== false, readAt: r.readAt || null,
         date: r.createdAt
       }))
@@ -455,6 +484,151 @@ router.patch('/bug-reports/:reportId', async (req, res) => {
     res.json({ success: true, report: { id: report._id, isRead: !!report.isRead, readAt: report.readAt || null } });
   } catch (error) {
     res.status(500).json({ error: 'Error updating bug report.' });
+  }
+});
+
+router.get('/parser/health', async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const match = { createdAt: { $gte: since } };
+    const failedOutcomes = ['empty', 'weak', 'error'];
+
+    const [summaryAgg, platforms, recentEvents, recentBugReports] = await Promise.all([
+      ParserEvent.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            success: { $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] } },
+            partial: { $sum: { $cond: [{ $eq: ['$outcome', 'partial'] }, 1, 0] } },
+            empty: { $sum: { $cond: [{ $eq: ['$outcome', 'empty'] }, 1, 0] } },
+            weak: { $sum: { $cond: [{ $eq: ['$outcome', 'weak'] }, 1, 0] } },
+            error: { $sum: { $cond: [{ $eq: ['$outcome', 'error'] }, 1, 0] } },
+            reported: { $sum: { $cond: [{ $eq: ['$outcome', 'reported'] }, 1, 0] } },
+            avgConfidence: { $avg: '$confidence' },
+            avgQuestions: { $avg: '$questionCount' }
+          }
+        }
+      ]),
+      ParserEvent.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: '$platform',
+            count: { $sum: 1 },
+            success: { $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] } },
+            partial: { $sum: { $cond: [{ $eq: ['$outcome', 'partial'] }, 1, 0] } },
+            failed: { $sum: { $cond: [{ $in: ['$outcome', failedOutcomes] }, 1, 0] } },
+            reported: { $sum: { $cond: [{ $eq: ['$outcome', 'reported'] }, 1, 0] } },
+            avgConfidence: { $avg: '$confidence' },
+            avgQuestions: { $avg: '$questionCount' },
+            lastSeenAt: { $max: '$createdAt' },
+            topReasons: { $addToSet: '$reason' }
+          }
+        },
+        { $sort: { failed: -1, reported: -1, count: -1, lastSeenAt: -1 } },
+        { $limit: 30 }
+      ]),
+      ParserEvent.find(match)
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .populate('userId', 'email')
+        .lean(),
+      BugReport.find({ createdAt: { $gte: since } })
+        .sort({ createdAt: -1 })
+        .limit(12)
+        .populate('userId', 'email')
+        .lean()
+    ]);
+
+    const summary = summaryAgg[0] || {
+      total: 0, success: 0, partial: 0, empty: 0, weak: 0, error: 0, reported: 0,
+      avgConfidence: 0, avgQuestions: 0
+    };
+    const failed = (summary.empty || 0) + (summary.weak || 0) + (summary.error || 0);
+
+    res.json({
+      success: true,
+      windowDays: days,
+      since,
+      summary: {
+        ...summary,
+        failed,
+        failureRate: summary.total ? failed / summary.total : 0,
+        avgConfidence: Number(summary.avgConfidence || 0),
+        avgQuestions: Number(summary.avgQuestions || 0)
+      },
+      platforms: platforms.map(item => ({
+        platform: item._id || 'universal',
+        count: item.count || 0,
+        success: item.success || 0,
+        partial: item.partial || 0,
+        failed: item.failed || 0,
+        reported: item.reported || 0,
+        failureRate: item.count ? (item.failed || 0) / item.count : 0,
+        avgConfidence: Number(item.avgConfidence || 0),
+        avgQuestions: Number(item.avgQuestions || 0),
+        lastSeenAt: item.lastSeenAt,
+        topReasons: (item.topReasons || []).filter(Boolean).slice(0, 4)
+      })),
+      recentEvents: recentEvents.map(serializeParserEvent),
+      recentBugReports: recentBugReports.map(report => ({
+        id: report._id,
+        user: report.userId?.email || 'Unknown user',
+        url: report.url,
+        platform: report.platform || '',
+        parserDiagnostics: report.parserDiagnostics || {},
+        parserSnapshot: report.parserSnapshot || {},
+        isRead: report.isRead !== false,
+        date: report.createdAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching parser health.' });
+  }
+});
+
+router.get('/parser/events', async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const platform = String(req.query.platform || '').trim().substring(0, 80);
+    const outcome = String(req.query.outcome || '').trim().substring(0, 40);
+    const search = String(req.query.q || '').trim().substring(0, 120);
+    const query = {};
+    if (platform && platform !== 'all') query.platform = platform;
+    if (outcome && outcome !== 'all') query.outcome = outcome;
+    if (search) {
+      const pattern = new RegExp(escapeRegExp(search), 'i');
+      query.$or = [
+        { url: pattern },
+        { hostname: pattern },
+        { platform: pattern },
+        { reason: pattern },
+        { 'snapshot.bodyText': pattern },
+        { 'snapshot.questionTexts': pattern }
+      ];
+    }
+
+    const [total, events] = await Promise.all([
+      ParserEvent.countDocuments(query),
+      ParserEvent.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('userId', 'email')
+        .lean()
+    ]);
+
+    res.json({
+      success: true,
+      events: events.map(serializeParserEvent),
+      pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching parser events.' });
   }
 });
 
