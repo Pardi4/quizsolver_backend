@@ -459,9 +459,7 @@ async function claimCreditUsage(userId, action, questionHash, count = 1, attempt
 
   const existing = await CreditUsage.findOne({ dedupeKey });
   if (existing?.status === 'charged' || existing?.status === 'waived') {
-    await freeCompletedCreditUsageDedupeKey(existing, 'legacy-completed');
-    if (attempt < 3) return claimCreditUsage(userId, action, questionHash, count, attempt + 1);
-    throw new Error('Could not prepare credit claim.');
+    return { shouldCharge: false, duplicate: true, usage: existing };
   }
   if (existing?.status === 'claimed') {
     const claimAge = Date.now() - new Date(existing.createdAt || existing.claimedAt || 0).getTime();
@@ -617,8 +615,7 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
       status: 'waived',
       charged: false,
       waivedReason: 'admin',
-      chargedAt: new Date(),
-      dedupeKey: releasedDedupeKey(creditUsage.usage, 'completed')
+      chargedAt: new Date()
     });
     return { ok: true, charged: false, user: adminUser };
   }
@@ -643,8 +640,7 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
   await markCreditUsage(creditUsage.usage, {
     status: 'charged',
     charged: true,
-    chargedAt: new Date(),
-    dedupeKey: releasedDedupeKey(creditUsage.usage, 'completed')
+    chargedAt: new Date()
   });
 
   if (options.updateStreak) {

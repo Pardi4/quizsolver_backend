@@ -17,6 +17,7 @@ router.use(adminOnly);
 
 const paidProviders = ['lemonsqueezy', 'whop'];
 const EXTENSION_ACTIVE_WINDOW_MS = 90 * 1000;
+const CREDIT_DUPLICATE_REVIEW_WINDOW_MS = 10 * 60 * 1000;
 
 function auditLog(adminUser, action, details = {}) {
   console.log(`[AUDIT] ${JSON.stringify({ ts: new Date().toISOString(), admin: adminUser.email, action, ...details })}`);
@@ -653,7 +654,7 @@ router.get('/billing/safety', async (req, res) => {
         { $match: chargedMatch },
         {
           $group: {
-            _id: { user: '$user', questionHash: '$questionHash' },
+            _id: { user: '$user', action: '$action', questionHash: '$questionHash', dedupeWindow: '$dedupeWindow' },
             count: { $sum: 1 },
             credits: { $sum: '$credits' },
             actions: { $addToSet: '$action' },
@@ -661,7 +662,17 @@ router.get('/billing/safety', async (req, res) => {
             lastChargedAt: { $max: '$chargedAt' }
           }
         },
-        { $match: { count: { $gt: 1 } } },
+        {
+          $addFields: {
+            spanMs: { $subtract: ['$lastChargedAt', '$firstChargedAt'] }
+          }
+        },
+        {
+          $match: {
+            count: { $gt: 1 },
+            spanMs: { $lte: CREDIT_DUPLICATE_REVIEW_WINDOW_MS }
+          }
+        },
         { $sort: { lastChargedAt: -1 } },
         { $limit: 25 },
         { $lookup: { from: 'users', localField: '_id.user', foreignField: '_id', as: 'user' } },
@@ -671,10 +682,14 @@ router.get('/billing/safety', async (req, res) => {
             _id: 0,
             userId: '$_id.user',
             email: '$user.email',
+            action: '$_id.action',
             questionHash: '$_id.questionHash',
+            dedupeWindow: '$_id.dedupeWindow',
             count: 1,
             credits: 1,
             actions: 1,
+            spanMs: 1,
+            reviewWindowMs: CREDIT_DUPLICATE_REVIEW_WINDOW_MS,
             firstChargedAt: 1,
             lastChargedAt: 1
           }
