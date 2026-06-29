@@ -494,7 +494,7 @@ router.get('/parser/health', async (req, res) => {
     const match = { createdAt: { $gte: since } };
     const failedOutcomes = ['empty', 'weak', 'error'];
 
-    const [summaryAgg, platforms, problemGroups, recentEvents, recentBugReports] = await Promise.all([
+    const [summaryAgg, platforms, problemGroups, domainRanking, recentEvents, recentBugReports] = await Promise.all([
       ParserEvent.aggregate([
         { $match: match },
         {
@@ -552,6 +552,38 @@ router.get('/parser/health', async (req, res) => {
         { $sort: { count: -1, lastSeenAt: -1 } },
         { $limit: 20 }
       ]),
+      ParserEvent.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $ifNull: ['$hostname', ''] },
+            count: { $sum: 1 },
+            success: { $sum: { $cond: [{ $eq: ['$outcome', 'success'] }, 1, 0] } },
+            partial: { $sum: { $cond: [{ $eq: ['$outcome', 'partial'] }, 1, 0] } },
+            failed: { $sum: { $cond: [{ $in: ['$outcome', failedOutcomes] }, 1, 0] } },
+            reported: { $sum: { $cond: [{ $eq: ['$outcome', 'reported'] }, 1, 0] } },
+            avgConfidence: { $avg: '$confidence' },
+            avgQuestions: { $avg: '$questionCount' },
+            lastSeenAt: { $max: '$createdAt' },
+            sampleUrl: { $last: '$url' },
+            topReasons: { $addToSet: '$reason' },
+            platforms: { $addToSet: '$platform' }
+          }
+        },
+        {
+          $addFields: {
+            rankScore: {
+              $add: [
+                { $multiply: ['$failed', 3] },
+                { $multiply: ['$reported', 2] },
+                '$partial'
+              ]
+            }
+          }
+        },
+        { $sort: { rankScore: -1, failed: -1, reported: -1, count: -1, lastSeenAt: -1 } },
+        { $limit: 20 }
+      ]),
       ParserEvent.find(match)
         .sort({ createdAt: -1 })
         .limit(30)
@@ -605,6 +637,21 @@ router.get('/parser/health', async (req, res) => {
         lastSeenAt: item.lastSeenAt,
         sampleUrl: item.sampleUrl || '',
         sampleText: item.sampleText || ''
+      })),
+      domainRanking: domainRanking.map(item => ({
+        hostname: item._id || '',
+        count: item.count || 0,
+        success: item.success || 0,
+        partial: item.partial || 0,
+        failed: item.failed || 0,
+        reported: item.reported || 0,
+        failureRate: item.count ? (item.failed || 0) / item.count : 0,
+        avgConfidence: Number(item.avgConfidence || 0),
+        avgQuestions: Number(item.avgQuestions || 0),
+        lastSeenAt: item.lastSeenAt,
+        sampleUrl: item.sampleUrl || '',
+        topReasons: (item.topReasons || []).filter(Boolean).slice(0, 4),
+        platforms: (item.platforms || []).filter(Boolean).slice(0, 4)
       })),
       recentEvents: recentEvents.map(serializeParserEvent),
       recentBugReports: recentBugReports.map(report => ({
