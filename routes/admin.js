@@ -494,7 +494,7 @@ router.get('/parser/health', async (req, res) => {
     const match = { createdAt: { $gte: since } };
     const failedOutcomes = ['empty', 'weak', 'error'];
 
-    const [summaryAgg, platforms, recentEvents, recentBugReports] = await Promise.all([
+    const [summaryAgg, platforms, problemGroups, recentEvents, recentBugReports] = await Promise.all([
       ParserEvent.aggregate([
         { $match: match },
         {
@@ -530,6 +530,27 @@ router.get('/parser/health', async (req, res) => {
         },
         { $sort: { failed: -1, reported: -1, count: -1, lastSeenAt: -1 } },
         { $limit: 30 }
+      ]),
+      ParserEvent.aggregate([
+        { $match: { ...match, outcome: { $in: [...failedOutcomes, 'reported', 'partial'] } } },
+        {
+          $group: {
+            _id: {
+              hostname: { $ifNull: ['$hostname', ''] },
+              platform: { $ifNull: ['$platform', 'universal'] },
+              reason: { $ifNull: ['$reason', ''] },
+              outcome: { $ifNull: ['$outcome', 'unknown'] }
+            },
+            count: { $sum: 1 },
+            avgConfidence: { $avg: '$confidence' },
+            avgQuestions: { $avg: '$questionCount' },
+            lastSeenAt: { $max: '$createdAt' },
+            sampleUrl: { $last: '$url' },
+            sampleText: { $last: { $arrayElemAt: ['$snapshot.questionTexts', 0] } }
+          }
+        },
+        { $sort: { count: -1, lastSeenAt: -1 } },
+        { $limit: 20 }
       ]),
       ParserEvent.find(match)
         .sort({ createdAt: -1 })
@@ -572,6 +593,18 @@ router.get('/parser/health', async (req, res) => {
         avgQuestions: Number(item.avgQuestions || 0),
         lastSeenAt: item.lastSeenAt,
         topReasons: (item.topReasons || []).filter(Boolean).slice(0, 4)
+      })),
+      problemGroups: problemGroups.map(item => ({
+        hostname: item._id?.hostname || '',
+        platform: item._id?.platform || 'universal',
+        reason: item._id?.reason || '',
+        outcome: item._id?.outcome || 'unknown',
+        count: item.count || 0,
+        avgConfidence: Number(item.avgConfidence || 0),
+        avgQuestions: Number(item.avgQuestions || 0),
+        lastSeenAt: item.lastSeenAt,
+        sampleUrl: item.sampleUrl || '',
+        sampleText: item.sampleText || ''
       })),
       recentEvents: recentEvents.map(serializeParserEvent),
       recentBugReports: recentBugReports.map(report => ({
