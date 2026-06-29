@@ -5,21 +5,31 @@ const ParserEvent = require('../models/ParserEvent');
 const router = express.Router();
 router.use(authMiddleware);
 
-function cleanText(value, max = 500) {
+function redactSensitiveText(value) {
   return String(value || '')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
+    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Za-z0-9_-]{32,})\b/g, '[token]')
+    .replace(/\b(?:\d[ -]?){13,19}\b/g, '[number]')
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, '[phone]');
+}
+
+function cleanText(value, max = 500) {
+  return redactSensitiveText(String(value || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  )
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, max);
 }
 
 function cleanHtml(value, max = 12000) {
-  return String(value || '')
+  return redactSensitiveText(String(value || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
     .replace(/\s(?:src|href)\s*=\s*(['"])(?!#|\/|\.\/).*?\1/gi, '')
+  )
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, max);
