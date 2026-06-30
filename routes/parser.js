@@ -1,6 +1,7 @@
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const ParserEvent = require('../models/ParserEvent');
+const BugReport = require('../models/BugReport');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -28,6 +29,7 @@ function cleanHtml(value, max = 12000) {
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\s(value|data-token|data-auth|data-key|data-secret|data-email|data-user|data-password|aria-valuetext)\s*=\s*(['"]).*?\2/gi, ' $1="[redacted]"')
     .replace(/\s(?:src|href)\s*=\s*(['"])(?!#|\/|\.\/).*?\1/gi, '')
   )
     .replace(/\s+/g, ' ')
@@ -83,6 +85,61 @@ function cleanOutcome(value) {
   return ['success', 'partial', 'empty', 'weak', 'error', 'reported'].includes(value) ? value : 'empty';
 }
 
+function hasUsefulSnapshot(snapshot = {}) {
+  return Boolean(
+    snapshot.htmlSnippet ||
+    snapshot.bodyText ||
+    (Array.isArray(snapshot.questionTexts) && snapshot.questionTexts.length) ||
+    (Array.isArray(snapshot.optionsSample) && snapshot.optionsSample.length)
+  );
+}
+
+function shouldAutoReportParserEvent(event) {
+  return Boolean(
+    event?.url &&
+    ['empty', 'weak', 'error'].includes(event.outcome) &&
+    hasUsefulSnapshot(event.snapshot || {})
+  );
+}
+
+async function createParserBugReportIfNeeded(req, event) {
+  if (!shouldAutoReportParserEvent(event)) return false;
+
+  const duplicateSince = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const existing = await BugReport.findOne({
+    userId: event.userId,
+    source: 'parser-auto',
+    url: event.url,
+    platform: event.platform || 'universal',
+    'parserDiagnostics.outcome': event.outcome,
+    createdAt: { $gte: duplicateSince }
+  }).select('_id');
+
+  if (existing) return false;
+
+  await BugReport.create({
+    userId: event.userId,
+    url: event.url,
+    description: cleanText(`Automatic parser failure: ${event.reason || event.outcome}`, 1000),
+    platform: event.platform || 'universal',
+    source: 'parser-auto',
+    parserEventId: event._id,
+    parserDiagnostics: {
+      outcome: event.outcome,
+      confidence: event.confidence || 0,
+      reason: event.reason || '',
+      questionCount: event.questionCount || 0,
+      optionCount: event.optionCount || 0,
+      attemptedTypes: event.attemptedTypes || []
+    },
+    parserSnapshot: event.snapshot || {},
+    userAgent: (req.headers['user-agent'] || '').substring(0, 300),
+    isRead: false
+  });
+
+  return true;
+}
+
 router.post('/event', async (req, res) => {
   try {
     const body = req.body || {};
@@ -112,7 +169,14 @@ router.post('/event', async (req, res) => {
       snapshot: cleanSnapshot(body.snapshot || {})
     });
 
-    res.json({ success: true, id: event._id });
+    let bugReportCreated = false;
+    try {
+      bugReportCreated = await createParserBugReportIfNeeded(req, event);
+    } catch (autoReportError) {
+      console.warn('[ParserEvent] Could not create automatic bug report:', autoReportError.message);
+    }
+
+    res.json({ success: true, id: event._id, bugReportCreated });
   } catch (error) {
     console.warn('[ParserEvent] Could not record event:', error.message);
     res.status(500).json({ error: 'Could not record parser event.' });

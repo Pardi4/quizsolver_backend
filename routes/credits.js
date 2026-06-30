@@ -45,6 +45,7 @@ function cleanHtml(value, max = 12000) {
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\s(value|data-token|data-auth|data-key|data-secret|data-email|data-user|data-password|aria-valuetext)\s*=\s*(['"]).*?\2/gi, ' $1="[redacted]"')
     .replace(/\s(?:src|href)\s*=\s*(['"])(?!#|\/|\.\/).*?\1/gi, '')
   )
     .replace(/\s+/g, ' ')
@@ -297,6 +298,7 @@ router.post('/report-bug', async (req, res) => {
       url: url.substring(0, 500),
       description: description || '',
       platform,
+      source: 'manual',
       parserDiagnostics,
       parserSnapshot,
       userAgent: (req.headers['user-agent'] || '').substring(0, 300)

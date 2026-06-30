@@ -170,6 +170,7 @@ function serializeParserEvent(event) {
     parserVersion: event.parserVersion || '',
     extensionVersion: event.extensionVersion || '',
     snapshot: event.snapshot || {},
+    hasPageCode: Boolean(event.snapshot?.htmlSnippet),
     createdAt: event.createdAt
   };
 }
@@ -429,8 +430,11 @@ router.get('/bug-reports', async (req, res) => {
         id: r._id, user: r.userId?.email, url: r.url,
         description: r.description, userAgent: r.userAgent || '',
         platform: r.platform || '',
+        source: r.source || 'manual',
+        parserEventId: r.parserEventId || null,
         parserDiagnostics: r.parserDiagnostics || {},
         parserSnapshot: r.parserSnapshot || {},
+        hasPageCode: Boolean(r.parserSnapshot?.htmlSnippet),
         isRead: r.isRead !== false, readAt: r.readAt || null,
         date: r.createdAt
       }))
@@ -659,8 +663,11 @@ router.get('/parser/health', async (req, res) => {
         user: report.userId?.email || 'Unknown user',
         url: report.url,
         platform: report.platform || '',
+        source: report.source || 'manual',
+        parserEventId: report.parserEventId || null,
         parserDiagnostics: report.parserDiagnostics || {},
         parserSnapshot: report.parserSnapshot || {},
+        hasPageCode: Boolean(report.parserSnapshot?.htmlSnippet),
         isRead: report.isRead !== false,
         date: report.createdAt
       }))

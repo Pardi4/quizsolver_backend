@@ -38,6 +38,18 @@ const bugReportSchema = new mongoose.Schema({
     optionsSample: { type: [String], default: [] },
     selectorSummary: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
+  source: {
+    type: String,
+    enum: ['manual', 'parser-auto'],
+    default: 'manual',
+    index: true
+  },
+  parserEventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ParserEvent',
+    default: null,
+    index: true
+  },
   userAgent: String,
   isRead: {
     type: Boolean,
@@ -60,5 +72,6 @@ const bugReportSchema = new mongoose.Schema({
 });
 
 bugReportSchema.index({ platform: 1, createdAt: -1 });
+bugReportSchema.index({ source: 1, url: 1, platform: 1, createdAt: -1 });
 
 module.exports = mongoose.model('BugReport', bugReportSchema);
