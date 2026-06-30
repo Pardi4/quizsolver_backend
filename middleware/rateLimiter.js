@@ -1,5 +1,8 @@
 const rateLimit = require('express-rate-limit');
 
+const QUIZ_REQUESTS_PER_MINUTE = 100;
+const quizSolveEndpointPattern = /^\/api\/quiz\/(?:solve(?:-batch|-snapshot)?|explain|follow-up)(?:[/?#]|$)/i;
+
 const requestIp = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
 
 const userKeyGenerator = (req) => {
@@ -7,9 +10,11 @@ const userKeyGenerator = (req) => {
   return requestIp(req);
 };
 
+const isQuizSolveEndpoint = (req) => quizSolveEndpointPattern.test(req.originalUrl || req.url || '');
+
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 40,
+  max: (req) => isQuizSolveEndpoint(req) ? QUIZ_REQUESTS_PER_MINUTE : 40,
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -27,10 +32,7 @@ const authLimiter = rateLimit({
 
 const quizLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: (req) => {
-    if (req.user && req.user.role === 'admin') return 120;
-    return 20;
-  },
+  max: QUIZ_REQUESTS_PER_MINUTE,
   message: { error: 'Too many quiz requests. Please wait a moment.' },
   standardHeaders: true,
   legacyHeaders: false,
