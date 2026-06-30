@@ -54,4 +54,13 @@ const adminLimiter = rateLimit({
   keyGenerator: requestIp,
 });
 
-module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter };
+const parserSnapshotLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 8,
+  message: { error: 'Parser diagnostics rate limit exceeded.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: requestIp,
+});
+
+module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };

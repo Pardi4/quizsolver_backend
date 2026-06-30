@@ -11,6 +11,8 @@ const MAX_FULL_HTML_CHARS = Math.min(
   5000000
 );
 
+const SNAPSHOT_DIR_RESOLVED = path.resolve(SNAPSHOT_DIR);
+
 function redactSensitiveText(value) {
   return String(value || '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
@@ -19,12 +21,38 @@ function redactSensitiveText(value) {
     .replace(/\b(?:authorization|bearer|csrf|xsrf|token|jwt|secret|password|passwd|pass|apikey|api_key)\s*[:=]\s*["']?[^"'\s<]{8,}/gi, '$1=[redacted]');
 }
 
+function normalizeTextPayload(value) {
+  return String(value || '')
+    .replace(/\0/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+}
+
+function isPlausibleHtml(value) {
+  const sample = String(value || '').slice(0, 200000).toLowerCase();
+  if (!/<[a-z!/][\s\S]*?>/.test(sample)) return false;
+  const structuralTags = sample.match(/<\/?(?:html|body|main|form|div|section|article|fieldset|legend|label|input|button|select|textarea|span|p|h[1-6])\b/g) || [];
+  return structuralTags.length >= 2 || /<(?:html|body)\b/.test(sample);
+}
+
+function defangExecutableHtml(value) {
+  return String(value || '')
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '<script data-qs-removed="true">[removed script]</script>')
+    .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '<style data-qs-removed="true">[removed style]</style>')
+    .replace(/<(iframe|object|embed|applet)\b[\s\S]*?<\/\1\s*>/gi, '<$1 data-qs-removed="true">[removed $1]</$1>')
+    .replace(/<(iframe|object|embed|applet|base|link|meta)\b[^>]*\/?>/gi, '<$1 data-qs-removed="true">[removed $1]</$1>')
+    .replace(/\son[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
+    .replace(/\s(src|srcset|href|xlink:href|poster|data|formaction|action|srcdoc)\s*=\s*(['"])[\s\S]*?\2/gi, ' $1="[removed]"')
+    .replace(/\sstyle\s*=\s*(['"])[\s\S]*?\1/gi, ' style="[removed]"')
+    .replace(/\s(value|data-token|data-auth|data-key|data-secret|data-email|data-user|data-password|aria-valuetext)\s*=\s*(['"])[\s\S]*?\2/gi, ' $1="[redacted]"');
+}
+
 function cleanFullPageHtml(value) {
-  const raw = String(value || '');
+  const raw = normalizeTextPayload(value);
+  if (!isPlausibleHtml(raw)) {
+    return { html: '', originalChars: raw.length, storedChars: 0, truncated: false, rejected: 'not-html' };
+  }
   const truncated = raw.length > MAX_FULL_HTML_CHARS;
-  const html = redactSensitiveText(raw)
-    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
-    .replace(/\s(value|data-token|data-auth|data-key|data-secret|data-email|data-user|data-password|aria-valuetext)\s*=\s*(['"]).*?\2/gi, ' $1="[redacted]"')
+  const html = redactSensitiveText(defangExecutableHtml(raw))
     .substring(0, MAX_FULL_HTML_CHARS);
 
   return { html, originalChars: raw.length, storedChars: html.length, truncated };
@@ -44,6 +72,7 @@ async function storeParserSnapshotHtml({ html, url = '', platform = '', source =
   const filePath = path.join(SNAPSHOT_DIR, filename);
   const content = [
     'QuizSolver parser diagnostic page snapshot',
+    'Security: saved as text/plain attachment, executable tags and remote-loading attributes removed.',
     `Created: ${new Date().toISOString()}`,
     `URL: ${safeHeader(url)}`,
     `Platform: ${safeHeader(platform, 120)}`,
@@ -56,12 +85,14 @@ async function storeParserSnapshotHtml({ html, url = '', platform = '', source =
     '',
     cleaned.html
   ].join('\n');
+  const sha256 = crypto.createHash('sha256').update(content).digest('hex');
 
   await fs.promises.writeFile(filePath, content, 'utf8');
   return {
     id,
     filename,
     bytes: Buffer.byteLength(content, 'utf8'),
+    sha256,
     truncated: cleaned.truncated,
     capturedAt: new Date()
   };
@@ -70,7 +101,9 @@ async function storeParserSnapshotHtml({ html, url = '', platform = '', source =
 function snapshotFilePath(fileId = '') {
   const id = String(fileId || '');
   if (!/^[a-z0-9-]{20,80}$/i.test(id)) return '';
-  return path.join(SNAPSHOT_DIR, `${id}.txt`);
+  const filePath = path.resolve(SNAPSHOT_DIR, `${id}.txt`);
+  if (!filePath.startsWith(`${SNAPSHOT_DIR_RESOLVED}${path.sep}`)) return '';
+  return filePath;
 }
 
 async function sendParserSnapshotFile(res, fileId = '') {
@@ -83,8 +116,12 @@ async function sendParserSnapshotFile(res, fileId = '') {
     return res.status(404).json({ error: 'Snapshot file not found.' });
   }
 
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="parser-page-${fileId}.txt"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Download-Options', 'noopen');
   return res.sendFile(filePath);
 }
 

@@ -81,6 +81,7 @@ function cleanParserSnapshot(snapshot = {}) {
       id: cleanToken(snapshot.fullHtmlFile.id || '', 100),
       filename: cleanText(snapshot.fullHtmlFile.filename || '', 140),
       bytes: Math.max(0, Number(snapshot.fullHtmlFile.bytes || 0)),
+      sha256: cleanToken(snapshot.fullHtmlFile.sha256 || '', 80),
       truncated: Boolean(snapshot.fullHtmlFile.truncated),
       capturedAt: snapshot.fullHtmlFile.capturedAt || null
     } : undefined

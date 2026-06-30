@@ -96,6 +96,7 @@ const parserEventSchema = new mongoose.Schema({
       id: { type: String, default: '', maxlength: 100 },
       filename: { type: String, default: '', maxlength: 140 },
       bytes: { type: Number, default: 0 },
+      sha256: { type: String, default: '', maxlength: 80 },
       truncated: { type: Boolean, default: false },
       capturedAt: { type: Date, default: null }
     }

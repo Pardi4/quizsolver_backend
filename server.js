@@ -6,7 +6,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/db');
-const { generalLimiter, adminLimiter } = require('./middleware/rateLimiter');
+const { generalLimiter, adminLimiter, parserSnapshotLimiter } = require('./middleware/rateLimiter');
 
 const authRoutes = require('./routes/auth');
 const { router: quizRoutes, publicRouter: quizPublicRoutes } = require('./routes/quiz');
@@ -543,7 +543,7 @@ function extensionAuthCallbackHtml() {
 }
 
 app.use('/api/webhook', webhookRoutes);
-app.use(['/api/parser/event', '/api/credits/report-bug'], express.json({ limit: '6mb' }));
+app.use(['/api/parser/event', '/api/credits/report-bug'], parserSnapshotLimiter, express.json({ limit: '6mb' }));
 app.use(['/api/quiz/solve', '/api/quiz/solve-batch', '/api/quiz/solve-snapshot'], express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '80kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
