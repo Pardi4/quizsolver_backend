@@ -36,7 +36,14 @@ const bugReportSchema = new mongoose.Schema({
     htmlSnippet: { type: String, default: '', maxlength: 12000 },
     questionTexts: { type: [String], default: [] },
     optionsSample: { type: [String], default: [] },
-    selectorSummary: { type: mongoose.Schema.Types.Mixed, default: {} }
+    selectorSummary: { type: mongoose.Schema.Types.Mixed, default: {} },
+    fullHtmlFile: {
+      id: { type: String, default: '', maxlength: 100 },
+      filename: { type: String, default: '', maxlength: 140 },
+      bytes: { type: Number, default: 0 },
+      truncated: { type: Boolean, default: false },
+      capturedAt: { type: Date, default: null }
+    }
   },
   source: {
     type: String,

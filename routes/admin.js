@@ -10,6 +10,7 @@ const StudyNote = require('../models/StudyNote');
 const CreditUsage = require('../models/CreditUsage');
 const ParserEvent = require('../models/ParserEvent');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
+const { sendParserSnapshotFile } = require('../utils/parserSnapshotFiles');
 
 const router = express.Router();
 
@@ -170,7 +171,7 @@ function serializeParserEvent(event) {
     parserVersion: event.parserVersion || '',
     extensionVersion: event.extensionVersion || '',
     snapshot: event.snapshot || {},
-    hasPageCode: Boolean(event.snapshot?.htmlSnippet),
+    hasPageCode: Boolean(event.snapshot?.htmlSnippet || event.snapshot?.fullHtmlFile?.id),
     createdAt: event.createdAt
   };
 }
@@ -434,7 +435,7 @@ router.get('/bug-reports', async (req, res) => {
         parserEventId: r.parserEventId || null,
         parserDiagnostics: r.parserDiagnostics || {},
         parserSnapshot: r.parserSnapshot || {},
-        hasPageCode: Boolean(r.parserSnapshot?.htmlSnippet),
+        hasPageCode: Boolean(r.parserSnapshot?.htmlSnippet || r.parserSnapshot?.fullHtmlFile?.id),
         isRead: r.isRead !== false, readAt: r.readAt || null,
         date: r.createdAt
       }))
@@ -489,6 +490,10 @@ router.patch('/bug-reports/:reportId', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Error updating bug report.' });
   }
+});
+
+router.get('/parser/snapshot-file/:fileId', async (req, res) => {
+  return sendParserSnapshotFile(res, req.params.fileId);
 });
 
 router.get('/parser/health', async (req, res) => {
@@ -667,7 +672,7 @@ router.get('/parser/health', async (req, res) => {
         parserEventId: report.parserEventId || null,
         parserDiagnostics: report.parserDiagnostics || {},
         parserSnapshot: report.parserSnapshot || {},
-        hasPageCode: Boolean(report.parserSnapshot?.htmlSnippet),
+        hasPageCode: Boolean(report.parserSnapshot?.htmlSnippet || report.parserSnapshot?.fullHtmlFile?.id),
         isRead: report.isRead !== false,
         date: report.createdAt
       }))

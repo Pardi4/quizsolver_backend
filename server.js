@@ -543,6 +543,7 @@ function extensionAuthCallbackHtml() {
 }
 
 app.use('/api/webhook', webhookRoutes);
+app.use(['/api/parser/event', '/api/credits/report-bug'], express.json({ limit: '6mb' }));
 app.use(['/api/quiz/solve', '/api/quiz/solve-batch', '/api/quiz/solve-snapshot'], express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '80kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));

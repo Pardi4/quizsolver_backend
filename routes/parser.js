@@ -2,6 +2,7 @@ const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const ParserEvent = require('../models/ParserEvent');
 const BugReport = require('../models/BugReport');
+const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -77,7 +78,14 @@ function cleanSnapshot(snapshot = {}) {
     htmlSnippet: cleanHtml(snapshot.htmlSnippet, 12000),
     questionTexts: cleanStringArray(snapshot.questionTexts, 8, 300),
     optionsSample: cleanStringArray(snapshot.optionsSample, 20, 180),
-    selectorSummary
+    selectorSummary,
+    fullHtmlFile: snapshot.fullHtmlFile && typeof snapshot.fullHtmlFile === 'object' ? {
+      id: cleanToken(snapshot.fullHtmlFile.id || '', 100),
+      filename: cleanText(snapshot.fullHtmlFile.filename || '', 140),
+      bytes: Math.max(0, Number(snapshot.fullHtmlFile.bytes || 0)),
+      truncated: Boolean(snapshot.fullHtmlFile.truncated),
+      capturedAt: snapshot.fullHtmlFile.capturedAt || null
+    } : undefined
   };
 }
 
@@ -89,6 +97,7 @@ function hasUsefulSnapshot(snapshot = {}) {
   return Boolean(
     snapshot.htmlSnippet ||
     snapshot.bodyText ||
+    snapshot.fullHtmlFile?.id ||
     (Array.isArray(snapshot.questionTexts) && snapshot.questionTexts.length) ||
     (Array.isArray(snapshot.optionsSample) && snapshot.optionsSample.length)
   );
@@ -148,12 +157,25 @@ router.post('/event', async (req, res) => {
     const supportedQuestionCount = Math.min(Math.max(parseInt(body.supportedQuestionCount, 10) || 0, 0), 200);
     const optionCount = Math.min(Math.max(parseInt(body.optionCount, 10) || 0, 0), 1000);
     const confidence = Math.min(Math.max(Number(body.confidence || 0), 0), 1);
+    const platform = cleanToken(body.platform || 'universal', 80) || 'universal';
+    const outcome = cleanOutcome(body.outcome);
+    const rawSnapshot = body.snapshot || {};
+    const snapshot = cleanSnapshot(rawSnapshot);
+    const fullHtmlFile = await storeParserSnapshotHtml({
+      html: rawSnapshot.fullPageHtml || rawSnapshot.fullBodyHtml || '',
+      url,
+      platform,
+      source: body.eventType || 'solve',
+      outcome,
+      userId: req.user._id
+    });
+    if (fullHtmlFile) snapshot.fullHtmlFile = fullHtmlFile;
 
     const event = await ParserEvent.create({
       userId: req.user._id,
       eventType: ['solve', 'manual-report', 'diagnostic'].includes(body.eventType) ? body.eventType : 'solve',
-      outcome: cleanOutcome(body.outcome),
-      platform: cleanToken(body.platform || 'universal', 80) || 'universal',
+      outcome,
+      platform,
       detectorPlatform: cleanToken(body.detectorPlatform || '', 80),
       url,
       hostname,
@@ -166,7 +188,7 @@ router.post('/event', async (req, res) => {
       questionTypes: cleanStringArray(body.questionTypes, 10, 40),
       parserVersion: cleanToken(body.parserVersion || 'v2', 40) || 'v2',
       extensionVersion: cleanToken(body.extensionVersion || '', 40),
-      snapshot: cleanSnapshot(body.snapshot || {})
+      snapshot
     });
 
     let bugReportCreated = false;

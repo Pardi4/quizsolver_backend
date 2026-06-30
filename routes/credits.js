@@ -5,6 +5,7 @@ const BugReport = require('../models/BugReport');
 const User = require('../models/User');
 const ParserEvent = require('../models/ParserEvent');
 const { CREDIT_PACKS } = require('../config/creditPacks');
+const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -75,7 +76,14 @@ function cleanParserSnapshot(snapshot = {}) {
     htmlSnippet: cleanHtml(snapshot.htmlSnippet, 12000),
     questionTexts: cleanArray(snapshot.questionTexts, 8, 300),
     optionsSample: cleanArray(snapshot.optionsSample, 20, 180),
-    selectorSummary
+    selectorSummary,
+    fullHtmlFile: snapshot.fullHtmlFile && typeof snapshot.fullHtmlFile === 'object' ? {
+      id: cleanToken(snapshot.fullHtmlFile.id || '', 100),
+      filename: cleanText(snapshot.fullHtmlFile.filename || '', 140),
+      bytes: Math.max(0, Number(snapshot.fullHtmlFile.bytes || 0)),
+      truncated: Boolean(snapshot.fullHtmlFile.truncated),
+      capturedAt: snapshot.fullHtmlFile.capturedAt || null
+    } : undefined
   };
 }
 
@@ -267,7 +275,8 @@ router.post('/report-bug', async (req, res) => {
   try {
     let { url, description } = req.body;
     const platform = cleanToken(req.body.platform || '', 80);
-    const parserSnapshot = cleanParserSnapshot(req.body.parserSnapshot || {});
+    const rawParserSnapshot = req.body.parserSnapshot || {};
+    const parserSnapshot = cleanParserSnapshot(rawParserSnapshot);
     const parserDiagnostics = cleanParserDiagnostics(req.body.parserDiagnostics || {});
     let hostname = '';
 
@@ -285,6 +294,16 @@ router.post('/report-bug', async (req, res) => {
     } catch {
       return res.status(400).json({ error: 'Invalid URL format.' });
     }
+
+    const fullHtmlFile = await storeParserSnapshotHtml({
+      html: rawParserSnapshot.fullPageHtml || rawParserSnapshot.fullBodyHtml || '',
+      url,
+      platform,
+      source: 'manual-report',
+      outcome: parserDiagnostics.outcome || 'reported',
+      userId: req.user._id
+    });
+    if (fullHtmlFile) parserSnapshot.fullHtmlFile = fullHtmlFile;
 
     if (description) {
       description = String(description)
