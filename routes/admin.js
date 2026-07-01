@@ -669,27 +669,32 @@ router.get('/parser/health', async (req, res) => {
   }
 });
 
+function parserEventsQuery(params = {}) {
+  const platform = String(params.platform || '').trim().substring(0, 80);
+  const outcome = String(params.outcome || '').trim().substring(0, 40);
+  const search = String(params.q || '').trim().substring(0, 120);
+  const query = {};
+  if (platform && platform !== 'all') query.platform = platform;
+  if (outcome && outcome !== 'all') query.outcome = outcome;
+  if (search) {
+    const pattern = new RegExp(escapeRegExp(search), 'i');
+    query.$or = [
+      { url: pattern },
+      { hostname: pattern },
+      { platform: pattern },
+      { reason: pattern },
+      { 'snapshot.bodyText': pattern },
+      { 'snapshot.questionTexts': pattern }
+    ];
+  }
+  return query;
+}
+
 router.get('/parser/events', async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
-    const platform = String(req.query.platform || '').trim().substring(0, 80);
-    const outcome = String(req.query.outcome || '').trim().substring(0, 40);
-    const search = String(req.query.q || '').trim().substring(0, 120);
-    const query = {};
-    if (platform && platform !== 'all') query.platform = platform;
-    if (outcome && outcome !== 'all') query.outcome = outcome;
-    if (search) {
-      const pattern = new RegExp(escapeRegExp(search), 'i');
-      query.$or = [
-        { url: pattern },
-        { hostname: pattern },
-        { platform: pattern },
-        { reason: pattern },
-        { 'snapshot.bodyText': pattern },
-        { 'snapshot.questionTexts': pattern }
-      ];
-    }
+    const query = parserEventsQuery(req.query);
 
     const [total, events] = await Promise.all([
       ParserEvent.countDocuments(query),
@@ -708,6 +713,30 @@ router.get('/parser/events', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching parser events.' });
+  }
+});
+
+router.delete('/parser/events', async (req, res) => {
+  try {
+    const query = parserEventsQuery(req.query);
+    if (!Object.keys(query).length) {
+      return res.status(400).json({ error: 'Use the clear-all endpoint to delete every parser event.' });
+    }
+    const result = await ParserEvent.deleteMany(query);
+    auditLog(req.user, 'PARSER_EVENTS_CLEAR_FILTERED', { deleted: result.deletedCount || 0, filter: query });
+    res.json({ success: true, deleted: result.deletedCount || 0 });
+  } catch (error) {
+    res.status(500).json({ error: 'Error clearing parser events.' });
+  }
+});
+
+router.delete('/parser/events/all', async (req, res) => {
+  try {
+    const result = await ParserEvent.deleteMany({});
+    auditLog(req.user, 'PARSER_EVENTS_CLEAR_ALL', { deleted: result.deletedCount || 0 });
+    res.json({ success: true, deleted: result.deletedCount || 0 });
+  } catch (error) {
+    res.status(500).json({ error: 'Error clearing parser events.' });
   }
 });
 
