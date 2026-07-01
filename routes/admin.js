@@ -30,7 +30,9 @@ const USER_SORTS = {
   questions_desc: { 'stats.totalQuestionsSolved': -1, createdAt: -1, _id: -1 },
   questions_asc: { 'stats.totalQuestionsSolved': 1, createdAt: 1, _id: 1 },
   streak_desc: { 'streak.current': -1, createdAt: -1, _id: -1 },
-  streak_asc: { 'streak.current': 1, createdAt: 1, _id: 1 }
+  streak_asc: { 'streak.current': 1, createdAt: 1, _id: 1 },
+  status_desc: { isBanned: 1, extensionLastSeenAt: -1, createdAt: -1, _id: -1 },
+  status_asc: { isBanned: -1, extensionLastSeenAt: 1, createdAt: 1, _id: 1 }
 };
 
 function auditLog(adminUser, action, details = {}) {

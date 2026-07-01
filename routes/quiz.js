@@ -997,7 +997,6 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     if (questions.length > 50)
       return res.status(400).json({ error: 'Max 50 questions per batch.' });
 
-    const chargeHashesInRequest = new Set();
     const preparedQuestions = [];
 
     for (const rawQuestionData of questions) {
@@ -1015,13 +1014,10 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
       }
 
       const questionHash = CachedAnswer.generateHash(questionData);
-      const duplicateInRequest = chargeHashesInRequest.has(questionHash);
       const cachedHit = await getCachedAnswerHit(questionData, questionHash, questionData.type);
-      const chargeCredits = !duplicateInRequest
-        && await shouldChargeForQuestion(user._id, 'solve', questionHash);
+      const chargeCredits = await shouldChargeForQuestion(user._id, 'solve', questionHash);
 
-      if (chargeCredits) chargeHashesInRequest.add(questionHash);
-      preparedQuestions.push({ questionData, questionHash, cachedHit, chargeCredits, duplicateInRequest });
+      preparedQuestions.push({ questionData, questionHash, cachedHit, chargeCredits });
     }
 
     const creditsNeeded = preparedQuestions.filter(q => q.chargeCredits).length;
@@ -1037,72 +1033,41 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     }
     responseUser = spendCheck.user || user;
 
-    for (const item of preparedQuestions) {
-      if (item.invalidError || !item.chargeCredits) continue;
-      const creditUsage = await beginCreditUsage(user, 'solve', item.questionHash, true);
-      if (!creditUsage.ok) {
-        item.invalidError = {
-          status: creditUsage.status,
-          error: creditUsage.body?.error || 'No credits remaining.',
-          limitReached: !!creditUsage.body?.limitReached,
-          remaining: creditUsage.body?.remaining || 0
-        };
-        continue;
-      }
-      item.creditUsage = creditUsage;
-      responseUser = creditUsage.user || responseUser;
-    }
-
     const results = [];
-    const billedHashesInRequest = new Set();
 
     for (const item of preparedQuestions) {
-      const { questionData, questionHash, creditUsage, duplicateInRequest, invalidError } = item;
+      const { questionData, questionHash, chargeCredits, invalidError } = item;
       if (invalidError) {
         results.push({ success: false, ...serializeQuestionPayloadError(invalidError) });
         continue;
       }
 
-      let itemCreditUsage = creditUsage;
+      let itemCreditUsage = null;
 
       try {
+        itemCreditUsage = await beginCreditUsage(user, 'solve', questionHash, chargeCredits);
+        if (!itemCreditUsage.ok) {
+          results.push({
+            success: false,
+            error: itemCreditUsage.body?.error || 'No credits remaining.',
+            limitReached: !!itemCreditUsage.body?.limitReached,
+            remaining: itemCreditUsage.body?.remaining || 0
+          });
+          continue;
+        }
+        responseUser = itemCreditUsage.user || responseUser;
+
         const cachedHit = item.cachedHit || await getCachedAnswerHit(questionData, questionHash, questionData.type);
         if (cachedHit) {
-          if (!itemCreditUsage && duplicateInRequest && !billedHashesInRequest.has(questionHash)) {
-            const shouldChargeDuplicate = await shouldChargeForQuestion(user._id, 'solve', questionHash);
-            itemCreditUsage = await beginCreditUsage(user, 'solve', questionHash, shouldChargeDuplicate);
-            if (!itemCreditUsage.ok) {
-              results.push({
-                success: false,
-                error: itemCreditUsage.body?.error || 'No credits remaining.',
-                limitReached: !!itemCreditUsage.body?.limitReached
-              });
-              continue;
-            }
-          }
           const chargeResult = await completeCreditUsage(user, itemCreditUsage);
           if (!chargeResult.ok) {
             results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
             continue;
           }
-          if (itemCreditUsage?.shouldCharge) billedHashesInRequest.add(questionHash);
           responseUser = chargeResult.user || responseUser;
           const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, { ...req.body, questionData });
           results.push({ success: true, answer: cachedHit.answer, cached: true, noteId: studyNote?._id || null });
           continue;
-        }
-
-        if (duplicateInRequest && !billedHashesInRequest.has(questionHash)) {
-          const shouldChargeDuplicate = await shouldChargeForQuestion(user._id, 'solve', questionHash);
-          itemCreditUsage = await beginCreditUsage(user, 'solve', questionHash, shouldChargeDuplicate);
-          if (!itemCreditUsage.ok) {
-            results.push({
-              success: false,
-              error: itemCreditUsage.body?.error || 'No credits remaining.',
-              limitReached: !!itemCreditUsage.body?.limitReached
-            });
-            continue;
-          }
         }
 
         const answer = await callAI(questionData);
@@ -1112,7 +1077,6 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
           results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
           continue;
         }
-        if (itemCreditUsage?.shouldCharge) billedHashesInRequest.add(questionHash);
         responseUser = chargeResult.user || responseUser;
         const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
         results.push({ success: true, answer, cached: false, noteId: studyNote?._id || null });
