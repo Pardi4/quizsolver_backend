@@ -897,7 +897,7 @@ router.get('/cache/stats', async (req, res) => {
       CachedAnswer.countDocuments(),
       CachedAnswer.countDocuments(query),
       CachedAnswer.find(query)
-        .sort({ hitCount: -1, lastUsedAt: -1 })
+        .sort({ lastUsedAt: -1, createdAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .select('questionText questionType hitCount options prompts rows answer createdAt lastUsedAt')
