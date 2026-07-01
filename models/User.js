@@ -1,8 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const PROFANITY_LIST = ['kurw','chuj','pizd','jeba','fuck','shit','dick','ass','bitch','cunt','damn','hell','puta','merd'];
-
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -57,7 +55,6 @@ const userSchema = new mongoose.Schema({
   failedLoginAttempts: { type: Number, default: 0 },
   lockedUntil: { type: Date, default: null },
   isBanned: { type: Boolean, default: false },
-  excludeFromLeaderboard: { type: Boolean, default: false },
   appliedCreditPurchases: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Purchase'
@@ -180,20 +177,6 @@ userSchema.methods.addCredits = function(amount, options = {}) {
   }
   this.credits += amount;
   this.stats.totalCreditsPurchased += amount;
-};
-
-userSchema.methods.getLeaderboardName = function() {
-  const prefix = this.email.split('@')[0];
-  let clean = prefix.toLowerCase();
-  for (const word of PROFANITY_LIST) {
-    if (clean.includes(word)) {
-      clean = clean.replace(new RegExp(word, 'gi'), '***');
-    }
-  }
-  if (clean.length > 3) {
-    return clean.slice(0, 3) + '***';
-  }
-  return clean + '***';
 };
 
 userSchema.methods.toPublicJSON = function() {

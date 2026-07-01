@@ -57,7 +57,6 @@ function serializeAdminUser(user) {
     stats: user.stats || {},
     streak: user.streak || {},
     isBanned: !!user.isBanned,
-    excludeFromLeaderboard: !!user.excludeFromLeaderboard,
     isExtensionActive,
     extensionLastSeenAt,
     extensionLastSeenReason: user.extensionLastSeenReason || '',
@@ -239,7 +238,7 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned excludeFromLeaderboard streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
@@ -360,20 +359,6 @@ router.post('/users/:userId/unban', async (req, res) => {
     res.json({ success: true, message: `${user.email} unbanned.` });
   } catch (error) {
     res.status(500).json({ error: 'Error unbanning user.' });
-  }
-});
-
-router.patch('/users/:userId/leaderboard', async (req, res) => {
-  try {
-    const { exclude } = req.body;
-    const user = await User.findById(req.params.userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-    user.excludeFromLeaderboard = !!exclude;
-    await user.save();
-    auditLog(req.user, 'LEADERBOARD_TOGGLE', { target: user.email, exclude: !!exclude });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Error updating leaderboard setting.' });
   }
 });
 
@@ -505,7 +490,7 @@ router.get('/parser/health', async (req, res) => {
     const match = { createdAt: { $gte: since } };
     const failedOutcomes = ['empty', 'weak', 'error'];
 
-    const [summaryAgg, platforms, problemGroups, domainRanking, recentEvents, recentBugReports] = await Promise.all([
+    const [summaryAgg, platforms, problemGroups, domainIssues, recentEvents, recentBugReports] = await Promise.all([
       ParserEvent.aggregate([
         { $match: match },
         {
@@ -649,7 +634,7 @@ router.get('/parser/health', async (req, res) => {
         sampleUrl: item.sampleUrl || '',
         sampleText: item.sampleText || ''
       })),
-      domainRanking: domainRanking.map(item => ({
+      domainIssues: domainIssues.map(item => ({
         hostname: item._id || '',
         count: item.count || 0,
         success: item.success || 0,
@@ -753,7 +738,7 @@ router.get('/support/messages', async (req, res) => {
     const emails = [...new Set(messages.map(m => String(m.fromEmail || '').toLowerCase()).filter(Boolean))];
     const linkedUsers = emails.length
       ? await User.find({ email: { $in: emails } })
-        .select('email displayName role credits stats streak isBanned excludeFromLeaderboard extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform createdAt')
+        .select('email displayName role credits stats streak isBanned extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform createdAt')
         .lean()
       : [];
     const usersByEmail = new Map(linkedUsers.map(user => [user.email, serializeAdminUser(user)]));
@@ -1207,30 +1192,6 @@ router.get('/billing/usage', async (req, res) => {
   } catch (error) {
     console.error('[Admin] Billing usage error:', error.message);
     res.status(500).json({ error: 'Error fetching credit usage.' });
-  }
-});
-
-router.get('/leaderboard', async (req, res) => {
-  try {
-    const users = await User.find({
-      excludeFromLeaderboard: { $ne: true },
-      isBanned: { $ne: true },
-      role: { $ne: 'admin' }
-    })
-    .sort({ 'stats.totalQuestionsSolved': -1 })
-    .limit(10)
-    .select('email stats.totalQuestionsSolved stats.totalQuizzesSolved streak');
-
-    const leaderboard = users.map((u, i) => ({
-      rank: i + 1,
-      name: u.getLeaderboardName(),
-      questionsSolved: u.stats.totalQuestionsSolved,
-      streak: u.streak.current
-    }));
-
-    res.json({ success: true, leaderboard });
-  } catch (error) {
-    res.status(500).json({ error: 'Error fetching leaderboard.' });
   }
 });
 
