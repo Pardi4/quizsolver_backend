@@ -499,8 +499,8 @@ router.get('/google/callback', async (req, res) => {
     if (extensionWebAuth) {
       return res.redirect(extensionWebAuthRedirect({ error: rawMessage, state: extensionState }));
     }
-    const message = encodeURIComponent(rawMessage);
-    res.redirect(`${SITE_URL}/?auth=login&error=${message}`);
+    const hash = new URLSearchParams({ auth: 'login', error: rawMessage }).toString();
+    res.redirect(`${SITE_URL}/#${hash}`);
   }
 });
 

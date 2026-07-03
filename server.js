@@ -53,6 +53,7 @@ const PAGE_SLUGS = {
   demo: 'demo',
   credits: 'credits',
   privacy: 'privacy',
+  terms: 'terms',
   success: 'success',
   notFound: '404',
   quizSolverAi: 'quiz-solver-ai',
@@ -118,7 +119,21 @@ const INDEXED_PAGE_KEYS = [
   'kahoot',
   'quizizz',
   'privacy',
+  'terms',
   'blog'
+];
+
+const PUBLIC_QUERY_PARAMS_TO_DROP = [
+  'auth',
+  'error',
+  'q',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'gclid',
+  'fbclid'
 ];
 
 const STATIC_OPTIONS = {
@@ -193,15 +208,34 @@ function cleanPublicPageUrl(req) {
   const rawQuery = queryIndex === -1 ? '' : req.originalUrl.slice(queryIndex + 1);
   const cleanPath = rawPath !== '/' ? rawPath.replace(/\/+$/, '') || '/' : '/';
   const params = new URLSearchParams(rawQuery);
-  const preserveAuthError = params.has('auth') && params.has('error');
 
-  if (preserveAuthError && !params.has('q') && cleanPath === rawPath) {
-    return req.originalUrl;
-  }
-
-  (preserveAuthError ? ['q'] : ['auth', 'error', 'q']).forEach(key => params.delete(key));
+  PUBLIC_QUERY_PARAMS_TO_DROP.forEach(key => params.delete(key));
   const cleanQuery = params.toString();
   return `${cleanPath}${cleanQuery ? `?${cleanQuery}` : ''}`;
+}
+
+function publicRequestScheme(req) {
+  if (req.headers['cf-visitor']) {
+    try {
+      const cfVisitor = JSON.parse(req.headers['cf-visitor']);
+      if (cfVisitor?.scheme) return String(cfVisitor.scheme).toLowerCase();
+    } catch (e) {}
+  }
+
+  const rawForwardedProto = String(req.headers['x-forwarded-proto'] || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  if (rawForwardedProto === 'https') return 'https';
+
+  // Cloudflare Tunnel/Flexible SSL can reach the origin over HTTP even when the
+  // public request is already HTTPS. In that topology, redirecting only because
+  // the origin hop is HTTP creates the GSC "redirect error" loop.
+  if (req.headers['cf-ray'] || req.headers['cf-connecting-ip']) return 'https';
+
+  if (rawForwardedProto) return rawForwardedProto;
+  if (String(req.headers['x-forwarded-ssl'] || '').toLowerCase() === 'on') return 'https';
+  return String(req.protocol || '').toLowerCase();
 }
 
 app.use((req, res, next) => {
@@ -211,16 +245,7 @@ app.use((req, res, next) => {
   const host = req.get('host') || '';
   const hostname = host.split(':')[0].toLowerCase();
   
-  let proto = req.headers['x-forwarded-proto'] || req.protocol || '';
-  if (req.headers['cf-visitor']) {
-    try {
-      const cfVisitor = JSON.parse(req.headers['cf-visitor']);
-      if (cfVisitor && cfVisitor.scheme) {
-        proto = cfVisitor.scheme;
-      }
-    } catch (e) {}
-  }
-  const forwardedProto = String(proto).split(',')[0].trim();
+  const forwardedProto = publicRequestScheme(req);
   
   const apexHost = 'getquizsolver.com';
   const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(hostname);
@@ -376,7 +401,7 @@ function routePriority(route) {
   if (route.includes('kahoot-ai-bot') || route.includes('quiz-solver-ai') || route.includes('testportal-quiz-solver') || route.includes('google-forms-quiz-solver')) return '0.9';
   if (route.includes('/blog/category/')) return '0.75';
   if (route.includes('/blog/')) return '0.7';
-  if (route.includes('privacy')) return '0.4';
+  if (route.includes('privacy') || route.includes('terms')) return '0.4';
   return '0.8';
 }
 
@@ -434,6 +459,13 @@ function robotsTxt() {
 
 function sitemapXml() {
   const lastmod = process.env.SITEMAP_LASTMOD || new Date().toISOString().slice(0, 10);
+  const pageChangefreq = (pageKey) => (
+    pageKey === 'privacy' || pageKey === 'terms'
+      ? 'yearly'
+      : pageKey === 'blog'
+        ? 'weekly'
+        : 'monthly'
+  );
   const pageUrls = INDEXED_PAGE_KEYS
     .flatMap(pageKey => SUPPORTED_LOCALES.map(locale => ({ pageKey, locale, route: PAGE_ROUTES[pageKey][locale.code] })))
     .map(({ pageKey, route }) => {
@@ -447,7 +479,7 @@ function sitemapXml() {
         alternates,
         `    <xhtml:link rel="alternate" hreflang="x-default" href="${PUBLIC_SITE_URL}${PAGE_ROUTES[pageKey].en === '/' ? '/' : PAGE_ROUTES[pageKey].en}"/>`,
         `    <lastmod>${lastmod}</lastmod>`,
-        '    <changefreq>weekly</changefreq>',
+        `    <changefreq>${pageChangefreq(pageKey)}</changefreq>`,
         `    <priority>${routePriority(route)}</priority>`,
         '  </url>'
       ].join('\n');
