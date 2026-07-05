@@ -393,7 +393,14 @@ async function saveStudyNoteBestEffort(userId, cachedAnswer, body, updates = {})
 }
 
 const CREDIT_DEDUPE_WINDOW_MS = Math.max(parseInt(process.env.CREDIT_DEDUPE_WINDOW_MS, 10) || 2 * 60 * 1000, 30 * 1000);
+const CREDIT_DUPLICATE_REPLAY_WINDOW_MS = Math.max(
+  parseInt(process.env.CREDIT_DUPLICATE_REPLAY_WINDOW_MS, 10) || CREDIT_DEDUPE_WINDOW_MS,
+  CREDIT_DEDUPE_WINDOW_MS,
+  10 * 1000
+);
 const CREDIT_CLAIM_TTL_MS = Math.max(parseInt(process.env.CREDIT_CLAIM_TTL_MS, 10) || 10 * 60 * 1000, CREDIT_DEDUPE_WINDOW_MS);
+const RECENT_SOLVE_REPLAY_MAX = Math.max(parseInt(process.env.RECENT_SOLVE_REPLAY_MAX, 10) || 2000, 100);
+const recentSolveReplays = new Map();
 
 function creditWindowId(now = new Date()) {
   return Math.floor(now.getTime() / CREDIT_DEDUPE_WINDOW_MS);
@@ -403,8 +410,21 @@ function creditDedupeKey(userId, action, questionHash, now = new Date()) {
   return `${userId}:${action}:${questionHash}:${creditWindowId(now)}`;
 }
 
+async function findRecentCompletedCreditUsage(userId, action, questionHash, windowMs = CREDIT_DUPLICATE_REPLAY_WINDOW_MS) {
+  if (!userId || !action || !questionHash) return null;
+  return CreditUsage.findOne({
+    user: userId,
+    action,
+    questionHash,
+    status: { $in: ['charged', 'waived'] },
+    chargedAt: { $gte: new Date(Date.now() - windowMs) }
+  }).sort({ chargedAt: -1, updatedAt: -1 });
+}
+
 async function shouldChargeForQuestion(userId, action, questionHash) {
-  return !!(userId && action && questionHash);
+  if (!userId || !action || !questionHash) return false;
+  const recentCompleted = await findRecentCompletedCreditUsage(userId, action, questionHash);
+  return !recentCompleted;
 }
 
 async function findActiveCreditClaim(userId, action, questionHash) {
@@ -459,11 +479,7 @@ async function claimCreditUsage(userId, action, questionHash, count = 1, attempt
 
   const existing = await CreditUsage.findOne({ dedupeKey });
   if (existing?.status === 'charged' || existing?.status === 'waived') {
-    if (attempt < 3) {
-      await freeCompletedCreditUsageDedupeKey(existing, 'next_charge');
-      return claimCreditUsage(userId, action, questionHash, count, attempt + 1);
-    }
-    throw new Error('Could not prepare a fresh credit claim.');
+    return { shouldCharge: false, duplicate: true, usage: existing };
   }
   if (existing?.status === 'claimed') {
     const claimAge = Date.now() - new Date(existing.createdAt || existing.claimedAt || 0).getTime();
@@ -503,18 +519,6 @@ function releasedDedupeKey(usage, reason = 'completed') {
   return `${usage.dedupeKey || usage._id}:${reason}:${usage._id}`;
 }
 
-async function freeCompletedCreditUsageDedupeKey(usage, reason = 'completed') {
-  if (!usage?._id) return;
-  try {
-    await CreditUsage.updateOne(
-      { _id: usage._id, status: { $in: ['charged', 'waived'] } },
-      { $set: { dedupeKey: releasedDedupeKey(usage, reason) } }
-    );
-  } catch (error) {
-    console.warn('[Credits] Could not release completed credit usage key:', error.message);
-  }
-}
-
 async function releaseCreditUsage(usage, reason = 'aborted', status = 'aborted') {
   if (!usage?._id) return;
   try {
@@ -537,8 +541,11 @@ async function releaseCreditUsage(usage, reason = 'aborted', status = 'aborted')
 
 async function beginCreditUsage(user, action, questionHash, shouldCharge, options = {}) {
   if (!shouldCharge) {
-    const freshUser = await User.findById(user._id);
-    return { ok: true, shouldCharge: false, user: freshUser || user };
+    const [freshUser, recentCompleted] = await Promise.all([
+      User.findById(user._id),
+      findRecentCompletedCreditUsage(user._id, action, questionHash)
+    ]);
+    return { ok: true, shouldCharge: false, duplicate: !!recentCompleted, user: freshUser || user };
   }
 
   const count = Math.max(parseInt(options.count, 10) || 1, 1);
@@ -669,6 +676,46 @@ function remainingFor(user) {
   return user?.getRemaining ? user.getRemaining() : 0;
 }
 
+function solveReplayKey(userId, action, questionHash) {
+  return `${userId}:${action}:${questionHash}`;
+}
+
+function pruneSolveReplays(now = Date.now()) {
+  for (const [key, entry] of recentSolveReplays) {
+    if (!entry || entry.expiresAt <= now || recentSolveReplays.size > RECENT_SOLVE_REPLAY_MAX) {
+      recentSolveReplays.delete(key);
+    }
+  }
+}
+
+function rememberSolveReplay(userId, action, questionHash, body) {
+  if (!userId || !action || !questionHash || !body?.success) return;
+  const now = Date.now();
+  pruneSolveReplays(now);
+  recentSolveReplays.set(solveReplayKey(userId, action, questionHash), {
+    expiresAt: now + CREDIT_DUPLICATE_REPLAY_WINDOW_MS,
+    body: { ...body }
+  });
+}
+
+async function getSolveReplay(userId, action, questionHash) {
+  const key = solveReplayKey(userId, action, questionHash);
+  const entry = recentSolveReplays.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    recentSolveReplays.delete(key);
+    return null;
+  }
+
+  const freshUser = await User.findById(userId);
+  return {
+    ...entry.body,
+    deduped: true,
+    replayed: true,
+    remaining: freshUser ? remainingFor(freshUser) : entry.body.remaining
+  };
+}
+
 
 
 async function normalizeCachedAnswer(cachedDoc, answer, type) {
@@ -703,7 +750,11 @@ async function chargeCachedAnswerHit(user, action, questionHash, options = {}) {
       return { ok: false, status: chargeResult.status, body: chargeResult.body };
     }
 
-    return { ok: true, user: chargeResult.user || creditUsage.user || user };
+    return {
+      ok: true,
+      user: chargeResult.user || creditUsage.user || user,
+      duplicate: !!chargeResult.duplicate
+    };
   } catch (error) {
     await abortCreditUsage(creditUsage);
     throw error;
@@ -854,6 +905,8 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       imageFingerprint
     };
     const questionHash = CachedAnswer.generateHash(snapshotQuestionData);
+    const replay = await getSolveReplay(user._id, 'solve-snapshot', questionHash);
+    if (replay) return res.json(replay);
 
     const cachedHit = await getCachedAnswerHit(snapshotQuestionData, questionHash, 'text');
     if (cachedHit) {
@@ -868,15 +921,18 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
         platform: req.body.platform || 'focusscan',
         questionImageBase64: imageData
       });
-      return res.json({
+      const body = {
         success: true,
         answer: cachedHit.answer,
         extractedQuestion: cachedHit.cachedDoc?.questionText || 'FocusScan image question',
         cached: true,
+        deduped: !!chargeResult.duplicate,
         remaining: remainingFor(responseUser),
         studyNoteSaved: !!studyNote,
         noteId: studyNote?._id || null
-      });
+      };
+      rememberSolveReplay(user._id, 'solve-snapshot', questionHash, body);
+      return res.json(body);
     }
 
     const chargeCredits = await shouldChargeForQuestion(user._id, 'solve-snapshot', questionHash);
@@ -904,15 +960,18 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       questionImageBase64: imageData
     });
 
-    res.json({
+    const body = {
       success: true,
       answer: solved.answer,
       extractedQuestion: solved.extractedQuestion,
       cached: false,
+      deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
-    });
+    };
+    rememberSolveReplay(user._id, 'solve-snapshot', questionHash, body);
+    res.json(body);
   } catch (error) {
     await abortCreditUsage(creditUsage);
     console.error('[Quiz] FocusScan error:', error.type || 'UNKNOWN', error.message);
@@ -934,6 +993,8 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 
     const questionHash = CachedAnswer.generateHash(questionData);
+    const replay = await getSolveReplay(user._id, 'solve', questionHash);
+    if (replay) return res.json(replay);
 
     const cachedHit = await getCachedAnswerHit(questionData, questionHash, questionData.type);
     if (cachedHit) {
@@ -943,14 +1004,17 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
       }
       const responseUser = chargeResult.user || user;
       const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, req.body);
-      return res.json({
+      const body = {
         success: true,
         answer: cachedHit.answer,
         cached: true,
+        deduped: !!chargeResult.duplicate,
         remaining: remainingFor(responseUser),
         studyNoteSaved: !!studyNote,
         noteId: studyNote?._id || null
-      });
+      };
+      rememberSolveReplay(user._id, 'solve', questionHash, body);
+      return res.json(body);
     }
 
     const chargeCredits = await shouldChargeForQuestion(user._id, 'solve', questionHash);
@@ -970,14 +1034,17 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     responseUser = chargeResult.user || responseUser;
     const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body);
 
-    res.json({
+    const body = {
       success: true,
       answer,
       cached: false,
+      deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
-    });
+    };
+    rememberSolveReplay(user._id, 'solve', questionHash, body);
+    res.json(body);
 
   } catch (error) {
     await abortCreditUsage(creditUsage);
@@ -1020,7 +1087,11 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
       preparedQuestions.push({ questionData, questionHash, cachedHit, chargeCredits });
     }
 
-    const creditsNeeded = preparedQuestions.filter(q => q.chargeCredits).length;
+    const chargeHashes = new Set();
+    for (const item of preparedQuestions) {
+      if (item.chargeCredits && item.questionHash) chargeHashes.add(item.questionHash);
+    }
+    const creditsNeeded = chargeHashes.size;
     let responseUser = user;
     const spendCheck = await userCanSpend(user, creditsNeeded);
     if (!spendCheck.allowed) {
@@ -1066,7 +1137,13 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
           }
           responseUser = chargeResult.user || responseUser;
           const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, { ...req.body, questionData });
-          results.push({ success: true, answer: cachedHit.answer, cached: true, noteId: studyNote?._id || null });
+          results.push({
+            success: true,
+            answer: cachedHit.answer,
+            cached: true,
+            deduped: !!chargeResult.duplicate,
+            noteId: studyNote?._id || null
+          });
           continue;
         }
 
@@ -1079,7 +1156,13 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
         }
         responseUser = chargeResult.user || responseUser;
         const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
-        results.push({ success: true, answer, cached: false, noteId: studyNote?._id || null });
+        results.push({
+          success: true,
+          answer,
+          cached: false,
+          deduped: !!chargeResult.duplicate,
+          noteId: studyNote?._id || null
+        });
 
       } catch (qErr) {
         await abortCreditUsage(itemCreditUsage);
@@ -1152,6 +1235,7 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     res.json({
       success: true,
       explanation,
+      deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
@@ -1220,6 +1304,7 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     res.json({
       success: true,
       followUp,
+      deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
       studyNoteSaved: !!studyNote,
       noteId: studyNote?._id || null
