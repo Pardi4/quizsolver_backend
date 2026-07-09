@@ -152,6 +152,18 @@ chmod +x /var/www/quizsolver/backend/deploy/backup-mongo.sh
 MONGO_URI='mongodb://quizsolver_admin:TWOJE_HASLO@127.0.0.1:27017/quizsolver?authSource=admin' /var/www/quizsolver/backend/deploy/backup-mongo.sh
 ```
 
+Pobranie backupu na PC z Windows (PowerShell):
+
+```powershell
+.\backend\deploy\download-mongo-backup.ps1 -Server TWOJ_IP_SERWERA -User root
+```
+
+Domyslnie plik trafi do:
+
+```text
+%USERPROFILE%\Downloads\quizsolver-mongo-backups
+```
+
 Cron codziennie o 03:20:
 
 ```bash

@@ -3,7 +3,7 @@ set -eu
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/quizsolver-mongo}"
 DB_NAME="${DB_NAME:-quizsolver}"
-MONGO_URI="${MONGO_URI:-mongodb://quizsolver_admin:CHANGE_ME_MONGO_PASSWORD@127.0.0.1:27017/quizsolver?authSource=admin}"
+MONGO_URI="${MONGO_URI:-${MONGODB_URI:-mongodb://quizsolver_admin:CHANGE_ME_MONGO_PASSWORD@127.0.0.1:27017/quizsolver?authSource=admin}}"
 
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/${DB_NAME}-$(date +%F-%H%M%S).archive.gz"
