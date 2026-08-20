@@ -324,6 +324,7 @@ router.post('/report-bug', async (req, res) => {
       userAgent: (req.headers['user-agent'] || '').substring(0, 300)
     });
 
+    // Intentional fire-and-forget: non-critical event logging
     ParserEvent.create({
       userId: req.user._id,
       eventType: 'manual-report',

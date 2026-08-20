@@ -1,15 +1,48 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const tokenBlacklist = new Set();
+const { getRedisClient, isConnected } = require('../utils/redis');
+
+// TODO: Replace in-memory Map with Redis (TTL = token expiry) for multi-instance deployments
+const inMemoryBlacklist = new Map();
 
 setInterval(() => {
-  if (tokenBlacklist.size > 5000) {
-    const entries = [...tokenBlacklist];
-    tokenBlacklist.clear();
-    entries.slice(-2500).forEach(t => tokenBlacklist.add(t));
+  const now = Math.floor(Date.now() / 1000);
+  for (const [token, exp] of inMemoryBlacklist.entries()) {
+    if (now >= exp) {
+      inMemoryBlacklist.delete(token);
+    }
+  }
+  if (inMemoryBlacklist.size > 20000) {
+    const entries = [...inMemoryBlacklist.entries()]
+      .sort((a, b) => a[1] - b[1])
+      .slice(10000);
+    inMemoryBlacklist.clear();
+    entries.forEach(([t, exp]) => inMemoryBlacklist.set(t, exp));
   }
 }, 3600000);
+
+async function checkBlacklist(token) {
+  if (isConnected()) {
+    try {
+      const exists = await getRedisClient().exists(`bl_${token}`);
+      return exists === 1;
+    } catch {}
+  }
+  return inMemoryBlacklist.has(token);
+}
+
+async function addToBlacklist(token, exp) {
+  if (isConnected()) {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const ttl = Math.max(1, exp - now);
+      await getRedisClient().setEx(`bl_${token}`, ttl, '1');
+      return;
+    } catch {}
+  }
+  inMemoryBlacklist.set(token, exp);
+}
 
 async function authMiddleware(req, res, next) {
   try {
@@ -20,7 +53,7 @@ async function authMiddleware(req, res, next) {
 
     const token = authHeader.split(' ')[1];
 
-    if (tokenBlacklist.has(token)) {
+    if (await checkBlacklist(token)) {
       return res.status(401).json({ error: 'Token has been revoked.' });
     }
 
@@ -34,6 +67,11 @@ async function authMiddleware(req, res, next) {
       if (tokenAgeDays > 30) {
         return res.status(401).json({ error: 'Token too old. Please log in again.' });
       }
+    }
+
+    const mongoose = require('mongoose');
+    if (!decoded.userId || !mongoose.Types.ObjectId.isValid(decoded.userId)) {
+      return res.status(401).json({ error: 'Invalid token payload.' });
     }
 
     const user = await User.findById(decoded.userId).select('-__v');
@@ -83,8 +121,36 @@ function generateToken(userId, rememberMe = true) {
   );
 }
 
-function revokeToken(token) {
-  tokenBlacklist.add(token);
+async function revokeToken(token) {
+  try {
+    const decoded = jwt.decode(token);
+    const exp = decoded?.exp || Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
+    await addToBlacklist(token, exp);
+  } catch (error) {
+    await addToBlacklist(token, Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60));
+  }
 }
 
-module.exports = { authMiddleware, adminOnly, generateToken, revokeToken };
+async function isTokenBlacklisted(token) {
+  return await checkBlacklist(token);
+}
+
+async function optionalAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) return next();
+
+    const token = authHeader.split(' ')[1];
+    if (await isTokenBlacklisted(token)) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      issuer: process.env.JWT_ISSUER || 'quizsolver-api',
+      audience: process.env.JWT_AUDIENCE || 'quizsolver-ext',
+    });
+    const user = await User.findById(decoded.userId).select('-__v');
+    if (user && !user.isBanned) req.user = user;
+  } catch {}
+  next();
+}
+
+module.exports = { authMiddleware, optionalAuth, adminOnly, generateToken, revokeToken, isTokenBlacklisted };

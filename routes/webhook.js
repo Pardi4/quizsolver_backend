@@ -81,30 +81,30 @@ function orderTotalUsd(attributes, packInfo) {
 }
 
 function resolvePack(payload) {
-  const custom = customData(payload);
   const attributes = orderAttributes(payload);
-
-  const customPack = String(custom.pack || '').trim();
-  const customCredits = parseInt(custom.credits, 10);
-
-  if (customPack && Number.isFinite(customCredits) && customCredits > 0) {
-    return {
-      id: customPack,
-      credits: customCredits,
-      price: 0
-    };
-  }
-
-  const byCredits = packFromCredits(customCredits);
-  if (byCredits) return byCredits;
-
+  const custom = customData(payload);
+  
+  // 1. Always prioritize the actual product variant purchased
   const byVariant = packFromLemonVariantId(orderVariantId(attributes));
   if (byVariant) return byVariant;
 
+  // 2. Fallback to amount paid
   const amountUsd = orderTotalUsd(attributes, null);
   if (amountUsd >= 9) return { id: 'pro', credits: 2000, price: 9.99 };
   if (amountUsd >= 4) return { id: 'popular', credits: 500, price: 4.99 };
   if (amountUsd >= 1) return { id: 'starter', credits: 100, price: 1.99 };
+  
+  // 3. Only if no price and no variant (e.g. manual admin invoice), trust custom data safely
+  const customPack = String(custom.pack || '').trim();
+  const customCredits = parseInt(custom.credits, 10);
+  if (customPack && Number.isFinite(customCredits) && customCredits > 0 && amountUsd >= (customCredits * 0.001)) {
+    return {
+      id: customPack,
+      credits: customCredits,
+      price: amountUsd
+    };
+  }
+
   return null;
 }
 
@@ -163,6 +163,19 @@ router.post('/lemonsqueezy', async (req, res) => {
     const externalOrderId = lemonOrderId ? `lemonsqueezy:${lemonOrderId}` : '';
 
     console.log(`[LemonSqueezy] Event: ${action}${externalOrderId ? ` (${externalOrderId})` : ''}`);
+
+    if (action === 'order_refunded' || action === 'order_chargebacked') {
+      if (externalOrderId) {
+        const existingPurchase = await Purchase.findOne({ externalOrderId });
+        if (existingPurchase && existingPurchase.creditsApplied) {
+          await Purchase.revokeCredits(existingPurchase);
+          console.log(`[LemonSqueezy] Revoked ${existingPurchase.credits} credits for refunded/chargebacked order: ${externalOrderId}`);
+        } else {
+          console.log(`[LemonSqueezy] Refund ignored - purchase not found or already revoked: ${externalOrderId}`);
+        }
+      }
+      return res.status(200).json({ received: true, action: 'revoked' });
+    }
 
     if (action !== 'order_created') {
       return res.status(200).json({ received: true, ignored: true });

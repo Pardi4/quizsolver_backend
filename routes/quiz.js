@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuth, isTokenBlacklisted } = require('../middleware/auth');
 const { quizLimiter } = require('../middleware/rateLimiter');
 const User = require('../models/User');
 const CachedAnswer = require('../models/CachedAnswer');
@@ -321,20 +321,7 @@ function serializeSharedAttempt(attempt, notes) {
   };
 }
 
-async function optionalAuth(req, res, next) {
-  try {
-    const authHeader = req.headers.authorization || '';
-    if (!authHeader.startsWith('Bearer ')) return next();
 
-    const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET, {
-      issuer: process.env.JWT_ISSUER || 'quizsolver-api',
-      audience: process.env.JWT_AUDIENCE || 'quizsolver-ext',
-    });
-    const user = await User.findById(decoded.userId).select('-__v');
-    if (user && !user.isBanned) req.user = user;
-  } catch {}
-  next();
-}
 
 function serializeStudyNote(note) {
   const options = (note.options || []).map(cleanQuizText);
@@ -593,17 +580,23 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
     return { ok: false, status: 404, body: { error: 'User not found.', limitReached: false, remaining: 0 } };
   }
 
-  const spendCheck = await userCanSpend(user, count);
-  if (!spendCheck.allowed) {
+  const lockedUser = await User.findOneAndUpdate(
+    { _id: user._id, role: { $ne: 'admin' }, credits: { $gte: count } },
+    { $inc: { credits: -count } },
+    { new: true }
+  );
+
+  if (!lockedUser) {
     await releaseCreditUsage(claim.usage, 'no_credits', 'declined');
+    const freshUser = await User.findById(user._id);
     return {
       ok: false,
       status: 429,
-      body: { error: 'No credits remaining.', limitReached: true, remaining: spendCheck.user?.getRemaining?.() || 0 }
+      body: { error: 'No credits remaining.', limitReached: true, remaining: remainingFor(freshUser) }
     };
   }
 
-  return { ok: true, shouldCharge: true, usage: claim.usage, user: spendCheck.user || user, count };
+  return { ok: true, shouldCharge: true, usage: claim.usage, user: lockedUser, count };
 }
 
 async function completeCreditUsage(user, creditUsage, options = {}) {
@@ -632,10 +625,9 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
   }
 
   const chargedUser = await User.findOneAndUpdate(
-    { _id: user._id, role: { $ne: 'admin' }, credits: { $gte: count } },
+    { _id: user._id, role: { $ne: 'admin' } },
     {
       $inc: {
-        credits: -count,
         'stats.totalQuestionsSolved': count,
         'stats.totalCreditsSpent': count
       }
@@ -644,8 +636,8 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
   );
 
   if (!chargedUser) {
-    await releaseCreditUsage(creditUsage.usage, 'no_credits_at_charge', 'declined');
-    return { ok: false, status: 429, body: { error: 'No credits remaining.', limitReached: true, remaining: 0 } };
+    await releaseCreditUsage(creditUsage.usage, 'user_not_found_at_charge', 'declined');
+    return { ok: false, status: 404, body: { error: 'User not found.', limitReached: false, remaining: 0 } };
   }
 
   await markCreditUsage(creditUsage.usage, {
@@ -668,6 +660,13 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
 
 async function abortCreditUsage(creditUsage) {
   if (creditUsage?.shouldCharge && creditUsage.usage) {
+    if (!creditUsage.adminWaive) {
+      const count = Math.max(parseInt(creditUsage.count, 10) || 1, 1);
+      await User.updateOne(
+        { _id: creditUsage.user._id, role: { $ne: 'admin' } },
+        { $inc: { credits: count } }
+      );
+    }
     await releaseCreditUsage(creditUsage.usage, 'processing_failed', 'aborted');
   }
 }
@@ -1081,8 +1080,11 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
       }
 
       const questionHash = CachedAnswer.generateHash(questionData);
-      const cachedHit = await getCachedAnswerHit(questionData, questionHash, questionData.type);
-      const chargeCredits = await shouldChargeForQuestion(user._id, 'solve', questionHash);
+      // Parallelize cache lookup and charge check per question
+      const [cachedHit, chargeCredits] = await Promise.all([
+        getCachedAnswerHit(questionData, questionHash, questionData.type),
+        shouldChargeForQuestion(user._id, 'solve', questionHash)
+      ]);
 
       preparedQuestions.push({ questionData, questionHash, cachedHit, chargeCredits });
     }

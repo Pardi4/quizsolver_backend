@@ -316,7 +316,8 @@ router.post('/verify-email', authLimiter, async (req, res) => {
     await user.save();
     const token = generateToken(user._id, rememberMe);
     res.json({ success: true, token, user: user.toPublicJSON() });
-  } catch {
+  } catch (error) {
+    console.error('verify-email error:', error.message || error);
     res.status(500).json({ error: 'Could not verify email.' });
   }
 });
@@ -334,7 +335,8 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
       mailDisabled: !!verification.delivery.disabled,
       devCode: shouldExposeDevCode() || verification.delivery.disabled ? verification.code : undefined
     });
-  } catch {
+  } catch (error) {
+    console.error('resend-verification error:', error.message || error);
     res.status(500).json({ error: 'Could not resend verification code.' });
   }
 });
@@ -354,7 +356,8 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
       });
     }
     res.json({ success: true, message: 'If the account exists, a reset code was sent.' });
-  } catch {
+  } catch (error) {
+    console.error('forgot-password error:', error.message || error);
     res.status(500).json({ error: 'Could not start password reset.' });
   }
 });
@@ -384,7 +387,8 @@ router.post('/reset-password', authLimiter, async (req, res) => {
     }
     await user.save();
     res.json({ success: true, message: 'Password updated.' });
-  } catch {
+  } catch (error) {
+    console.error('reset-password error:', error.message || error);
     res.status(500).json({ error: 'Could not reset password.' });
   }
 });
@@ -538,8 +542,10 @@ router.post('/extension-heartbeat', authMiddleware, async (req, res) => {
 
 router.post('/logout', authMiddleware, async (req, res) => {
   try {
-    revokeToken(req.token);
-    res.json({ success: true, message: 'Logged out.' });
+    if (req.token) {
+      await revokeToken(req.token);
+    }
+    res.json({ success: true, message: 'Logged out successfully.' });
   } catch (error) {
     res.status(500).json({ error: 'Logout error.' });
   }

@@ -179,38 +179,40 @@ function serializeParserEvent(event) {
 
 router.get('/stats', async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const adminUsers = await User.countDocuments({ role: 'admin' });
-    const cachedAnswers = await CachedAnswer.countDocuments();
-    const totalPurchases = await Purchase.countDocuments();
-    const totalBugReports = await BugReport.countDocuments();
-    const unreadBugReports = await BugReport.countDocuments({ $and: [{ isRead: false }, { isRead: { $exists: true } }] });
-    const openSupportMessages = await SupportMessage.countDocuments({ status: { $ne: 'closed' } });
-    const unreadSupportMessages = await SupportMessage.countDocuments({ isRead: false });
-
-    const totalQuestionsAgg = await User.aggregate([{ $group: { _id: null, total: { $sum: '$stats.totalQuestionsSolved' } } }]);
-    const totalQuestions = totalQuestionsAgg[0]?.total || 0;
-
-    const totalCreditsAgg = await User.aggregate([{ $group: { _id: null, total: { $sum: '$credits' } } }]);
-    const totalCreditsInSystem = totalCreditsAgg[0]?.total || 0;
-
-    const revenueAgg = await Purchase.aggregate([{ $match: { paymentProvider: { $in: paidProviders } } }, { $group: { _id: null, total: { $sum: '$priceUsd' } } }]);
-    const totalRevenue = revenueAgg[0]?.total || 0;
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayPurchases = await Purchase.countDocuments({ createdAt: { $gte: today } });
-
     const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthRevenueAgg = await Purchase.aggregate([
-      { $match: { paymentProvider: { $in: paidProviders }, createdAt: { $gte: thisMonth } } },
-      { $group: { _id: null, total: { $sum: '$priceUsd' } } }
+
+    const [
+      totalUsers, adminUsers, cachedAnswers, totalPurchases,
+      totalBugReports, unreadBugReports, openSupportMessages, unreadSupportMessages,
+      totalQuestionsAgg, totalCreditsAgg, revenueAgg,
+      todayPurchases, monthRevenueAgg, bannedUsers, recentUsers
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ role: 'admin' }),
+      CachedAnswer.countDocuments(),
+      Purchase.countDocuments(),
+      BugReport.countDocuments(),
+      BugReport.countDocuments({ $and: [{ isRead: false }, { isRead: { $exists: true } }] }),
+      SupportMessage.countDocuments({ status: { $ne: 'closed' } }),
+      SupportMessage.countDocuments({ isRead: false }),
+      User.aggregate([{ $group: { _id: null, total: { $sum: '$stats.totalQuestionsSolved' } } }]),
+      User.aggregate([{ $group: { _id: null, total: { $sum: '$credits' } } }]),
+      Purchase.aggregate([{ $match: { paymentProvider: { $in: paidProviders } } }, { $group: { _id: null, total: { $sum: '$priceUsd' } } }]),
+      Purchase.countDocuments({ createdAt: { $gte: today } }),
+      Purchase.aggregate([
+        { $match: { paymentProvider: { $in: paidProviders }, createdAt: { $gte: thisMonth } } },
+        { $group: { _id: null, total: { $sum: '$priceUsd' } } }
+      ]),
+      User.countDocuments({ isBanned: true }),
+      User.find().sort({ createdAt: -1 }).limit(10).select('email displayName role credits stats createdAt isBanned')
     ]);
+
+    const totalQuestions = totalQuestionsAgg[0]?.total || 0;
+    const totalCreditsInSystem = totalCreditsAgg[0]?.total || 0;
+    const totalRevenue = revenueAgg[0]?.total || 0;
     const monthRevenue = monthRevenueAgg[0]?.total || 0;
-
-    const bannedUsers = await User.countDocuments({ isBanned: true });
-
-    const recentUsers = await User.find().sort({ createdAt: -1 }).limit(10).select('email displayName role credits stats createdAt isBanned');
 
     res.json({
       success: true,
@@ -282,6 +284,9 @@ router.patch('/users/:userId/role', async (req, res) => {
   try {
     const { role } = req.body;
     if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role.' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(400).json({ error: 'Invalid user ID.' });
+    }
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
     if (user._id.toString() === req.user._id.toString() && role !== 'admin') return res.status(400).json({ error: 'Cannot remove your own admin role.' });
@@ -297,6 +302,7 @@ router.patch('/users/:userId/role', async (req, res) => {
 
 router.post('/users/:userId/grant-credits', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ error: 'Invalid user ID.' });
     const { credits, reason } = req.body;
     const amount = Math.min(parseInt(credits) || 0, 10000);
     if (amount <= 0) return res.status(400).json({ error: 'Credits must be > 0.' });
@@ -316,6 +322,7 @@ router.post('/users/:userId/grant-credits', async (req, res) => {
 
 router.post('/users/:userId/quick-grant', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ error: 'Invalid user ID.' });
     const { amount } = req.body;
     const allowed = [50, 100, 200, 500];
     if (!allowed.includes(parseInt(amount))) {
@@ -336,6 +343,7 @@ router.post('/users/:userId/quick-grant', async (req, res) => {
 
 router.post('/users/:userId/ban', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ error: 'Invalid user ID.' });
     if (req.params.userId === req.user._id.toString()) return res.status(400).json({ error: 'Cannot ban yourself.' });
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
@@ -350,6 +358,7 @@ router.post('/users/:userId/ban', async (req, res) => {
 
 router.post('/users/:userId/unban', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ error: 'Invalid user ID.' });
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
     user.isBanned = false;
@@ -732,9 +741,18 @@ router.delete('/parser/events', async (req, res) => {
 
 router.delete('/parser/events/all', async (req, res) => {
   try {
-    const result = await ParserEvent.deleteMany({});
-    auditLog(req.user, 'PARSER_EVENTS_CLEAR_ALL', { deleted: result.deletedCount || 0 });
-    res.json({ success: true, deleted: result.deletedCount || 0 });
+    let totalDeleted = 0;
+    const BATCH_SIZE = 10000;
+    // Delete in batches to avoid locking the database with very large collections
+    let batch;
+    do {
+      const ids = await ParserEvent.find({}, { _id: 1 }).limit(BATCH_SIZE).lean();
+      if (ids.length === 0) break;
+      batch = await ParserEvent.deleteMany({ _id: { $in: ids.map(d => d._id) } });
+      totalDeleted += batch.deletedCount || 0;
+    } while (batch.deletedCount >= BATCH_SIZE);
+    auditLog(req.user, 'PARSER_EVENTS_CLEAR_ALL', { deleted: totalDeleted });
+    res.json({ success: true, deleted: totalDeleted });
   } catch (error) {
     res.status(500).json({ error: 'Error clearing parser events.' });
   }
@@ -810,6 +828,7 @@ router.get('/support/messages', async (req, res) => {
 
 router.patch('/support/messages/:messageId', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.messageId)) return res.status(400).json({ error: 'Invalid ID.' });
     const patch = {};
     if (['open', 'pending', 'closed'].includes(req.body.status)) patch.status = req.body.status;
     if (typeof req.body.isRead === 'boolean') patch.isRead = req.body.isRead;
@@ -824,6 +843,7 @@ router.patch('/support/messages/:messageId', async (req, res) => {
 
 router.post('/support/messages/:messageId/reply', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.messageId)) return res.status(400).json({ error: 'Invalid ID.' });
     const message = await SupportMessage.findById(req.params.messageId);
     if (!message) return res.status(404).json({ error: 'Support message not found.' });
     const text = String(req.body.text || '').trim().substring(0, 10000);
@@ -1250,4 +1270,90 @@ router.get('/system/health', async (req, res) => {
   }
 });
 
+router.get('/client-errors', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    
+    const ClientError = require('../models/ClientError');
+    const [errors, total] = await Promise.all([
+      ClientError.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('user', 'email displayName')
+        .lean(),
+      ClientError.countDocuments()
+    ]);
+
+    res.json({
+      success: true,
+      errors: errors.map(e => ({
+        id: e._id,
+        message: e.message,
+        stack: e.stack,
+        url: e.url,
+        source: e.source,
+        userAgent: e.userAgent,
+        version: e.version,
+        user: e.user ? { id: e.user._id, email: e.user.email, displayName: e.user.displayName } : null,
+        createdAt: e.createdAt
+      })),
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load client errors.' });
+  }
+});
+
+router.delete('/client-errors/:id', async (req, res) => {
+  try {
+    const ClientError = require('../models/ClientError');
+    await ClientError.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete client error.' });
+  }
+});
+
 module.exports = router;
+
+router.get('/chart-stats', async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const Purchase = require('../models/Purchase');
+    const User = require('../models/User');
+    
+    const [purchases, users] = await Promise.all([
+      Purchase.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { 
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            revenue: { $sum: '$priceUsd' },
+            credits: { $sum: '$credits' }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]),
+      User.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { 
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            signups: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+    ]);
+    
+    res.json({ success: true, purchases, users });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching chart stats' });
+  }
+});

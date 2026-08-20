@@ -157,6 +157,8 @@ const STATIC_OPTIONS = {
 
 app.set('trust proxy', 1);
 connectDB();
+const { connectRedis } = require('./utils/redis');
+connectRedis();
 
 function normalizeAdminRoutePath(value) {
   const routePath = String(value || '').trim().replace(/^\/+|\/+$/g, '');

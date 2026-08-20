@@ -99,13 +99,50 @@ purchaseSchema.statics.applyCredits = async function(purchaseOrId) {
   return purchase;
 };
 
+purchaseSchema.statics.revokeCredits = async function(purchaseOrId) {
+  const User = require('./User');
+  const purchase = typeof purchaseOrId === 'object' && purchaseOrId?._id
+    ? purchaseOrId
+    : await this.findById(purchaseOrId);
+
+  if (!purchase) throw new Error('Purchase not found.');
+  if (purchase.creditsApplied === false) return purchase;
+
+  const updatedUser = await User.findOneAndUpdate(
+    {
+      _id: purchase.userId,
+      appliedCreditPurchases: purchase._id
+    },
+    {
+      $inc: {
+        credits: -purchase.credits,
+        'stats.totalCreditsPurchased': -purchase.credits
+      },
+      $pull: { appliedCreditPurchases: purchase._id }
+    },
+    { new: true }
+  );
+
+  if (!updatedUser) {
+    throw new Error('Could not revoke credits from user. Perhaps already revoked?');
+  }
+
+  if (purchase.creditsApplied) {
+    purchase.creditsApplied = false;
+    purchase.creditsAppliedAt = null;
+    await purchase.save();
+  }
+
+  return purchase;
+};
+
 purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, details = {}) {
   const User = require('./User');
   const normalizedCredits = Math.max(parseInt(credits, 10) || 0, 0);
   if (!normalizedCredits) throw new Error('Credits must be greater than 0.');
 
-  const userExists = await User.exists({ _id: userId });
-  if (!userExists) throw new Error('User not found for credit purchase.');
+  const buyer = await User.findById(userId);
+  if (!buyer) throw new Error('User not found for credit purchase.');
 
   const purchaseData = {
     userId,
@@ -132,7 +169,28 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
     if (!purchase) throw error;
   }
 
-  return this.applyCredits(purchase);
+  const result = await this.applyCredits(purchase);
+
+  // Referral gamification: give 10% of credits to the referrer
+  if (purchase.creditsApplied && buyer.referredBy && pack !== 'referral_bonus' && normalizedCredits > 0) {
+    try {
+      const bonusCredits = Math.max(1, Math.floor(normalizedCredits * 0.10));
+      const bonusPurchase = await this.create({
+        userId: buyer.referredBy,
+        pack: 'referral_bonus',
+        credits: bonusCredits,
+        priceUsd: 0,
+        paymentProvider: 'referral',
+        grantReason: `Referral bonus from purchase ${purchaseData.externalOrderId || 'unknown'} by ${buyer.email}`
+      });
+      await this.applyCredits(bonusPurchase);
+      console.log(`[Referral] Granted ${bonusCredits} bonus credits to referrer ${buyer.referredBy}`);
+    } catch (err) {
+      console.error('[Referral] Failed to grant referral bonus:', err);
+    }
+  }
+
+  return result;
 };
 
 module.exports = mongoose.model('Purchase', purchaseSchema);

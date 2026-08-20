@@ -366,11 +366,13 @@ async function requestChatCompletion(body) {
     }
     throw new AIError('MODEL_ERROR', message || 'AI request failed.');
   }
-}
+const pLimit = require('p-limit');
+const aiConcurrencyLimit = pLimit(20);
 
 async function callAIWithModel(questionData, model, imageDetail = 'low') {
-  const { type, imageUrl, text, options } = questionData;
-  const body = {
+  return aiConcurrencyLimit(async () => {
+    const { type, imageUrl, text, options } = questionData;
+    const body = {
     model,
     temperature: 0,
     max_completion_tokens: getMaxTokens(type),
@@ -389,6 +391,7 @@ async function callAIWithModel(questionData, model, imageDetail = 'low') {
       ? questionData.rows.length
       : null;
   return parseAnswer(raw, type, options, expectedCount);
+  });
 }
 
 async function callAI(questionData) {

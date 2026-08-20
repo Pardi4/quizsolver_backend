@@ -221,4 +221,28 @@ router.post('/contact', async (req, res) => {
   }
 });
 
+const ClientError = require('../models/ClientError');
+const { optionalAuth } = require('../middleware/auth');
+
+router.post('/client-error', optionalAuth, async (req, res) => {
+  try {
+    const errorData = {
+      message: String(req.body.message || 'Unknown error').substring(0, 1000),
+      stack: String(req.body.stack || '').substring(0, 5000),
+      url: String(req.body.url || '').substring(0, 1000),
+      source: ['extension', 'frontend'].includes(req.body.source) ? req.body.source : 'other',
+      userAgent: String(req.headers['user-agent'] || '').substring(0, 500),
+      version: String(req.body.version || 'unknown').substring(0, 50)
+    };
+    if (req.user) errorData.user = req.user._id;
+    
+    await ClientError.create(errorData);
+    res.status(201).json({ success: true });
+  } catch (err) {
+    // Fail silently to not disrupt the client
+    console.error('[Support] Could not save client error:', err.message);
+    res.status(201).json({ success: false });
+  }
+});
+
 module.exports = router;

@@ -128,6 +128,7 @@ userSchema.methods.resetFreeCreditsIfNeeded = function() {
 };
 
 userSchema.methods.updateStreak = function() {
+  // NOTE: Uses UTC date. Streaks reset at midnight UTC, not user's local timezone.
   const today = new Date().toISOString().slice(0, 10);
   if (this.streak.lastSolveDate === today) return;
 
