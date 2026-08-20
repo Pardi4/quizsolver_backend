@@ -76,6 +76,7 @@ const OUTPUT_CONTRACTS = {
   checkbox: 'Type checkbox means multiple answers may be correct. Return every correct zero-based option index, comma-separated, in ascending order. Example: 0,2,3. If exactly one option is correct, return one index only.',
   matching: 'Type matching means each item must be matched to one option/dropdown value. Return a JSON array of zero-based option indices, one number per item, in item order. Example: [2,0,1].',
   matrix: 'Type matrix means each row must choose one column. Return a JSON array of zero-based column indices, one number per row, in row order. Example: [1,0,3].',
+  ordering: 'Type ordering means the options must be placed in a specific correct sequence. Return a JSON array of zero-based option indices representing the correct sorted order, from first/earliest to last/latest. Example: [2,0,1].',
   text: 'Type text means free-text answer. Return the shortest useful final answer only. No final period. If the question asks what an acronym stands for, return only the expanded phrase in lowercase unless proper nouns require capitals.',
   radio: 'Type radio means exactly one answer is correct. Return the single zero-based option index. Example: 2.'
 };
@@ -484,6 +485,7 @@ function answerTextForPrompt(options, answer, type, meta = {}) {
   let answerText = '';
   if (type === 'radio' && options) answerText = options[answer] || String(answer);
   else if (type === 'checkbox' && options && Array.isArray(answer)) answerText = answer.map(i => options[i] || i).join(', ');
+  else if (type === 'ordering' && options && Array.isArray(answer)) answerText = answer.map((idx, i) => `${i + 1}. ${options[idx] || idx}`).join('\n');
   else if ((type === 'matching' || type === 'matrix') && Array.isArray(answer)) {
     const labels = type === 'matching' ? (meta.prompts || []) : (meta.rows || []);
     answerText = answer.map((idx, i) => {
