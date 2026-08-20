@@ -10,12 +10,12 @@ async function connectRedis() {
     url: process.env.REDIS_URL  
   });  
   
-  redisClient.on('error', (err) = 
+  redisClient.on('error', (err) => {
     console.error('[Redis] Error:', err.message);  
     isRedisConnected = false;  
   });  
   
-  redisClient.on('connect', () = 
+  redisClient.on('connect', () => {
     console.log('[Redis] Connected successfully.');  
     isRedisConnected = true;  
   });  
