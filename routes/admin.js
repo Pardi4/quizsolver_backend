@@ -1321,6 +1321,40 @@ router.delete('/client-errors/:id', async (req, res) => {
   }
 });
 
+router.post('/users/:id/quick-grant', async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid credits amount' });
+    const Purchase = require('../models/Purchase');
+    const result = await Purchase.recordPurchase(req.params.id, 'admin_grant', amount, {
+      priceUsd: 0,
+      paymentProvider: 'manual',
+      grantedBy: req.user._id,
+      grantReason: 'Admin quick grant'
+    });
+    res.json({ success: true, purchase: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/users/:id/grant-credits', async (req, res) => {
+  try {
+    const { credits, reason } = req.body;
+    if (!credits || credits <= 0) return res.status(400).json({ error: 'Invalid credits amount' });
+    const Purchase = require('../models/Purchase');
+    const result = await Purchase.recordPurchase(req.params.id, 'admin_grant', credits, {
+      priceUsd: 0,
+      paymentProvider: 'manual',
+      grantedBy: req.user._id,
+      grantReason: reason || 'Admin manual grant'
+    });
+    res.json({ success: true, purchase: result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 
 router.get('/chart-stats', async (req, res) => {
