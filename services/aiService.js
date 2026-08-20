@@ -367,7 +367,7 @@ async function requestChatCompletion(body) {
     throw new AIError('MODEL_ERROR', message || 'AI request failed.');
   }
 }
-const pLimit = require('p-limit');
+const pLimit = require('p-limit').default || require('p-limit');
 const aiConcurrencyLimit = pLimit(20);
 
 async function callAIWithModel(questionData, model, imageDetail = 'low') {

@@ -63,8 +63,8 @@ const storeGenerator = () => {
   };
 };
 
-// We will use standard store for simplicity but initialize the client gracefully
-const store = new RedisStore({
+const createStore = (prefix) => new RedisStore({
+  prefix,
   sendCommand: (...args) => {
     if (!isConnected()) return Promise.resolve(null);
     return getRedisClient().sendCommand(args);
@@ -73,62 +73,68 @@ const store = new RedisStore({
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store,
+  store: createStore('rl_general_'),
   max: (req) => isQuizSolveEndpoint(req) ? QUIZ_REQUESTS_PER_MINUTE : 40,
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  store,
+  store: createStore('rl_auth_'),
   max: 5,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 const quizLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store,
+  store: createStore('rl_quiz_'),
   max: QUIZ_REQUESTS_PER_MINUTE,
   message: { error: 'Too many quiz requests. Please wait a moment.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 const webhookLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store,
+  store: createStore('rl_webhook_'),
   max: 100,
   message: { error: 'Too many webhook requests.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 const adminLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store,
+  store: createStore('rl_admin_'),
   max: 300,
   message: { error: 'Too many admin requests.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 const parserSnapshotLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  store,
+  store: createStore('rl_parser_'),
   max: 10,
   message: { error: 'Too many parser snapshots uploaded from this IP.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
+  validate: { xForwardedForHeader: false, trustProxy: false }
 });
 
 module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };
