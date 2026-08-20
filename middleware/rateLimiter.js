@@ -78,7 +78,7 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 const authLimiter = rateLimit({
@@ -88,7 +88,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 const quizLimiter = rateLimit({
@@ -98,7 +98,7 @@ const quizLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 const webhookLimiter = rateLimit({
@@ -108,7 +108,7 @@ const webhookLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 const adminLimiter = rateLimit({
@@ -118,7 +118,7 @@ const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKeyGenerator,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 const parserSnapshotLimiter = rateLimit({
@@ -128,7 +128,7 @@ const parserSnapshotLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
-  validate: { ip: false, xForwardedForHeader: false, trustProxy: false }
+  validate: false
 });
 
 module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };
