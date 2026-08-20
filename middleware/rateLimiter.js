@@ -73,7 +73,6 @@ const createStore = (prefix) => new RedisStore({
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store: createStore('rl_general_'),
   max: (req) => isQuizSolveEndpoint(req) ? QUIZ_REQUESTS_PER_MINUTE : 40,
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
@@ -84,7 +83,6 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  store: createStore('rl_auth_'),
   max: 5,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
@@ -95,7 +93,6 @@ const authLimiter = rateLimit({
 
 const quizLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store: createStore('rl_quiz_'),
   max: QUIZ_REQUESTS_PER_MINUTE,
   message: { error: 'Too many quiz requests. Please wait a moment.' },
   standardHeaders: true,
@@ -106,7 +103,6 @@ const quizLimiter = rateLimit({
 
 const webhookLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store: createStore('rl_webhook_'),
   max: 100,
   message: { error: 'Too many webhook requests.' },
   standardHeaders: true,
@@ -117,7 +113,6 @@ const webhookLimiter = rateLimit({
 
 const adminLimiter = rateLimit({
   windowMs: 60 * 1000,
-  store: createStore('rl_admin_'),
   max: 300,
   message: { error: 'Too many admin requests.' },
   standardHeaders: true,
@@ -128,7 +123,6 @@ const adminLimiter = rateLimit({
 
 const parserSnapshotLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  store: createStore('rl_parser_'),
   max: 10,
   message: { error: 'Too many parser snapshots uploaded from this IP.' },
   standardHeaders: true,
