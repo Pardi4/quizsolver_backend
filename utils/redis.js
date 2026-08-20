@@ -6,6 +6,11 @@ let isRedisConnected = false;
 async function connectRedis() {  
   if (redisClient) return redisClient;  
   
+  if (!process.env.REDIS_URL) {
+    console.log('[Redis] No REDIS_URL provided. Skipping Redis connection.');
+    return null;
+  }
+
   redisClient = createClient({  
     url: process.env.REDIS_URL  
   });  
