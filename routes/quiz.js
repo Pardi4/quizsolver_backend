@@ -1,3 +1,4 @@
+const pLimit = require('p-limit');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
@@ -926,7 +927,7 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
         extractedQuestion: cachedHit.cachedDoc?.questionText || 'FocusScan image question',
         cached: true,
         deduped: !!chargeResult.duplicate,
-        remaining: remainingFor(responseUser),
+        remaining: remainingFor(finalUser),
         studyNoteSaved: !!studyNote,
         noteId: studyNote?._id || null
       };
@@ -1106,80 +1107,66 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     }
     responseUser = spendCheck.user || user;
 
-    const results = [];
+    
+    const pLimit = require('p-limit');
+    const limit = pLimit(10); // Process up to 10 AI calls concurrently
 
-    for (const item of preparedQuestions) {
+    const results = await Promise.all(preparedQuestions.map((item) => limit(async () => {
       const { questionData, questionHash, chargeCredits, invalidError } = item;
       if (invalidError) {
-        results.push({ success: false, ...serializeQuestionPayloadError(invalidError) });
-        continue;
+        return { success: false, ...serializeQuestionPayloadError(invalidError) };
       }
 
       let itemCreditUsage = null;
-
       try {
         itemCreditUsage = await beginCreditUsage(user, 'solve', questionHash, chargeCredits);
         if (!itemCreditUsage.ok) {
-          results.push({
+          return {
             success: false,
             error: itemCreditUsage.body?.error || 'No credits remaining.',
             limitReached: !!itemCreditUsage.body?.limitReached,
             remaining: itemCreditUsage.body?.remaining || 0
-          });
-          continue;
+          };
         }
-        responseUser = itemCreditUsage.user || responseUser;
 
         const cachedHit = item.cachedHit || await getCachedAnswerHit(questionData, questionHash, questionData.type);
         if (cachedHit) {
           const chargeResult = await completeCreditUsage(user, itemCreditUsage);
           if (!chargeResult.ok) {
-            results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
-            continue;
+            return { success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached };
           }
-          responseUser = chargeResult.user || responseUser;
           const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, { ...req.body, questionData });
-          results.push({
+          return {
             success: true,
             answer: cachedHit.answer,
             cached: true,
             deduped: !!chargeResult.duplicate,
             noteId: studyNote?._id || null
-          });
-          continue;
+          };
         }
 
         const answer = await callAI(questionData);
         const cachedDoc = await CachedAnswer.cacheAnswer(questionData, answer);
         const chargeResult = await completeCreditUsage(user, itemCreditUsage);
         if (!chargeResult.ok) {
-          results.push({ success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached });
-          continue;
+          return { success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached };
         }
-        responseUser = chargeResult.user || responseUser;
         const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
-        results.push({
+        return {
           success: true,
           answer,
           cached: false,
           deduped: !!chargeResult.duplicate,
           noteId: studyNote?._id || null
-        });
-
-      } catch (qErr) {
+        };
+      } catch (error) {
         await abortCreditUsage(itemCreditUsage);
-        results.push({ success: false, ...aiErrorResponse(qErr) });
+        console.error('[Quiz] Batch item error:', error.message);
+        return { success: false, error: 'Processing failed.' };
       }
-    }
+    })));
 
-    const finalUser = await User.findById(user._id);
-    if (finalUser) {
-      finalUser.stats.totalQuizzesSolved += 1;
-      finalUser.updateStreak();
-      await finalUser.save();
-      responseUser = finalUser;
-    }
-
+    const finalUser = await User.findById(user._id) || user;
     res.json({ success: true, results, remaining: remainingFor(responseUser) });
 
   } catch (error) {
