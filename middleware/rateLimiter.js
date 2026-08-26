@@ -8,7 +8,7 @@ const requestIp = (req) => req.ip || req.connection?.remoteAddress || req.socket
 const userKeyGenerator = (req) => {
   if (req.user && req.user._id) return `user_${req.user._id}`;
   
-  
+  // Extract userId from JWT if available (fast decode, no verify needed just for rate limit keying)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
@@ -29,7 +29,7 @@ const isQuizSolveEndpoint = (req) => quizSolveEndpointPattern.test(req.originalU
 const { RedisStore } = require('rate-limit-redis');
 const { getRedisClient, isConnected } = require('../utils/redis');
 
-
+// TODO: Use rate-limit-redis store for production multi-instance deployments
 const storeGenerator = () => {
   return {
     ...new RedisStore({
@@ -42,7 +42,7 @@ const storeGenerator = () => {
         });
         return store.increment(key);
       }
-      return { totalHits: 0, resetTime: new Date() }; 
+      return { totalHits: 0, resetTime: new Date() }; // Fail-open fallback
     },
     decrement: async (key) => {
       if (isConnected()) {
@@ -131,14 +131,4 @@ const parserSnapshotLimiter = rateLimit({
   validate: false
 });
 
-const qrLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 15,
-  message: { error: 'Too many QR requests.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: requestIp,
-  validate: false
-});
-
-module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter, qrLimiter };
+module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };

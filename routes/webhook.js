@@ -94,7 +94,7 @@ function resolvePack(payload) {
   if (amountUsd >= 4) return { id: 'popular', credits: 500, price: 4.99 };
   if (amountUsd >= 1) return { id: 'starter', credits: 100, price: 1.99 };
   
-  
+  // 3. Only if no price and no variant (e.g. manual admin invoice), trust custom data safely
   const customPack = String(custom.pack || '').trim();
   const customCredits = parseInt(custom.credits, 10);
   if (customPack && Number.isFinite(customCredits) && customCredits > 0 && amountUsd >= (customCredits * 0.001)) {

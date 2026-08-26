@@ -743,7 +743,7 @@ router.delete('/parser/events/all', async (req, res) => {
   try {
     let totalDeleted = 0;
     const BATCH_SIZE = 10000;
-    
+    // Delete in batches to avoid locking the database with very large collections
     let batch;
     do {
       const ids = await ParserEvent.find({}, { _id: 1 }).limit(BATCH_SIZE).lean();

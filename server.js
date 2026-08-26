@@ -25,7 +25,7 @@ const ADMIN_PORT = parseInt(process.env.ADMIN_PORT, 10) || 40583;
 const ADMIN_HOST = process.env.ADMIN_HOST || '127.0.0.1';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
-const CHROME_WEB_STORE_URL = 'https:
+const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/quiz-solver-pro/cjchfdnplpjkihigljnicebnhjkpndik';
 const ANGULAR_BROWSER_DIR = path.join(__dirname, '..', 'frontend', 'dist', 'angular-web', 'browser');
 const ANGULAR_INDEX = path.join(ANGULAR_BROWSER_DIR, 'index.html');
 const HAS_ANGULAR_BUILD = fs.existsSync(ANGULAR_INDEX);
@@ -230,9 +230,9 @@ function publicRequestScheme(req) {
     .toLowerCase();
   if (rawForwardedProto === 'https') return 'https';
 
-  
-  
-  
+  // Cloudflare Tunnel/Flexible SSL can reach the origin over HTTP even when the
+  // public request is already HTTPS. In that topology, redirecting only because
+  // the origin hop is HTTP creates the GSC "redirect error" loop.
   if (req.headers['cf-ray'] || req.headers['cf-connecting-ip']) return 'https';
 
   if (rawForwardedProto) return rawForwardedProto;
@@ -274,7 +274,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", 'data:'],
-      
+      // Angular prerender output contains inline hydration scripts and a CSS onload handler.
       scriptSrc: ["'self'", "'unsafe-inline'"],
       scriptSrcAttr: ["'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],

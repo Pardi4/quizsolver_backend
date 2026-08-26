@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const MAX_IMAGE_BASE64 = 2 * 1024 * 1024; 
+const MAX_IMAGE_BASE64 = 2 * 1024 * 1024; // 2MB base64 string (~1.5MB actual image)
 
 const studyNoteSchema = new mongoose.Schema({
   user: {
