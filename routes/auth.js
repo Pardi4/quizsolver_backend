@@ -704,4 +704,24 @@ router.delete('/me', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Failed to delete account' }); }
 });
 
+// Marketing Unsubscribe (Must be public, no auth middleware)
+router.get('/unsubscribe', async (req, res) => {
+  const { id, token } = req.query;
+  if (!id || !token) return res.status(400).send('Invalid link.');
+  
+  const expectedToken = Buffer.from(id + 'unsub').toString('base64');
+  if (token !== expectedToken) return res.status(400).send('Invalid or expired link.');
+  
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(id);
+    if (!user) return res.status(404).send('User not found.');
+    user.marketingConsent = false;
+    await user.save();
+    res.send('<div style="font-family:sans-serif;text-align:center;margin-top:50px;"><h2>Unsubscribed Successfully</h2><p>You will no longer receive marketing emails from QuizSolver.</p></div>');
+  } catch (err) {
+    res.status(500).send('An error occurred.');
+  }
+});
+
 module.exports = router;

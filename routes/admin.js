@@ -1356,6 +1356,39 @@ router.post('/users/:id/grant-credits', async (req, res) => {
   }
 });
 
+
+router.get('/marketing/stats', async (req, res) => {
+  try {
+    const totalOptIn = await User.countDocuments({ marketingConsent: true });
+    res.json({ success: true, totalOptIn });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
+router.post('/marketing/send', async (req, res) => {
+  try {
+    const { subject, html, targetCount } = req.body;
+    if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
+    
+    let users = await User.find({ marketingConsent: true }, '_id email');
+    
+    if (targetCount && targetCount < users.length) {
+      // Shuffle and pick targetCount users
+      users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
+    }
+    
+    const { sendMarketingBatch } = require('../services/emailService');
+    const result = await sendMarketingBatch(users, subject, html);
+    
+    auditLog(req.user, 'MARKETING_SENT', { subject, count: users.length });
+    res.json(result);
+  } catch (err) {
+    console.error('Marketing send error:', err);
+    res.status(500).json({ error: 'Failed to send marketing emails.' });
+  }
+});
+
 module.exports = router;
 
 router.get('/chart-stats', async (req, res) => {

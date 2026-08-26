@@ -210,7 +210,63 @@ function emailChangeTemplate(code) {
   });
 }
 
+
+async function sendMarketingBatch(users, subject, htmlContent) {
+  if (!isEmailConfigured()) return { success: false, disabled: true };
+
+  const emails = users.map(user => {
+    // Generate a simple unsubscribe token (in a real app, use a proper signed JWT or HMAC)
+    const token = Buffer.from(user._id.toString() + 'unsub').toString('base64');
+    const unsubLink = `${SITE_URL}/api/marketing/unsubscribe?id=${user._id}&token=${token}`;
+    
+    const personalizedHtml = htmlContent + 
+      `<br><br><hr style="border:none;border-top:1px solid #eee;"><p style="font-size:12px;color:#999;text-align:center;">You received this because you are opted into marketing emails. <a href="${unsubLink}">Click here to unsubscribe</a>.</p>`;
+
+    return {
+      from: FROM_EMAIL,
+      to: user.email,
+      subject,
+      html: baseEmail({
+        title: subject,
+        preheader: 'Marketing update from QuizSolver',
+        body: personalizedHtml
+      }),
+      reply_to: SUPPORT_EMAIL
+    };
+  });
+
+  if (process.env.RESEND_API_KEY) {
+    // Resend batch API limits to 100 emails per request
+    const chunks = [];
+    for (let i = 0; i < emails.length; i += 100) {
+      chunks.push(emails.slice(i, i + 100));
+    }
+    
+    for (const chunk of chunks) {
+      await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(chunk)
+      }).catch(err => console.error('Resend batch error:', err));
+    }
+    return { success: true, count: emails.length };
+  } else {
+    // SMTP sequential
+    const transport = getSmtpTransport();
+    if (!transport) return { success: false, disabled: true };
+    
+    for (const email of emails) {
+      await transport.sendMail(email).catch(err => console.error('SMTP error:', err));
+    }
+    return { success: true, count: emails.length };
+  }
+}
+
 module.exports = {
+  sendMarketingBatch,
   SITE_URL,
   SUPPORT_EMAIL,
   escapeHtml,
