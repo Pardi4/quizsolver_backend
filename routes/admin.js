@@ -62,6 +62,7 @@ function serializeAdminUser(user) {
     extensionLastSeenReason: user.extensionLastSeenReason || '',
     extensionLastSeenUrl: user.extensionLastSeenUrl || '',
     extensionLastSeenPlatform: user.extensionLastSeenPlatform || '',
+    securityLogs: user.securityLogs || [],
     createdAt: user.createdAt
   };
 }

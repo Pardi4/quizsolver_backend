@@ -568,6 +568,11 @@ router.patch('/me', authMiddleware, async (req, res) => {
       if (!user.passwordHash) return res.status(400).json({ error: 'Account uses external login. Set a password via reset flow first.' });
       const isValid = await user.comparePassword(req.body.currentPassword);
       if (!isValid) return res.status(401).json({ error: 'Incorrect current password.' });
+      user.securityLogs.push({
+        event: 'PASSWORD_CHANGE',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] || ''
+      });
       user.passwordHash = req.body.newPassword;
       user.passwordChangedAt = new Date();
     }
@@ -607,6 +612,12 @@ router.patch('/me', authMiddleware, async (req, res) => {
       const isValid = await require('bcryptjs').compare(req.body.confirmEmailChangeCode, user.emailChangeCodeHash);
       if (!isValid) return res.status(400).json({ error: 'Invalid verification code.' });
       
+      user.securityLogs.push({
+        event: 'EMAIL_CHANGE',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] || '',
+        details: { oldEmail: user.email, newEmail: user.pendingNewEmail }
+      });
       user.email = user.pendingNewEmail;
       user.emailVerified = true;
       user.emailChangeCodeHash = '';
@@ -616,6 +627,11 @@ router.patch('/me', authMiddleware, async (req, res) => {
 
     // Cancel Deletion
     if (req.body.cancelDeletion) {
+      user.securityLogs.push({
+        event: 'DELETION_CANCELLED',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] || ''
+      });
       user.accountDeletionScheduledAt = null;
     }
 
@@ -664,8 +680,14 @@ router.delete('/me', authMiddleware, async (req, res) => {
     const isValid = await require('bcryptjs').compare(req.body.code, user.deletionCodeHash);
     if (!isValid) return res.status(400).json({ error: 'Invalid verification code.' });
     
-    // Schedule deletion in 14 days
-    user.accountDeletionScheduledAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const scheduledAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    user.securityLogs.push({
+      event: 'DELETION_SCHEDULED',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] || '',
+      details: { scheduledAt }
+    });
+    user.accountDeletionScheduledAt = scheduledAt;
     user.deletionCodeHash = '';
     user.deletionCodeExpiresAt = null;
     await user.save();

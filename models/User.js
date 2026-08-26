@@ -77,6 +77,13 @@ const userSchema = new mongoose.Schema({
   emailChangeCodeHash: { type: String, default: '' },
   emailChangeExpiresAt: { type: Date, default: null },
   pendingNewEmail: { type: String, default: '' },
+  securityLogs: [{
+    event: { type: String, required: true }, // e.g., 'EMAIL_CHANGE', 'PASSWORD_CHANGE', 'DELETION_SCHEDULED'
+    ip: { type: String, default: '' },
+    userAgent: { type: String, default: '' },
+    details: { type: mongoose.Schema.Types.Mixed, default: {} },
+    createdAt: { type: Date, default: Date.now }
+  }],
   createdAt: {
     type: Date,
     default: Date.now
