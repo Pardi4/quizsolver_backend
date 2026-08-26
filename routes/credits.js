@@ -146,7 +146,7 @@ router.post('/buy', async (req, res) => {
       return res.status(503).json({ error: 'Payments are not configured yet.' });
     }
 
-    const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
+    const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https:
 
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',
@@ -272,7 +272,7 @@ router.get('/referrals', async (req, res) => {
   }
 });
 
-router.post('/report-bug', async (req, res) => {
+router.post('/report-bug', require('../middleware/rateLimiter').authLimiter, async (req, res) => {
   try {
     let { url, description } = req.body;
     const platform = cleanToken(req.body.platform || '', 80);

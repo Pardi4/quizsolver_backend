@@ -8,7 +8,7 @@ const clientErrorSchema = new mongoose.Schema({
   source: { type: String, enum: ['extension', 'frontend', 'other'], default: 'other' },  
   userAgent: { type: String },  
   version: { type: String },  
-  createdAt: { type: Date, default: Date.now, expires: '30d' } // auto-delete after 30 days  
+  createdAt: { type: Date, default: Date.now, expires: '30d' } 
 });  
   
 module.exports = mongoose.model('ClientError', clientErrorSchema); 

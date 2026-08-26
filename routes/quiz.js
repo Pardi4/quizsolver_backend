@@ -1081,7 +1081,7 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
       }
 
       const questionHash = CachedAnswer.generateHash(questionData);
-      // Parallelize cache lookup and charge check per question
+      
       const [cachedHit, chargeCredits] = await Promise.all([
         getCachedAnswerHit(questionData, questionHash, questionData.type),
         shouldChargeForQuestion(user._id, 'solve', questionHash)
@@ -1109,7 +1109,7 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
 
     
     const pLimit = require('p-limit');
-    const limit = pLimit(10); // Process up to 10 AI calls concurrently
+    const limit = pLimit(10); 
 
     const results = await Promise.all(preparedQuestions.map((item) => limit(async () => {
       const { questionData, questionHash, chargeCredits, invalidError } = item;
@@ -1237,7 +1237,6 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
 });
 
 
-/* ── QUIZ SESSIONS ── */
 
 router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
@@ -1360,7 +1359,6 @@ router.get('/sessions/:sessionId/notes', async (req, res) => {
   }
 });
 
-/* ── USER NOTE PATCH ── */
 
 router.patch('/study-notes/:id/user-note', async (req, res) => {
   try {
@@ -1378,7 +1376,6 @@ router.patch('/study-notes/:id/user-note', async (req, res) => {
   }
 });
 
-/* ── SHARED QUIZ ── */
 
 const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
 

@@ -3,7 +3,7 @@ const User = require('../models/User');
 
 const { getRedisClient, isConnected } = require('../utils/redis');
 
-// TODO: Replace in-memory Map with Redis (TTL = token expiry) for multi-instance deployments
+
 const inMemoryBlacklist = new Map();
 
 setInterval(() => {
@@ -79,6 +79,14 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ error: 'User not found.' });
     }
 
+    
+    if (user.passwordChangedAt && decoded.iat) {
+      const changedAtTimestamp = Math.floor(user.passwordChangedAt.getTime() / 1000);
+      if (decoded.iat < changedAtTimestamp) {
+        return res.status(401).json({ error: 'Password changed recently. Please log in again.' });
+      }
+    }
+
     if (user.isBanned) {
       return res.status(403).json({ error: 'Account has been suspended.' });
     }
@@ -148,7 +156,7 @@ async function optionalAuth(req, res, next) {
       audience: process.env.JWT_AUDIENCE || 'quizsolver-ext',
     });
     const user = await User.findById(decoded.userId).select('-__v');
-    if (user && !user.isBanned) req.user = user;
+    if (user && !user.isBanned) { if (!(user.passwordChangedAt && decoded.iat && decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000))) { req.user = user; } }
   } catch {}
   next();
 }

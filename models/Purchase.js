@@ -171,7 +171,7 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
 
   const result = await this.applyCredits(purchase);
 
-  // Referral gamification: give 10% of credits to the referrer
+  
   if (purchase.creditsApplied && buyer.referredBy && pack !== 'referral_bonus' && normalizedCredits > 0) {
     try {
       const bonusCredits = Math.max(1, Math.floor(normalizedCredits * 0.10));

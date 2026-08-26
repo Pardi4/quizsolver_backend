@@ -1,3 +1,4 @@
+const { authLimiter } = require('../middleware/rateLimiter');
 const express = require('express');
 const SupportMessage = require('../models/SupportMessage');
 const { escapeHtml, SUPPORT_EMAIL } = require('../services/emailService');
@@ -197,7 +198,7 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
   }
 });
 
-router.post('/contact', async (req, res) => {
+router.post('/contact', authLimiter, async (req, res) => {
   try {
     const fromEmail = clean(req.body.email, 254).toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(fromEmail)) {
@@ -239,7 +240,7 @@ router.post('/client-error', optionalAuth, async (req, res) => {
     await ClientError.create(errorData);
     res.status(201).json({ success: true });
   } catch (err) {
-    // Fail silently to not disrupt the client
+    
     console.error('[Support] Could not save client error:', err.message);
     res.status(201).json({ success: false });
   }
