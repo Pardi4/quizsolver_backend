@@ -1355,7 +1355,19 @@ router.post('/users/:id/grant-credits', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
+router.delete('/support/messages/:messageId', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.messageId)) {
+      return res.status(400).json({ error: 'Invalid support message id.' });
+    }
+    const message = await SupportMessage.findByIdAndDelete(req.params.messageId);
+    if (!message) return res.status(404).json({ error: 'Support message not found.' });
+    auditLog(req.user, 'SUPPORT_DELETE', { messageId: message._id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error deleting support message.' });
+  }
+});
 
 router.get('/marketing/stats', async (req, res) => {
   try {
@@ -1368,24 +1380,57 @@ router.get('/marketing/stats', async (req, res) => {
 
 router.post('/marketing/send', async (req, res) => {
   try {
-    const { subject, html, targetCount } = req.body;
+    const { subject, html, targetCount, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
     if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
     
     let users = await User.find({ marketingConsent: true }, '_id email');
     
     if (targetCount && targetCount < users.length) {
-      // Shuffle and pick targetCount users
       users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
     }
     
     const { sendMarketingBatch } = require('../services/emailService');
-    const result = await sendMarketingBatch(users, subject, html);
+    const { createLemonSqueezyDiscount, generateRandomCode } = require('../services/lemonSqueezyService');
+
+    let globalCode = null;
+    let uniqueCodes = [];
     
-    auditLog(req.user, 'MARKETING_SENT', { subject, count: users.length });
+    const expiresAt = discountExpiresDays ? new Date(Date.now() + discountExpiresDays * 24 * 60 * 60 * 1000).toISOString() : null;
+
+    if (discountType === 'global') {
+      globalCode = generateRandomCode(discountPrefix || 'PROMO');
+      await createLemonSqueezyDiscount({
+        name: `Global ${discountPrefix || 'PROMO'} Campaign`,
+        code: globalCode,
+        amountPercent: discountPercent || 10,
+        maxRedemptions: discountMaxUses || 0,
+        expiresAt
+      });
+    } else if (discountType === 'unique') {
+      for (let i = 0; i < users.length; i++) {
+        const code = generateRandomCode(discountPrefix || 'PROMO');
+        uniqueCodes.push(code);
+        await createLemonSqueezyDiscount({
+          name: `Unique ${discountPrefix || 'PROMO'} for ${users[i].email}`,
+          code: code,
+          amountPercent: discountPercent || 10,
+          maxRedemptions: 1,
+          expiresAt
+        });
+      }
+    }
+
+    const result = await sendMarketingBatch(users, subject, html, {
+      discountType,
+      globalCode,
+      uniqueCodes
+    });
+    
+    auditLog(req.user, 'MARKETING_SENT', { subject, count: users.length, discountType });
     res.json(result);
   } catch (err) {
     console.error('Marketing send error:', err);
-    res.status(500).json({ error: 'Failed to send marketing emails.' });
+    res.status(500).json({ error: err.message || 'Failed to send marketing emails.' });
   }
 });
 

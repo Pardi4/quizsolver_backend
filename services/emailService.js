@@ -211,16 +211,23 @@ function emailChangeTemplate(code) {
 }
 
 
-async function sendMarketingBatch(users, subject, htmlContent) {
+async function sendMarketingBatch(users, subject, htmlContent, discountOptions = {}) {
   if (!isEmailConfigured()) return { success: false, disabled: true };
 
-  const emails = users.map(user => {
-    // Generate a simple unsubscribe token (in a real app, use a proper signed JWT or HMAC)
+  const emails = users.map((user, index) => {
     const token = Buffer.from(user._id.toString() + 'unsub').toString('base64');
     const unsubLink = `${SITE_URL}/api/marketing/unsubscribe?id=${user._id}&token=${token}`;
     
-    const personalizedHtml = htmlContent + 
-      `<br><br><hr style="border:none;border-top:1px solid #eee;"><p style="font-size:12px;color:#999;text-align:center;">You received this because you are opted into marketing emails. <a href="${unsubLink}">Click here to unsubscribe</a>.</p>`;
+    let personalizedHtml = htmlContent;
+    
+    // Inject discount code if requested
+    if (discountOptions.discountType === 'global' && discountOptions.globalCode) {
+      personalizedHtml = personalizedHtml.replace(/\{\{DISCOUNT_CODE\}\}/g, discountOptions.globalCode);
+    } else if (discountOptions.discountType === 'unique' && discountOptions.uniqueCodes) {
+      personalizedHtml = personalizedHtml.replace(/\{\{DISCOUNT_CODE\}\}/g, discountOptions.uniqueCodes[index]);
+    }
+
+    personalizedHtml += `<br><br><hr style="border:none;border-top:1px solid #eee;"><p style="font-size:12px;color:#999;text-align:center;">You received this because you are opted into marketing emails. <a href="${unsubLink}">Click here to unsubscribe</a>.</p>`;
 
     return {
       from: FROM_EMAIL,
@@ -236,7 +243,6 @@ async function sendMarketingBatch(users, subject, htmlContent) {
   });
 
   if (process.env.RESEND_API_KEY) {
-    // Resend batch API limits to 100 emails per request
     const chunks = [];
     for (let i = 0; i < emails.length; i += 100) {
       chunks.push(emails.slice(i, i + 100));
@@ -254,7 +260,6 @@ async function sendMarketingBatch(users, subject, htmlContent) {
     }
     return { success: true, count: emails.length };
   } else {
-    // SMTP sequential
     const transport = getSmtpTransport();
     if (!transport) return { success: false, disabled: true };
     
