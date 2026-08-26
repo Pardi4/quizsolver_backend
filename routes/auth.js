@@ -195,7 +195,7 @@ router.post('/register', authLimiter, async (req, res) => {
     const userData = {
       email,
       passwordHash: password,
-      displayName,
+      
       authProviders: ['password'],
       emailVerified: false
     };
@@ -474,7 +474,7 @@ router.get('/google/callback', async (req, res) => {
     if (!user) {
       user = new User({
         email,
-        displayName: sanitizeDisplayName(googleProfile.name || email.split('@')[0]),
+        
         googleId: googleProfile.sub,
         authProviders: ['google'],
         emailVerified: true,
@@ -483,7 +483,7 @@ router.get('/google/callback', async (req, res) => {
     } else {
       user.googleId = user.googleId || googleProfile.sub;
       user.emailVerified = true;
-      user.displayName = user.displayName || sanitizeDisplayName(googleProfile.name || email.split('@')[0]);
+      
       if (!user.authProviders?.includes('google')) user.authProviders = [...(user.authProviders || []), 'google'];
     }
     user.failedLoginAttempts = 0;
@@ -549,6 +549,42 @@ router.post('/logout', authMiddleware, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Logout error.' });
   }
+});
+
+router.patch('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    if (typeof req.body.marketingConsent === 'boolean') {
+      user.marketingConsent = req.body.marketingConsent;
+    }
+    if (req.body.email && req.body.email !== user.email) {
+      const existing = await User.findOne({ email: req.body.email.toLowerCase() });
+      if (existing) return res.status(400).json({ error: 'Email is already in use.' });
+      user.email = req.body.email.toLowerCase();
+      user.emailVerified = false;
+    }
+    if (req.body.currentPassword && req.body.newPassword) {
+      if (!user.passwordHash) return res.status(400).json({ error: 'Account uses external login. Set a password via reset flow first.' });
+      const isValid = await user.comparePassword(req.body.currentPassword);
+      if (!isValid) return res.status(401).json({ error: 'Incorrect current password.' });
+      user.passwordHash = req.body.newPassword;
+      user.passwordChangedAt = new Date();
+    }
+    await user.save();
+    res.json({ success: true, user: user.toPublicJSON() });
+  } catch(e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/me', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.passwordHash) {
+      if (!req.body.password) return res.status(400).json({ error: 'Password required to delete account.' });
+      const isValid = await req.user.comparePassword(req.body.password);
+      if (!isValid) return res.status(401).json({ error: 'Incorrect password.' });
+    }
+    await User.deleteOne({ _id: req.user._id });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed to delete account' }); }
 });
 
 module.exports = router;

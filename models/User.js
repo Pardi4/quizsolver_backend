@@ -32,12 +32,6 @@ const userSchema = new mongoose.Schema({
   passwordResetCodeHash: { type: String, default: '' },
   passwordResetExpiresAt: { type: Date, default: null },
   passwordChangedAt: { type: Date, default: null },
-  displayName: {
-    type: String,
-    trim: true,
-    default: '',
-    maxlength: 50
-  },
   role: {
     type: String,
     enum: ['user', 'admin'],
@@ -76,6 +70,7 @@ const userSchema = new mongoose.Schema({
     totalCreditsSpent: { type: Number, default: 0 },
     totalCreditsPurchased: { type: Number, default: 0 }
   },
+  marketingConsent: { type: Boolean, default: true },
   createdAt: {
     type: Date,
     default: Date.now
@@ -185,7 +180,7 @@ userSchema.methods.toPublicJSON = function() {
   return {
     id: this._id,
     email: this.email,
-    displayName: this.displayName,
+    marketingConsent: this.marketingConsent,
     role: this.role,
     authProviders: this.authProviders || [],
     emailVerified: !!this.emailVerified,
