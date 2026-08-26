@@ -71,6 +71,12 @@ const userSchema = new mongoose.Schema({
     totalCreditsPurchased: { type: Number, default: 0 }
   },
   marketingConsent: { type: Boolean, default: true },
+  deletionCodeHash: { type: String, default: '' },
+  deletionCodeExpiresAt: { type: Date, default: null },
+  accountDeletionScheduledAt: { type: Date, default: null },
+  emailChangeCodeHash: { type: String, default: '' },
+  emailChangeExpiresAt: { type: Date, default: null },
+  pendingNewEmail: { type: String, default: '' },
   createdAt: {
     type: Date,
     default: Date.now
@@ -184,6 +190,7 @@ userSchema.methods.toPublicJSON = function() {
     role: this.role,
     authProviders: this.authProviders || [],
     emailVerified: !!this.emailVerified,
+    accountDeletionScheduledAt: this.accountDeletionScheduledAt,
     credits: this.role === 'admin' ? Infinity : this.credits,
     streak: this.streak,
     referralCode: this.referralCode,

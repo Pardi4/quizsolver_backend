@@ -193,6 +193,23 @@ async function sendEmail({ to, subject, html, text, replyTo }) {
   return { success: true, provider: 'smtp', id: info.messageId };
 }
 
+
+function deletionTemplate(code) {
+  return baseEmail({
+    title: 'Account Deletion Code',
+    preheader: 'Verification code to delete your QuizSolver account.',
+    body: `<p>You requested to delete your QuizSolver account.</p><p>Please use the following 6-digit code to confirm your request:</p><div style="text-align:center;padding:24px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.1);border-radius:12px;font-size:32px;font-weight:900;letter-spacing:.2em;color:#06b6d4;margin:20px 0;">${code}</div><p style="color:#94a3b8;font-size:14px;">If you didn't request this, you can ignore this email. Your account will not be deleted.</p>`
+  });
+}
+
+function emailChangeTemplate(code) {
+  return baseEmail({
+    title: 'Email Change Code',
+    preheader: 'Verification code to change your QuizSolver email address.',
+    body: `<p>You requested to change your email address.</p><p>Please use the following 6-digit code to confirm this change:</p><div style="text-align:center;padding:24px;background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.1);border-radius:12px;font-size:32px;font-weight:900;letter-spacing:.2em;color:#06b6d4;margin:20px 0;">${code}</div><p style="color:#94a3b8;font-size:14px;">If you didn't request this, you can safely ignore this email.</p>`
+  });
+}
+
 module.exports = {
   SITE_URL,
   SUPPORT_EMAIL,
@@ -201,6 +218,8 @@ module.exports = {
   sendEmail,
   verificationTemplate,
   resetPasswordTemplate,
+  deletionTemplate,
+  emailChangeTemplate,
   supportReplyTemplate,
   baseEmail
 };

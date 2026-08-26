@@ -7,7 +7,9 @@ const {
   SITE_URL,
   sendEmail,
   verificationTemplate,
-  resetPasswordTemplate
+  resetPasswordTemplate,
+  deletionTemplate,
+  emailChangeTemplate
 } = require('../services/emailService');
 
 const router = express.Router();
@@ -551,18 +553,17 @@ router.post('/logout', authMiddleware, async (req, res) => {
   }
 });
 
+
 router.patch('/me', authMiddleware, async (req, res) => {
   try {
     const user = req.user;
+    
+    // Marketing consent
     if (typeof req.body.marketingConsent === 'boolean') {
       user.marketingConsent = req.body.marketingConsent;
     }
-    if (req.body.email && req.body.email !== user.email) {
-      const existing = await User.findOne({ email: req.body.email.toLowerCase() });
-      if (existing) return res.status(400).json({ error: 'Email is already in use.' });
-      user.email = req.body.email.toLowerCase();
-      user.emailVerified = false;
-    }
+    
+    // Change password
     if (req.body.currentPassword && req.body.newPassword) {
       if (!user.passwordHash) return res.status(400).json({ error: 'Account uses external login. Set a password via reset flow first.' });
       const isValid = await user.comparePassword(req.body.currentPassword);
@@ -570,15 +571,109 @@ router.patch('/me', authMiddleware, async (req, res) => {
       user.passwordHash = req.body.newPassword;
       user.passwordChangedAt = new Date();
     }
+    
+    // Request Email Change
+    if (req.body.requestEmailChange) {
+      const newEmail = String(req.body.requestEmailChange).toLowerCase().trim();
+      if (newEmail === user.email) return res.status(400).json({ error: 'This is already your email.' });
+      
+      const existing = await User.findOne({ email: newEmail });
+      if (existing) return res.status(400).json({ error: 'Email is already in use.' });
+      
+      // Require password if they have one
+      if (user.passwordHash) {
+        if (!req.body.password) return res.status(400).json({ error: 'Password is required to change email.' });
+        const isValid = await user.comparePassword(req.body.password);
+        if (!isValid) return res.status(401).json({ error: 'Incorrect password.' });
+      }
+      
+      const vCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const salt = await require('bcryptjs').genSalt(10);
+      user.emailChangeCodeHash = await require('bcryptjs').hash(vCode, salt);
+      user.emailChangeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+      user.pendingNewEmail = newEmail;
+      
+      await sendEmail({
+        to: newEmail,
+        ...emailChangeTemplate(vCode)
+      });
+    }
+    
+    // Confirm Email Change
+    if (req.body.confirmEmailChangeCode) {
+      if (!user.emailChangeCodeHash || !user.emailChangeExpiresAt || user.emailChangeExpiresAt < new Date()) {
+        return res.status(400).json({ error: 'Verification code expired or invalid.' });
+      }
+      const isValid = await require('bcryptjs').compare(req.body.confirmEmailChangeCode, user.emailChangeCodeHash);
+      if (!isValid) return res.status(400).json({ error: 'Invalid verification code.' });
+      
+      user.email = user.pendingNewEmail;
+      user.emailVerified = true;
+      user.emailChangeCodeHash = '';
+      user.emailChangeExpiresAt = null;
+      user.pendingNewEmail = '';
+    }
+
+    // Cancel Deletion
+    if (req.body.cancelDeletion) {
+      user.accountDeletionScheduledAt = null;
+    }
+
     await user.save();
     res.json({ success: true, user: user.toPublicJSON() });
-  } catch(e) { res.status(500).json({ error: 'Server error' }); }
+  } catch(e) { 
+    console.error(e);
+    res.status(500).json({ error: 'Server error' }); 
+  }
+});
+
+router.post('/me/request-deletion', authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    if (user.passwordHash) {
+      if (!req.body.password) return res.status(400).json({ error: 'Password required.' });
+      const isValid = await user.comparePassword(req.body.password);
+      if (!isValid) return res.status(401).json({ error: 'Incorrect password.' });
+    }
+    
+    const vCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const salt = await require('bcryptjs').genSalt(10);
+    user.deletionCodeHash = await require('bcryptjs').hash(vCode, salt);
+    user.deletionCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    
+    await user.save();
+    
+    await sendEmail({
+      to: user.email,
+      ...deletionTemplate(vCode)
+    });
+    
+    res.json({ success: true, message: 'Verification code sent to email.' });
+  } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 router.delete('/me', authMiddleware, async (req, res) => {
   try {
-    if (req.user.passwordHash) {
-      if (!req.body.password) return res.status(400).json({ error: 'Password required to delete account.' });
+    const user = req.user;
+    if (!req.body.code) return res.status(400).json({ error: 'Verification code required.' });
+    if (!user.deletionCodeHash || !user.deletionCodeExpiresAt || user.deletionCodeExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'Verification code expired or invalid.' });
+    }
+    const isValid = await require('bcryptjs').compare(req.body.code, user.deletionCodeHash);
+    if (!isValid) return res.status(400).json({ error: 'Invalid verification code.' });
+    
+    // Schedule deletion in 14 days
+    user.accountDeletionScheduledAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    user.deletionCodeHash = '';
+    user.deletionCodeExpiresAt = null;
+    await user.save();
+    
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed to schedule deletion' }); }
+});
+
       const isValid = await req.user.comparePassword(req.body.password);
       if (!isValid) return res.status(401).json({ error: 'Incorrect password.' });
     }
