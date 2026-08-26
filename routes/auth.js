@@ -696,14 +696,6 @@ router.delete('/me', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Failed to schedule deletion' }); }
 });
 
-      const isValid = await req.user.comparePassword(req.body.password);
-      if (!isValid) return res.status(401).json({ error: 'Incorrect password.' });
-    }
-    await User.deleteOne({ _id: req.user._id });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: 'Failed to delete account' }); }
-});
-
 // Marketing Unsubscribe (Must be public, no auth middleware)
 router.get('/unsubscribe', async (req, res) => {
   const { id, token } = req.query;
