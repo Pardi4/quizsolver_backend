@@ -234,7 +234,7 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
 
     return {
       from: FROM_EMAIL,
-      to: user.email,
+      to: [user.email],
       subject,
       html: baseEmail({
         title: subject,
@@ -252,14 +252,22 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
     }
     
     for (const chunk of chunks) {
-      await fetch('https://api.resend.com/emails/batch', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(chunk)
-      }).catch(err => console.error('Resend batch error:', err));
+      try {
+        const res = await fetch('https://api.resend.com/emails/batch', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(chunk)
+        });
+        if (!res.ok) {
+          const errData = await res.text();
+          console.error('Resend batch API error:', res.status, errData);
+        }
+      } catch(err) {
+        console.error('Resend batch network error:', err);
+      }
     }
     return { success: true, count: emails.length };
   } else {
