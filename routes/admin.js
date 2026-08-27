@@ -1369,6 +1369,15 @@ router.delete('/support/messages/:messageId', async (req, res) => {
   }
 });
 
+router.get('/marketing/users', async (req, res) => {
+  try {
+    const users = await User.find({ marketingConsent: true }, 'email').sort({ createdAt: -1 });
+    res.json({ success: true, users: users.map(u => u.email) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users.' });
+  }
+});
+
 router.get('/marketing/stats', async (req, res) => {
   try {
     const totalOptIn = await User.countDocuments({ marketingConsent: true });
@@ -1380,15 +1389,22 @@ router.get('/marketing/stats', async (req, res) => {
 
 router.post('/marketing/send', async (req, res) => {
   try {
-    const { subject, html, targetCount, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
+    const { subject, html, targetCount, targetEmail, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
     if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
     
-    let users = await User.find({ marketingConsent: true }, '_id email');
-    
-    if (targetCount && targetCount < users.length) {
-      users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
+    let users = [];
+    if (targetEmail) {
+      const user = await User.findOne({ email: targetEmail });
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+      users = [user];
+    } else {
+      users = await User.find({ marketingConsent: true }, '_id email');
+      if (targetCount && targetCount < users.length) {
+        users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
+      }
     }
     
+    if (users.length === 0) return res.status(400).json({ error: 'No users to send to.' });
     const { sendMarketingBatch } = require('../services/emailService');
     const { createLemonSqueezyDiscount, generateRandomCode } = require('../services/lemonSqueezyService');
 

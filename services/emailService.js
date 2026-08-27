@@ -220,6 +220,9 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
     
     let personalizedHtml = htmlContent;
     
+    // Inject tags
+    personalizedHtml = personalizedHtml.replace(/\{\{EMAIL\}\}/g, user.email);
+    
     // Inject discount code if requested
     if (discountOptions.discountType === 'global' && discountOptions.globalCode) {
       personalizedHtml = personalizedHtml.replace(/\{\{DISCOUNT_CODE\}\}/g, discountOptions.globalCode);
