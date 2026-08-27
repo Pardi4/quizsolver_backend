@@ -849,7 +849,36 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
     if (!message) return res.status(404).json({ error: 'Support message not found.' });
     const text = String(req.body.text || '').trim().substring(0, 10000);
     if (!text) return res.status(400).json({ error: 'Reply text is required.' });
-    const template = supportReplyTemplate({ message, replyText: text });
+    
+    let template = supportReplyTemplate({ message, replyText: text });
+    let finalText = text;
+    
+    if (req.body.generateDiscount) {
+      try {
+        const { createLemonSqueezyDiscount, generateRandomCode } = require('../services/lemonSqueezyService');
+        const code = generateRandomCode('SUPPORT');
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        await createLemonSqueezyDiscount({
+          name: `Support Discount for ${message.fromEmail}`,
+          code,
+          amountPercent: 10,
+          maxRedemptions: 1,
+          expiresAt
+        });
+        
+        const discountBox = `<div style="margin-top:20px;padding:15px;border:1px dashed #06b6d4;border-radius:8px;background:rgba(6,182,212,0.05);color:#06b6d4;text-align:center;">
+          <strong>Twój kod rabatowy (-10%, ważny 7 dni):</strong><br>
+          <span style="font-size:24px;font-weight:bold;letter-spacing:2px;display:block;margin-top:10px;">${code}</span>
+        </div>`;
+        
+        template.html = template.html.replace('</body>', discountBox + '</body>');
+        template.text += `\n\nTwój jednorazowy kod rabatowy (-10%, ważny 7 dni): ${code}`;
+        finalText += `\n\nTwój jednorazowy kod rabatowy (-10%, ważny 7 dni): ${code}`;
+      } catch (err) {
+        console.error('Failed to generate discount:', err);
+      }
+    }
+
     let delivery = { success: false, disabled: true };
     let error = '';
     try {
@@ -861,12 +890,13 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
     } catch (err) {
       error = err.message || 'Email delivery failed.';
     }
+    
     message.replies.push({
       adminUser: req.user._id,
       fromEmail: SUPPORT_EMAIL,
       toEmail: message.fromEmail,
       subject: template.subject,
-      text,
+      text: finalText,
       html: template.html,
       providerMessageId: delivery.id || '',
       delivery: delivery.success ? 'sent' : (delivery.disabled ? 'disabled' : 'failed'),
@@ -883,11 +913,11 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
       message: {
         id: message._id,
         status: message.status,
-        repliedAt: message.repliedAt,
-        replyPreviewHtml: `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`
+        replies: message.replies
       }
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Error sending support reply.' });
   }
 });
@@ -1369,6 +1399,15 @@ router.delete('/support/messages/:messageId', async (req, res) => {
   }
 });
 
+router.get('/marketing/all-emails', async (req, res) => {
+  try {
+    const users = await User.find({}, 'email').sort({ createdAt: -1 }).limit(10000);
+    res.json({ success: true, emails: users.map(u => u.email) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch emails.' });
+  }
+});
+
 router.get('/marketing/users', async (req, res) => {
   try {
     const users = await User.find({ marketingConsent: true }, 'email').sort({ createdAt: -1 });
@@ -1394,11 +1433,14 @@ router.post('/marketing/send', async (req, res) => {
     
     let users = [];
     if (targetEmail) {
-      const user = await User.findOne({ email: targetEmail });
-      if (!user) return res.status(404).json({ error: 'User not found.' });
+      let user = await User.findOne({ email: targetEmail });
+      if (!user) {
+        // If not in DB, create a dummy object so we can still send the email
+        user = { _id: new mongoose.Types.ObjectId(), email: targetEmail, marketingConsent: false };
+      }
       users = [user];
     } else {
-      users = await User.find({ marketingConsent: true }, '_id email');
+      users = await User.find({ marketingConsent: true }, '_id email').limit(5000);
       if (targetCount && targetCount < users.length) {
         users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
       }
