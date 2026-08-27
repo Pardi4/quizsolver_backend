@@ -54,7 +54,12 @@ function generateRandomCode(prefix = 'PROMO') {
   for (let i = 0; i < 6; i++) {
     randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `${prefix}-${randomPart}`;
+  
+  // LemonSqueezy strictly allows only alphanumeric characters (no dashes).
+  let cleanPrefix = String(prefix).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cleanPrefix) cleanPrefix = 'PROMO';
+  
+  return `${cleanPrefix}${randomPart}`;
 }
 
 module.exports = {
