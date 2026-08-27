@@ -216,7 +216,7 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
 
   const emails = users.map((user, index) => {
     const token = Buffer.from(user._id.toString() + 'unsub').toString('base64');
-    const unsubLink = `${SITE_URL}/api/marketing/unsubscribe?id=${user._id}&token=${token}`;
+    const unsubLink = `${SITE_URL}/api/auth/unsubscribe?id=${user._id}&token=${token}`;
     
     let personalizedHtml = htmlContent;
     

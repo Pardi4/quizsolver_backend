@@ -785,6 +785,25 @@ app.listen(PORT, HOST, async () => {
   createAdminServer().listen(ADMIN_PORT, ADMIN_HOST, () => {
     console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
   });
+
+  // Background Tasks
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const usersToDelete = await User.find({ accountDeletionScheduledAt: { $lte: now } });
+      for (const user of usersToDelete) {
+        console.log(`[Cleanup] Permanently deleting account: ${user.email}`);
+        await require('./models/Purchase').deleteMany({ user: user._id });
+        await require('./models/CachedAnswer').deleteMany({ user: user._id });
+        await require('./models/CreditUsage').deleteMany({ user: user._id });
+        await require('./models/BugReport').deleteMany({ fromUser: user._id });
+        await require('./models/StudyNote').deleteMany({ user: user._id });
+        await User.findByIdAndDelete(user._id);
+      }
+    } catch (e) {
+      console.error('[Cleanup] Error running scheduled deletion task:', e);
+    }
+  }, 1000 * 60 * 60 * 12); // Run every 12 hours
 });
 
 module.exports = app;
