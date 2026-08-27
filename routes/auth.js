@@ -746,8 +746,7 @@ router.post('/qr/generate', authLimiter, async (req, res) => {
     });
 
     const qrUrl = `${SITE_URL}/qr-login/${sessionId}?s=${secret}`;
-    const qrImage = await QRCode.toString(qrUrl, {
-      type: 'svg',
+    const qrImage = await QRCode.toDataURL(qrUrl, {
       color: { dark: '#000000', light: '#ffffff' },
       margin: 1,
       width: 180
