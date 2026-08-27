@@ -734,8 +734,8 @@ router.get('/unsubscribe', async (req, res) => {
 
 router.post('/qr/generate', authLimiter, async (req, res) => {
   try {
-    const sessionId = crypto.randomBytes(16).toString('hex');
-    const secret = crypto.randomBytes(32).toString('hex');
+    const sessionId = crypto.randomBytes(8).toString('hex');
+    const secret = crypto.randomBytes(8).toString('hex');
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
 
     qrSessions.set(sessionId, {
