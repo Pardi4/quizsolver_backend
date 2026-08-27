@@ -12,6 +12,17 @@ const {
   emailChangeTemplate
 } = require('../services/emailService');
 
+const QRCode = require('qrcode');
+const qrSessions = new Map();
+
+// Cleanup stale QR sessions every 5 mins
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of qrSessions.entries()) {
+    if (now > session.expiresAt) qrSessions.delete(id);
+  }
+}, 5 * 60 * 1000);
+
 const router = express.Router();
 
 function sanitizeEmail(email) {
@@ -713,6 +724,85 @@ router.get('/unsubscribe', async (req, res) => {
     res.send('<div style="font-family:sans-serif;text-align:center;margin-top:50px;"><h2>Unsubscribed Successfully</h2><p>You will no longer receive marketing emails from QuizSolver.</p></div>');
   } catch (err) {
     res.status(500).send('An error occurred.');
+  }
+});
+
+
+// ----------------------------------------------------------------------------
+// QR LOGIN
+// ----------------------------------------------------------------------------
+
+router.post('/qr/generate', authLimiter, async (req, res) => {
+  try {
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    const secret = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
+
+    qrSessions.set(sessionId, {
+      secret,
+      expiresAt,
+      status: 'pending',
+      token: null
+    });
+
+    const qrUrl = `${SITE_URL}/qr-login/${sessionId}?s=${secret}`;
+    const qrImage = await QRCode.toString(qrUrl, {
+      type: 'svg',
+      color: { dark: '#000000', light: '#ffffff' },
+      margin: 1,
+      width: 180
+    });
+
+    res.json({
+      success: true,
+      sessionId,
+      secret,
+      qrUrl,
+      qrImage
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
+router.get('/qr/status/:sessionId', async (req, res) => {
+  const session = qrSessions.get(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found or expired' });
+  if (Date.now() > session.expiresAt) {
+    qrSessions.delete(req.params.sessionId);
+    return res.status(400).json({ error: 'Session expired' });
+  }
+  res.json({
+    success: true,
+    status: session.status,
+    token: session.token
+  });
+});
+
+router.post('/qr/confirm', authMiddleware, authLimiter, async (req, res) => {
+  try {
+    const { sessionId, secret } = req.body;
+    if (!sessionId || !secret) return res.status(400).json({ error: 'Missing parameters' });
+
+    const session = qrSessions.get(sessionId);
+    if (!session || session.secret !== secret) {
+      return res.status(400).json({ error: 'Invalid or expired session' });
+    }
+
+    if (Date.now() > session.expiresAt) {
+      qrSessions.delete(sessionId);
+      return res.status(400).json({ error: 'Session expired' });
+    }
+
+    // Generate token for the user that scanned the code
+    const token = generateToken(req.user._id, req.user.role);
+    
+    session.status = 'confirmed';
+    session.token = token;
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to confirm QR login' });
   }
 });
 
