@@ -1439,7 +1439,9 @@ router.post('/marketing/send', async (req, res) => {
     const result = await sendMarketingBatch(users, subject, html, {
       discountType,
       globalCode,
-      uniqueCodes
+      uniqueCodes,
+      discountPercent,
+      discountExpiresDays
     });
     
     auditLog(req.user, 'MARKETING_SENT', { subject, count: users.length, discountType });
