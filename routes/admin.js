@@ -57,6 +57,7 @@ function serializeAdminUser(user) {
     stats: user.stats || {},
     streak: user.streak || {},
     isBanned: !!user.isBanned,
+    marketingConsent: !!user.marketingConsent,
     isExtensionActive,
     extensionLastSeenAt,
     extensionLastSeenReason: user.extensionLastSeenReason || '',
@@ -241,7 +242,7 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
