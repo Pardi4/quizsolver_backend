@@ -34,7 +34,7 @@ function getSmtpTransport() {
   return smtpTransport;
 }
 
-function baseEmail({ title, preheader, body, ctaText, ctaUrl, footer }) {
+function baseEmail({ title, hideTitle, preheader, body, ctaText, ctaUrl, footer }) {
   const safeTitle = escapeHtml(title);
   const safePreheader = escapeHtml(preheader || '');
   const cta = ctaText && ctaUrl
@@ -66,7 +66,7 @@ function baseEmail({ title, preheader, body, ctaText, ctaUrl, footer }) {
             </tr>
             <tr>
               <td style="padding:30px 28px 34px;">
-                <h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;color:#f8fafc;">${safeTitle}</h1>
+                ${hideTitle ? "" : `<h1 style="margin:0 0 12px;font-size:28px;line-height:1.15;color:#f8fafc;">${safeTitle}</h1>`}
                 <div style="font-size:15px;line-height:1.75;color:#cbd5e1;">${body}</div>
                 ${cta}
               </td>
@@ -222,6 +222,12 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
     
     // Inject tags
     personalizedHtml = personalizedHtml.replace(/\{\{EMAIL\}\}/g, user.email);
+    if (discountOptions.discountPercent) {
+      personalizedHtml = personalizedHtml.replace(/\{\{DISCOUNT_PERCENT\}\}/g, discountOptions.discountPercent);
+    }
+    if (discountOptions.discountExpiresDays) {
+      personalizedHtml = personalizedHtml.replace(/\{\{DISCOUNT_EXPIRES\}\}/g, discountOptions.discountExpiresDays);
+    }
     
     // Inject discount code if requested
     if (discountOptions.discountType === 'global' && discountOptions.globalCode) {
@@ -238,6 +244,7 @@ async function sendMarketingBatch(users, subject, htmlContent, discountOptions =
       subject,
       html: baseEmail({
         title: subject,
+        hideTitle: true,
         preheader: 'Marketing update from QuizSolver',
         body: personalizedHtml
       }),
