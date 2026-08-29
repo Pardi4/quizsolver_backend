@@ -1429,7 +1429,7 @@ router.get('/marketing/stats', async (req, res) => {
 
 router.post('/marketing/send', async (req, res) => {
   try {
-    const { subject, html, targetCount, targetEmail, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
+    const { subject, html, targetCount, targetEmail, ignoreConsent, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
     if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
     
     let users = [];
@@ -1441,7 +1441,8 @@ router.post('/marketing/send', async (req, res) => {
       }
       users = [user];
     } else {
-      users = await User.find({ marketingConsent: true }, '_id email').limit(5000);
+      const query = ignoreConsent ? {} : { marketingConsent: true };
+      users = await User.find(query, '_id email').limit(5000);
       if (targetCount && targetCount < users.length) {
         users = users.sort(() => 0.5 - Math.random()).slice(0, targetCount);
       }
