@@ -210,7 +210,7 @@ router.post('/register', authLimiter, async (req, res) => {
       passwordHash: password,
       authProviders: ['password'],
       emailVerified: false,
-      marketingConsent: req.body.marketingConsent === true
+      marketingConsent: req.body.marketingConsent === true || req.body.marketingOptIn === true
     };
 
     if (referralCode) {
