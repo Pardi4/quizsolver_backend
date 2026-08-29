@@ -1429,7 +1429,7 @@ router.get('/marketing/stats', async (req, res) => {
 
 router.post('/marketing/send', async (req, res) => {
   try {
-    const { subject, html, targetCount, targetEmail, ignoreConsent, discountType, discountPrefix, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
+    const { subject, html, targetCount, targetEmail, ignoreConsent, discountType, discountPrefix, discountExactCode, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
     if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
     
     let users = [];
@@ -1458,7 +1458,7 @@ router.post('/marketing/send', async (req, res) => {
     const expiresAt = discountExpiresDays ? new Date(Date.now() + discountExpiresDays * 24 * 60 * 60 * 1000).toISOString() : null;
 
     if (discountType === 'global') {
-      globalCode = generateRandomCode(discountPrefix || 'PROMO');
+      globalCode = discountExactCode ? (discountPrefix || 'PROMO') : generateRandomCode(discountPrefix || 'PROMO');
       await createLemonSqueezyDiscount({
         name: `Global ${discountPrefix || 'PROMO'} Campaign`,
         code: globalCode,
