@@ -569,6 +569,19 @@ router.patch('/me', authMiddleware, async (req, res) => {
   try {
     const user = req.user;
     
+    // Change referral code
+    if (req.body.referralCode) {
+      const newRef = String(req.body.referralCode).trim();
+      if (!/^[a-zA-Z0-9\-_]{3,30}$/.test(newRef)) {
+        return res.status(400).json({ error: 'Kod polecający może zawierać tylko litery, cyfry, myślniki i podkreślenia (3-30 znaków).' });
+      }
+      if (newRef !== user.referralCode) {
+        const existing = await User.findOne({ referralCode: newRef });
+        if (existing) return res.status(400).json({ error: 'Ten kod polecający jest już zajęty.' });
+        user.referralCode = newRef;
+      }
+    }
+
     // Marketing consent
     if (typeof req.body.marketingConsent === 'boolean') {
       user.marketingConsent = req.body.marketingConsent;
