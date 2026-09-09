@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const mongoose = require('mongoose');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const User = require('../models/User');
@@ -868,13 +868,13 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
         });
         
         const discountBox = `<div style="margin-top:20px;padding:15px;border:1px dashed #06b6d4;border-radius:8px;background:rgba(6,182,212,0.05);color:#06b6d4;text-align:center;">
-          <strong>Twój kod rabatowy (-10%, ważny 7 dni):</strong><br>
+          <strong>TwĂłj kod rabatowy (-10%, waĹĽny 7 dni):</strong><br>
           <span style="font-size:24px;font-weight:bold;letter-spacing:2px;display:block;margin-top:10px;">${code}</span>
         </div>`;
         
         template.html = template.html.replace('</body>', discountBox + '</body>');
-        template.text += `\n\nTwój jednorazowy kod rabatowy (-10%, ważny 7 dni): ${code}`;
-        finalText += `\n\nTwój jednorazowy kod rabatowy (-10%, ważny 7 dni): ${code}`;
+        template.text += `\n\nTwĂłj jednorazowy kod rabatowy (-10%, waĹĽny 7 dni): ${code}`;
+        finalText += `\n\nTwĂłj jednorazowy kod rabatowy (-10%, waĹĽny 7 dni): ${code}`;
       } catch (err) {
         console.error('Failed to generate discount:', err);
       }
@@ -1496,6 +1496,25 @@ router.post('/marketing/send', async (req, res) => {
   }
 });
 
+
+router.get('/dataset', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const filePath = path.join(__dirname, '../data/parser_dataset.jsonl');
+    if (!fs.existsSync(filePath)) {
+      return res.json([]);
+    }
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const data = fileContent.trim().split('\n').filter(Boolean).map(line => {
+      try { return JSON.parse(line); } catch(e){ return null; }
+    }).filter(Boolean);
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to read dataset' });
+  }
+});
 module.exports = router;
 
 router.get('/chart-stats', async (req, res) => {
@@ -1532,3 +1551,4 @@ router.get('/chart-stats', async (req, res) => {
     res.status(500).json({ error: 'Error fetching chart stats' });
   }
 });
+
