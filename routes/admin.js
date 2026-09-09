@@ -1497,7 +1497,7 @@ router.post('/marketing/send', async (req, res) => {
 });
 
 
-router.get('/dataset', verifyToken, requireAdmin, async (req, res) => {
+router.get('/dataset', async (req, res) => {
   try {
     const fs = require('fs');
     const path = require('path');
@@ -1551,4 +1551,5 @@ router.get('/chart-stats', async (req, res) => {
     res.status(500).json({ error: 'Error fetching chart stats' });
   }
 });
+
 
