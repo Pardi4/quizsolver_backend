@@ -116,6 +116,61 @@ function resetPasswordTemplate({ code }) {
   };
 }
 
+function welcomeTemplate({ email }) {
+  const body = `
+    <p style="margin:0 0 16px;">Welcome to QuizSolver! Your account for <strong style="color:#f8fafc;">${escapeHtml(email)}</strong> is ready.</p>
+    <p style="margin:0 0 16px;">You can now use the Universal Parser™ to solve quizzes instantly. Simply install the Chrome Extension and pin it to your browser toolbar.</p>
+    <div style="margin:24px 0;padding:16px;border-radius:12px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);text-align:center;">
+      <p style="margin:0 0 8px;font-size:14px;color:#cbd5e1;">As a welcome gift, get 10% off your first credit top-up with code:</p>
+      <div style="font-size:20px;font-weight:900;color:#f8fafc;letter-spacing:1px;">WELCOME10</div>
+    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 24px;">
+      <tr>
+        <td style="border-radius:10px;background:linear-gradient(135deg,#06b6d4,#8b5cf6);">
+          <a href="https://chrome.google.com/webstore/detail/quizsolver/your-extension-id" target="_blank" style="padding:13px 20px;display:inline-block;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;">Download Chrome Extension</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 16px;color:#94a3b8;">If you need any help getting started, just reply to this email.</p>
+  `;
+  return {
+    subject: 'Welcome to QuizSolver 🚀',
+    text: 'Welcome to QuizSolver! Install our Chrome extension from the Web Store and start solving quizzes instantly. Use code WELCOME10 for 10% off your first top-up.',
+    html: baseEmail({
+      title: 'Welcome to QuizSolver',
+      preheader: 'Your account is ready to go',
+      body
+    })
+  };
+}
+
+function lowCreditsTemplate({ remaining }) {
+  const body = `
+    <p style="margin:0 0 16px;">Heads up! You are running low on QuizSolver credits.</p>
+    <p style="margin:0 0 16px;">You currently have only <strong style="color:#f8fafc;font-size:18px;">${remaining}</strong> credits left. Make sure to top up before your next big quiz so you don't run out of AI answers mid-test.</p>
+    <div style="margin:24px 0;padding:16px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);text-align:center;">
+      <p style="margin:0 0 8px;font-size:14px;color:#cbd5e1;">Special offer: Get 15% off your next refill with code:</p>
+      <div style="font-size:20px;font-weight:900;color:#f8fafc;letter-spacing:1px;">LOW15</div>
+    </div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 24px;">
+      <tr>
+        <td style="border-radius:10px;background:linear-gradient(135deg,#f59e0b,#ef4444);">
+          <a href="${SITE_URL}/credits" target="_blank" style="padding:13px 20px;display:inline-block;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;">Top up credits</a>
+        </td>
+      </tr>
+    </table>
+  `;
+  return {
+    subject: 'Low Credits Alert - Top up before your next quiz ⚠️',
+    text: `You have ${remaining} QuizSolver credits left. Top up at ${SITE_URL}/credits so you don't run out during a test.`,
+    html: baseEmail({
+      title: 'Low Credits Warning',
+      preheader: 'Don\'t run out mid-test!',
+      body
+    })
+  };
+}
+
 function supportReplyTemplate({ message, replyText }) {
   const safeReplyHtml = escapeHtml(replyText).replace(/\n/g, '<br>');
   const originalSubject = message.subject || '(No subject)';
@@ -308,5 +363,7 @@ module.exports = {
   deletionTemplate,
   emailChangeTemplate,
   supportReplyTemplate,
-  baseEmail
+  baseEmail,
+  welcomeTemplate,
+  lowCreditsTemplate
 };

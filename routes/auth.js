@@ -322,11 +322,21 @@ router.post('/verify-email', authLimiter, async (req, res) => {
     if (!codeMatches(user.emailVerificationCodeHash, code)) {
       return res.status(400).json({ error: 'Invalid verification code.' });
     }
-    user.emailVerified = true;
     user.emailVerificationCodeHash = '';
     user.emailVerificationExpiresAt = null;
     user.failedLoginAttempts = 0;
+    
+    // Check if this is the first time verifying (we only want to send welcome once)
+    const isFirstTimeVerification = !user.emailVerified;
+    
+    user.emailVerified = true;
     await user.save();
+    
+    if (isFirstTimeVerification) {
+      const { sendEmail, welcomeTemplate } = require('../services/emailService');
+      sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) }).catch(() => {});
+    }
+
     const token = generateToken(user._id, rememberMe);
     res.json({ success: true, token, user: user.toPublicJSON() });
   } catch (error) {
