@@ -126,14 +126,9 @@ const INDEXED_PAGE_KEYS = [
 const PUBLIC_QUERY_PARAMS_TO_DROP = [
   'auth',
   'error',
-  'q',
-  'utm_source',
-  'utm_medium',
-  'utm_campaign',
-  'utm_term',
-  'utm_content',
-  'gclid',
-  'fbclid'
+  'q'
+  // NOTE: utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+  // gclid, fbclid are intentionally KEPT for analytics & ad attribution.
 ];
 
 const STATIC_OPTIONS = {

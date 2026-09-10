@@ -127,15 +127,15 @@ async function grantReferralBonus(targetUser, credits, sourceOrderId = '') {
   const referrer = await User.findById(targetUser.referredBy);
   if (!referrer) return;
 
-  const bonus = Math.max(1, Math.floor(credits * 0.05));
+  const bonus = Math.max(1, Math.floor(credits * 0.10));
   const referralSource = sourceOrderId ? String(sourceOrderId) : `user:${targetUser._id}`;
   await Purchase.recordPurchase(referrer._id, 'referral_bonus', bonus, {
     priceUsd: 0,
     paymentProvider: 'referral',
     externalOrderId: `referral:${referrer._id}:${referralSource}`,
-    grantReason: `Referral bonus (5%) from ${targetUser.email}`
+    grantReason: `Referral bonus (10%) from ${targetUser.email}`
   });
-  console.log(`[Webhook] Referral 5% bonus: +${bonus} credits to ${referrer.email}`);
+  console.log(`[Webhook] Referral 10% bonus: +${bonus} credits to ${referrer.email}`);
 }
 
 router.post('/lemonsqueezy', async (req, res) => {
