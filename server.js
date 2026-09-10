@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 
 const express = require('express');
 const helmet = require('helmet');
@@ -279,7 +279,7 @@ app.use(helmet({
       scriptSrcAttr: ["'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
       connectSrc: ["'self'"],
-      frameAncestors: ["'none'"],
+      frameAncestors: ["'self'"],
       upgradeInsecureRequests: null
     }
   },

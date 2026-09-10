@@ -26,7 +26,7 @@
   <h1>Parser Dataset Viewer</h1>
   <div class="table-wrap">
     <table id="data-table">
-      <thead><tr><th>Time</th><th>URL</th><th>Platform</th><th>Outcome</th><th>Questions</th><th>Images</th><th>Action</th></tr></thead>
+      <thead><tr><th>Time</th><th>URL</th><th>Platform</th><th>Outcome</th><th>Questions</th><th>Action</th></tr></thead>
       <tbody><tr><td colspan="7">Loading...</td></tr></tbody>
     </table>
   </div>
@@ -68,7 +68,6 @@
             <td>${d.platform || 'universal'}</td>
             <td>${d.outcome || 'empty'}</td>
             <td>${d.snapshot?.questionsData?.length || 0}</td>
-            <td>${d.snapshot?.pageImages?.length || 0}</td>
             <td><button class="btn" onclick="showDetails(${i})">View Details</button></td>
           </tr>
         `).join('');
@@ -102,14 +101,6 @@
         });
       }
       
-      html += `<h4>Page Images (${d.snapshot?.pageImages?.length || 0})</h4><div>`;
-      if (d.snapshot?.pageImages) {
-        d.snapshot.pageImages.forEach(img => {
-          html += `<img src="${img.src}" title="${img.alt || 'image'}" />`;
-        });
-      }
-      html += `</div>`;
-      
       body.innerHTML = html;
       document.getElementById('modal').style.display = 'block';
     };
@@ -117,5 +108,4 @@
     loadData();
   </script>
 </body>
-</html>
 
