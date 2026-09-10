@@ -270,10 +270,11 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       fontSrc: ["'self'", 'data:'],
       // Angular prerender output contains inline hydration scripts and a CSS onload handler.
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      // Google Analytics 4 / Consent Mode v2 requires googletagmanager.com
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.googletagmanager.com'],
       scriptSrcAttr: ["'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'https:', 'https://*.google-analytics.com', 'https://*.googletagmanager.com'],
+      connectSrc: ["'self'", 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://*.googletagmanager.com'],
       frameAncestors: ["'self'"],
       upgradeInsecureRequests: null
     }
