@@ -494,7 +494,9 @@ router.get('/google/callback', async (req, res) => {
 
     const email = sanitizeEmail(googleProfile.email);
     let user = await User.findOne({ $or: [{ googleId: googleProfile.sub }, { email }] });
+    let isNewUser = false;
     if (!user) {
+      isNewUser = true;
       user = new User({
         email,
         
@@ -505,6 +507,9 @@ router.get('/google/callback', async (req, res) => {
       });
     } else {
       user.googleId = user.googleId || googleProfile.sub;
+      if (!user.emailVerified) {
+        isNewUser = true;
+      }
       user.emailVerified = true;
       
       if (!user.authProviders?.includes('google')) user.authProviders = [...(user.authProviders || []), 'google'];
@@ -513,6 +518,16 @@ router.get('/google/callback', async (req, res) => {
     user.lockedUntil = null;
     user.resetFreeCreditsIfNeeded();
     await user.save();
+
+    if (isNewUser) {
+      try {
+        const { sendEmail, welcomeTemplate } = require('../services/emailService');
+        sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) }).catch((e) => console.error(e));
+      } catch (err) {
+        console.error('Failed to send welcome email on google auth:', err);
+      }
+    }
+
     const token = generateToken(user._id, true);
     if (extensionRedirect) {
       return res.redirect(extensionTokenRedirect(extensionRedirect, token));

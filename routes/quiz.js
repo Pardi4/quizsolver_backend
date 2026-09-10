@@ -597,11 +597,12 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
     };
   }
 
-  // Trigger low-credits email when hitting specific threshold
-  if (lockedUser.credits === 5) {
+  // Trigger low-credits email when crossing or hitting the threshold of 5 credits
+  // (We check if user.credits was > 5 before deduction, and now it's <= 5)
+  if (lockedUser.credits <= 5 && user.credits > 5) {
     try {
       const { sendEmail, lowCreditsTemplate } = require('../services/emailService');
-      sendEmail({ to: lockedUser.email, ...lowCreditsTemplate({ remaining: lockedUser.credits }) }).catch(() => {});
+      sendEmail({ to: lockedUser.email, ...lowCreditsTemplate({ remaining: lockedUser.credits }) }).catch((e) => console.error(e));
     } catch (err) {
       console.error('Failed to send low credits email:', err);
     }
