@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -93,6 +93,7 @@
               <p><strong>Text:</strong> ${q.text}</p>
               <p><strong>Options:</strong> ${q.options ? q.options.join(' | ') : 'None'}</p>
               ${q.imageUrl ? `<img src="${q.imageUrl}" />` : ''}
+              ${q.aiAnswer ? `<p style="color:#10b981;font-weight:bold;">Likely Answer: ${q.aiAnswer}</p>` : ''}
               <details><summary>View Container HTML (${(q.containerHtml || '').length} chars)</summary>
                 <pre>${(q.containerHtml || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
               </details>
