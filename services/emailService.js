@@ -127,7 +127,7 @@ function welcomeTemplate({ email }) {
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 24px;">
       <tr>
         <td style="border-radius:10px;background:linear-gradient(135deg,#06b6d4,#8b5cf6);">
-          <a href="https://chrome.google.com/webstore/detail/quizsolver/your-extension-id" target="_blank" style="padding:13px 20px;display:inline-block;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;">Download Chrome Extension</a>
+          <a href="https://chromewebstore.google.com/detail/quiz-solver/cjchfdnplpjkihigljnicebnhjkpndik" target="_blank" style="padding:13px 20px;display:inline-block;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px;">Download Chrome Extension</a>
         </td>
       </tr>
     </table>

@@ -333,8 +333,11 @@ router.post('/verify-email', authLimiter, async (req, res) => {
     await user.save();
     
     if (isFirstTimeVerification) {
+      console.log(`[Email] Sending welcome email to ${user.email}...`);
       const { sendEmail, welcomeTemplate } = require('../services/emailService');
-      sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) }).catch(() => {});
+      sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) })
+        .then(res => console.log(`[Email] Welcome email sent:`, res))
+        .catch((err) => console.error(`[Email] Failed to send welcome email:`, err));
     }
 
     const token = generateToken(user._id, rememberMe);

@@ -601,8 +601,11 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
   // (We check if user.credits was > 5 before deduction, and now it's <= 5)
   if (lockedUser.credits <= 5 && user.credits > 5) {
     try {
+      console.log(`[Email] Sending low credits (5 left) email to ${lockedUser.email}...`);
       const { sendEmail, lowCreditsTemplate } = require('../services/emailService');
-      sendEmail({ to: lockedUser.email, ...lowCreditsTemplate({ remaining: lockedUser.credits }) }).catch((e) => console.error(e));
+      sendEmail({ to: lockedUser.email, ...lowCreditsTemplate({ remaining: lockedUser.credits }) })
+        .then(res => console.log(`[Email] Low credits email sent:`, res))
+        .catch((e) => console.error(`[Email] Failed to send low credits email:`, e));
     } catch (err) {
       console.error('Failed to send low credits email:', err);
     }
