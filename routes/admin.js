@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const mongoose = require('mongoose');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const User = require('../models/User');
@@ -58,6 +58,10 @@ function serializeAdminUser(user) {
     streak: user.streak || {},
     isBanned: !!user.isBanned,
     marketingConsent: !!user.marketingConsent,
+    accountDeletionScheduledAt: user.accountDeletionScheduledAt || null,
+    emailVerified: !!user.emailVerified,
+    authProviders: user.authProviders || [],
+    pendingNewEmail: user.pendingNewEmail || '',
     isExtensionActive,
     extensionLastSeenAt,
     extensionLastSeenReason: user.extensionLastSeenReason || '',

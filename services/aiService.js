@@ -52,12 +52,26 @@ async function fetchImageAsBase64(imageUrl) {
 
   if (!res.ok) throw new AIError('IMAGE_FETCH', `Image server returned ${res.status}.`);
 
-  const mimeType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
-  if (!ALLOWED_IMAGE_TYPES.has(mimeType))
-    throw new AIError('IMAGE_FETCH', `Unsupported image type: ${mimeType}`);
-
+  const mimeHeader = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   const buffer = await res.arrayBuffer();
-  return { base64: Buffer.from(buffer).toString('base64'), mimeType };
+  const bytes = Buffer.from(buffer);
+
+  let mimeType = mimeHeader;
+  if (!ALLOWED_IMAGE_TYPES.has(mimeType)) {
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+      mimeType = 'image/png';
+    } else if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+      mimeType = 'image/jpeg';
+    } else if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+      mimeType = 'image/gif';
+    } else if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+      mimeType = 'image/webp';
+    } else {
+      mimeType = 'image/png';
+    }
+  }
+
+  return { base64: bytes.toString('base64'), mimeType };
 }
 
 function imageUrlFromBase64(base64, mimeType) {
