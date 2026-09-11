@@ -1512,7 +1512,7 @@ router.get('/dataset', async (req, res) => {
     const fileContent = fs.readFileSync(filePath, 'utf8');
     const data = fileContent.trim().split('\n').filter(Boolean).map(line => {
       try { return JSON.parse(line); } catch(e){ return null; }
-    }).filter(Boolean);
+    }).filter(Boolean).reverse();
     res.json(data);
   } catch (err) {
     console.error(err);

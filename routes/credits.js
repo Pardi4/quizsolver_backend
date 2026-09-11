@@ -175,7 +175,7 @@ router.post('/buy', async (req, res) => {
             },
             checkout_data: {
               email: req.user.email,
-              name: req.user.displayName || '',
+              name: req.user.displayName || req.user.email.split('@')[0],
               custom: {
                 user_id: req.user._id.toString(),
                 pack: packInfo.id,
