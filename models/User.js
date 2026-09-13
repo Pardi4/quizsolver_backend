@@ -39,7 +39,7 @@ const userSchema = new mongoose.Schema({
   },
   credits: {
     type: Number,
-    default: 10,
+    default: 20,
     min: 0
   },
   freeCreditsLastReset: {
@@ -127,7 +127,7 @@ userSchema.methods.resetFreeCreditsIfNeeded = function() {
     return false;
   }
   if (this.freeCreditsLastReset !== currentMonth) {
-    const freeCredits = parseInt(process.env.FREE_MONTHLY_CREDITS) || 10;
+    const freeCredits = parseInt(process.env.FREE_MONTHLY_CREDITS) || 20;
     this.credits += freeCredits;
     this.freeCreditsLastReset = currentMonth;
     return true;
