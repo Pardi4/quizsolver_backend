@@ -1496,6 +1496,20 @@ router.get('/shared-attempts', async (req, res) => {
 
 const publicRouter = express.Router();
 
+publicRouter.get('/shared/:token/meta', async (req, res) => {
+  try {
+    const shared = await SharedQuiz.findOne({ token: req.params.token }).select('title questionCount createdAt').lean();
+    if (!shared) return res.status(404).json({ error: 'Not found' });
+    res.json({
+      title: shared.title || 'Shared Quiz',
+      description: `Quiz with ${shared.questionCount || '?'} questions`,
+      questionCount: shared.questionCount || 0
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 publicRouter.get('/shared/:token', async (req, res) => {
   try {
     const shared = await SharedQuiz.findOne({ token: req.params.token, isActive: true })
