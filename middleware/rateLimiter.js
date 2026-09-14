@@ -123,7 +123,7 @@ const adminLimiter = rateLimit({
 
 const parserSnapshotLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 10,
+  max: 5000,
   message: { error: 'Too many parser snapshots uploaded from this IP.' },
   standardHeaders: true,
   legacyHeaders: false,

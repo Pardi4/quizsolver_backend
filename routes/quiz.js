@@ -12,6 +12,7 @@ const QuizSession = require('../models/QuizSession');
 const SharedQuiz = require('../models/SharedQuiz');
 const { cleanQuizText } = require('../utils/textSanitizer');
 const { stripQuestionChrome, isQuestionChromeOnly, assessQuestionQuality } = require('../utils/questionTextGuard');
+const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
 
 const router = express.Router();
 
@@ -901,8 +902,20 @@ const preventConcurrentQuiz = (req, res, next) => {
 router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
   try {
+    const { sourceUrl, platform, pageHtml } = req.body;
     const imageData = String(req.body.imageData || '');
     const user = req.user;
+
+    if (pageHtml) {
+      storeParserSnapshotHtml({
+        html: pageHtml,
+        url: sourceUrl,
+        platform: platform || 'focusscan',
+        source: 'quiz-solve-snapshot',
+        outcome: 'requested',
+        userId: user._id
+      }).catch(() => {});
+    }
 
     if (!parseDataImage(imageData)) {
       return res.status(400).json({ error: 'Missing or invalid FocusScan image.' });
@@ -997,8 +1010,19 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
 router.post('/solve', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
   try {
-    const { questionData } = req.body;
+    const { questionData, pageHtml, url, platform } = req.body;
     const user = req.user;
+
+    if (pageHtml) {
+      storeParserSnapshotHtml({
+        html: pageHtml,
+        url: url,
+        platform: platform || 'universal',
+        source: 'quiz-solve-request',
+        outcome: 'requested',
+        userId: user._id
+      }).catch(() => {});
+    }
 
     const err = validateQuestionData(questionData);
     if (err) return sendQuestionPayloadError(res, err);
