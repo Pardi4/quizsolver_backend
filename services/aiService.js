@@ -234,10 +234,15 @@ function buildUserPrompt(textOrQuestion, optionsArg) {
 }
 
 function getMaxTokens(type) {
-  if (type === 'checkbox') return 20;
-  if (type === 'matching' || type === 'matrix') return 120;
-  if (type === 'text') return 40;
-  return 5;
+  // gpt-5.6-luna spends part of this budget on hidden reasoning tokens
+  // before it emits any visible content — these are NOT the old
+  // non-reasoning-model limits. Too low a budget here means the model
+  // burns everything on reasoning and returns empty content (finish_reason
+  // 'length'), which is what "Empty AI response." means in practice.
+  if (type === 'checkbox') return 300;
+  if (type === 'matching' || type === 'matrix') return 500;
+  if (type === 'text') return 300;
+  return 300; // radio
 }
 
 const LETTER_MAP = { A: 0, B: 1, C: 2, D: 3, E: 4, F: 5 };
@@ -442,11 +447,30 @@ async function requestChatCompletion(body) {
     const response = await openai.chat.completions.create({
       model: MODEL,
       // no `temperature` — this model only supports the default (1)
+      reasoning_effort: 'minimal', // suppress hidden reasoning tokens; this model
+      // burns tokens on internal reasoning by default (unlike gpt-4o, which had
+      // none of this). 'minimal' keeps it fast/cheap for short classification-
+      // style answers. If this model doesn't support the param, the API will
+      // reject it by name the same way it did with `temperature` earlier.
       max_completion_tokens: body.max_completion_tokens,
       messages: body.messages,
     }, { timeout: 30000 });
 
-    return response.choices[0]?.message?.content?.trim() || '';
+    const choice = response.choices[0];
+    const content = choice?.message?.content?.trim() || '';
+
+    if (!content) {
+      // Diagnostic for empty responses — if finishReason is 'length' and
+      // usage shows reasoning_tokens near maxCompletionTokens, the budget
+      // was consumed by hidden reasoning before any visible text was written.
+      console.warn('[AI] empty content', JSON.stringify({
+        finishReason: choice?.finish_reason,
+        usage: response.usage,
+        maxCompletionTokens: body.max_completion_tokens
+      }));
+    }
+
+    return content;
   } catch (err) {
     const message = String(err?.message || '');
     if (err?.status === 408 || message.includes('timeout')) {
@@ -524,7 +548,7 @@ function parseSnapshotPayload(raw) {
 async function callSnapshotAI(imageData, imageDetail = 'low') {
   const { base64, mimeType } = await fetchImageAsBase64(imageData, imageDetail);
   const body = {
-    max_completion_tokens: 160,
+    max_completion_tokens: 400, // headroom for hidden reasoning tokens, see getMaxTokens
     messages: [
       {
         role: 'system',
@@ -591,7 +615,7 @@ async function callExplanationAI(text, options, answer, type, explanationLanguag
   const languageHint = languageInstruction(explanationLanguage);
 
   const body = {
-    max_completion_tokens: 80,
+    max_completion_tokens: 250, // headroom for hidden reasoning tokens, see getMaxTokens
     messages: [
       { role: 'system', content: `Explain briefly why this answer is correct. Max 2 sentences. Be concise. ${languageHint}` },
       { role: 'user', content: `Question: ${text}\nCorrect answer: ${answerText}` }
@@ -616,7 +640,7 @@ async function callFollowUpAI({ text, options, answer, type, prompt, previousExp
   ].filter(Boolean).join('\n\n');
 
   const body = {
-    max_completion_tokens: 160,
+    max_completion_tokens: 400, // headroom for hidden reasoning tokens, see getMaxTokens
     messages: [
       { role: 'system', content: `You are a concise quiz tutor. Answer the follow-up using the provided correct answer. Max 4 short sentences. ${languageHint}` },
       { role: 'user', content: `${contextLines}\n\nFollow-up: ${safePrompt || 'Explain more.'}` }
