@@ -1,9 +1,11 @@
 const { OpenAI } = require('openai');
 const { cleanQuizText } = require('../utils/textSanitizer');
 
-const FAST_MODEL = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const ACCURATE_MODEL = process.env.OPENAI_MODEL_ACCURATE || process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o';
-const BASE_MODEL = FAST_MODEL;
+// Hardcoded single model for all operations
+const MODEL = 'gpt-5.6-luna';
+const FAST_MODEL = MODEL;
+const ACCURATE_MODEL = MODEL;
+const BASE_MODEL = MODEL;
 const MAX_IMAGE_DATA_URL_LENGTH = 5.5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -367,7 +369,7 @@ async function requestChatCompletion(body) {
   const openai = getOpenAI();
   try {
     const response = await openai.chat.completions.create({
-      model: body.model,
+      model: MODEL,
       temperature: body.temperature,
       max_completion_tokens: body.max_completion_tokens,
       messages: body.messages,
