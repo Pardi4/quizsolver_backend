@@ -447,7 +447,7 @@ async function requestChatCompletion(body) {
     const response = await openai.chat.completions.create({
       model: MODEL,
       // no `temperature` — this model only supports the default (1)
-      reasoning_effort: 'minimal', // suppress hidden reasoning tokens; this model
+      reasoning_effort: 'none', // suppress hidden reasoning tokens; this model
       // burns tokens on internal reasoning by default (unlike gpt-4o, which had
       // none of this). 'minimal' keeps it fast/cheap for short classification-
       // style answers. If this model doesn't support the param, the API will
