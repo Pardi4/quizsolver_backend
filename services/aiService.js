@@ -1,13 +1,20 @@
 const { OpenAI } = require('openai');
+const sharp = require('sharp');
 const { cleanQuizText } = require('../utils/textSanitizer');
 
 // Hardcoded single model for all operations
 const MODEL = 'gpt-5.6-luna';
-const FAST_MODEL = MODEL;
-const ACCURATE_MODEL = MODEL;
-const BASE_MODEL = MODEL;
 const MAX_IMAGE_DATA_URL_LENGTH = 5.5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+// Hard floors the compressor will never cross — protects text legibility on
+// quiz screenshots even on very large source images. 'high' is the retry
+// path used when we specifically need maximum readability, so it gets a
+// more generous floor than the default 'low' path.
+const COMPRESSION_FLOORS = {
+  low: { minWidth: 1000, minQuality: 60 },
+  high: { minWidth: 1400, minQuality: 70 }
+};
 
 let openaiInstance = null;
 
@@ -34,9 +41,80 @@ function parseDataImage(imageUrl) {
   return { base64: match[2], mimeType: match[1] };
 }
 
-async function fetchImageAsBase64(imageUrl) {
+// Downscales + recompresses an image only if it's over the size limit.
+// Two-phase approach, both bounded by COMPRESSION_FLOORS so text on quiz
+// screenshots never degrades past the point of legibility:
+//   Phase 1 — shrink dimensions at high fixed quality (JPEG quality
+//             degradation hurts text edges more per byte saved than
+//             downscaling does), down to minWidth. .sharpen() counteracts
+//             the softness downscaling introduces.
+//   Phase 2 — only if still too large at minWidth, ease quality down,
+//             never past minQuality.
+// If both floors are hit and it's still too large, throws rather than
+// silently shipping an unreadable image.
+async function compressIfNeeded(bytes, mimeType, imageDetail = 'low') {
+  let base64 = bytes.toString('base64');
+  if (base64.length <= MAX_IMAGE_DATA_URL_LENGTH) {
+    return { base64, mimeType };
+  }
+
+  const { minWidth, minQuality } = COMPRESSION_FLOORS[imageDetail] || COMPRESSION_FLOORS.low;
+  console.warn('[AI] image too large, compressing', { originalBytes: bytes.length, imageDetail });
+
+  const meta = await sharp(bytes).metadata();
+  let width = meta.width && meta.width > minWidth ? meta.width : minWidth;
+  const quality = 90;
+  let output;
+
+  // Phase 1: dimensions only, fixed high quality.
+  for (let attempt = 0; attempt < 8 && width > minWidth; attempt++) {
+    output = await sharp(bytes)
+      .resize({ width: Math.round(width), withoutEnlargement: true })
+      .sharpen()
+      .jpeg({ quality })
+      .toBuffer();
+    base64 = output.toString('base64');
+    if (base64.length <= MAX_IMAGE_DATA_URL_LENGTH) {
+      console.warn('[AI] compressed image (dimension pass)', { finalBytes: output.length, width: Math.round(width), quality, imageDetail });
+      return { base64, mimeType: 'image/jpeg' };
+    }
+    width = Math.max(minWidth, Math.round(width * 0.85));
+  }
+
+  // At the dimension floor — check once more before touching quality.
+  output = await sharp(bytes)
+    .resize({ width: minWidth, withoutEnlargement: true })
+    .sharpen()
+    .jpeg({ quality })
+    .toBuffer();
+  base64 = output.toString('base64');
+
+  // Phase 2: only now ease quality down, never past minQuality.
+  let currentQuality = quality;
+  while (base64.length > MAX_IMAGE_DATA_URL_LENGTH && currentQuality > minQuality) {
+    currentQuality = Math.max(minQuality, currentQuality - 10);
+    output = await sharp(bytes)
+      .resize({ width: minWidth, withoutEnlargement: true })
+      .sharpen()
+      .jpeg({ quality: currentQuality })
+      .toBuffer();
+    base64 = output.toString('base64');
+  }
+
+  if (base64.length > MAX_IMAGE_DATA_URL_LENGTH) {
+    throw new AIError('IMAGE_FETCH', 'Image too large even at the minimum legible size/quality.');
+  }
+
+  console.warn('[AI] compressed image (quality pass)', { finalBytes: output.length, width: minWidth, quality: currentQuality, imageDetail });
+  return { base64, mimeType: 'image/jpeg' };
+}
+
+async function fetchImageAsBase64(imageUrl, imageDetail = 'low') {
   const dataImage = parseDataImage(imageUrl);
-  if (dataImage) return dataImage;
+  if (dataImage) {
+    const bytes = Buffer.from(dataImage.base64, 'base64');
+    return compressIfNeeded(bytes, dataImage.mimeType, imageDetail);
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
@@ -73,7 +151,7 @@ async function fetchImageAsBase64(imageUrl) {
     }
   }
 
-  return { base64: bytes.toString('base64'), mimeType };
+  return compressIfNeeded(bytes, mimeType, imageDetail);
 }
 
 function imageUrlFromBase64(base64, mimeType) {
@@ -299,6 +377,9 @@ function normalizeSearchText(value) {
     .toLowerCase();
 }
 
+// Kept purely for logging/analytics on question difficulty — with a single
+// MODEL for all calls this no longer switches anything, only 'reason'
+// shows up in the [AI Route] log line.
 function detectModelReason(questionData) {
   const options = Array.isArray(questionData.options) ? questionData.options : [];
   const text = String(questionData.text || '');
@@ -313,12 +394,9 @@ function detectModelReason(questionData) {
 }
 
 function getInitialAIRoute(questionData) {
-  const reason = detectModelReason(questionData);
-  const useAccurate = reason !== 'simple';
   return {
-    model: useAccurate ? ACCURATE_MODEL : FAST_MODEL,
     imageDetail: 'low',
-    reason
+    reason: detectModelReason(questionData)
   };
 }
 
@@ -328,20 +406,13 @@ function isFallbackableModelError(error) {
   return /model|unsupported|unavailable|overloaded|temporarily|rate limit|not found|does not exist/i.test(error.message || '');
 }
 
+// Only remaining fallback path: retry once with high image detail after a
+// parse failure on an image question.
 function getFallbackAIRoute(questionData, error, attemptedRoute) {
   if (!isFallbackableModelError(error)) return null;
 
-  if (attemptedRoute.model !== ACCURATE_MODEL) {
-    return {
-      model: ACCURATE_MODEL,
-      imageDetail: questionData.imageUrl ? 'high' : 'low',
-      reason: `fallback:${error.type || 'error'}`
-    };
-  }
-
   if (questionData.imageUrl && attemptedRoute.imageDetail !== 'high' && error.type === 'INVALID_RESPONSE') {
     return {
-      model: ACCURATE_MODEL,
       imageDetail: 'high',
       reason: 'retry:image-high-detail'
     };
@@ -355,7 +426,7 @@ async function buildQuestionContent(questionData, imageDetail = 'low') {
   const userContent = [{ type: 'text', text: buildUserPrompt(questionData) }];
 
   if (imageUrl) {
-    const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
+    const { base64, mimeType } = await fetchImageAsBase64(imageUrl, imageDetail);
     userContent.push({
       type: 'image_url',
       image_url: { url: imageUrlFromBase64(base64, mimeType), detail: imageDetail }
@@ -370,7 +441,7 @@ async function requestChatCompletion(body) {
   try {
     const response = await openai.chat.completions.create({
       model: MODEL,
-      temperature: body.temperature,
+      // no `temperature` — this model only supports the default (1)
       max_completion_tokens: body.max_completion_tokens,
       messages: body.messages,
     }, { timeout: 30000 });
@@ -387,28 +458,26 @@ async function requestChatCompletion(body) {
 const pLimit = require('p-limit').default || require('p-limit');
 const aiConcurrencyLimit = pLimit(20);
 
-async function callAIWithModel(questionData, model, imageDetail = 'low') {
+async function callAIWithModel(questionData, imageDetail = 'low') {
   return aiConcurrencyLimit(async () => {
     const { type, imageUrl, text, options } = questionData;
     const body = {
-    model,
-    temperature: 0,
-    max_completion_tokens: getMaxTokens(type),
-    messages: [
-      { role: 'system', content: getSystemMessage(type) },
-      { role: 'user', content: await buildQuestionContent(questionData, imageDetail) }
-    ]
-  };
+      max_completion_tokens: getMaxTokens(type),
+      messages: [
+        { role: 'system', content: getSystemMessage(type) },
+        { role: 'user', content: await buildQuestionContent(questionData, imageDetail) }
+      ]
+    };
 
-  console.log('[AI] ->', JSON.stringify({ model, type, hasImage: !!imageUrl, imageDetail, textLen: text.length }));
-  const raw = await requestChatCompletion(body);
-  console.log('[AI] <-', raw.substring(0, 120));
-  const expectedCount = Array.isArray(questionData.prompts)
-    ? questionData.prompts.length
-    : Array.isArray(questionData.rows)
-      ? questionData.rows.length
-      : null;
-  return parseAnswer(raw, type, options, expectedCount);
+    console.log('[AI] ->', JSON.stringify({ model: MODEL, type, hasImage: !!imageUrl, imageDetail, textLen: text.length }));
+    const raw = await requestChatCompletion(body);
+    console.log('[AI] <-', raw.substring(0, 120));
+    const expectedCount = Array.isArray(questionData.prompts)
+      ? questionData.prompts.length
+      : Array.isArray(questionData.rows)
+        ? questionData.rows.length
+        : null;
+    return parseAnswer(raw, type, options, expectedCount);
   });
 }
 
@@ -416,17 +485,15 @@ async function callAI(questionData) {
   const initialRoute = getInitialAIRoute(questionData);
   try {
     console.log('[AI Route]', JSON.stringify(initialRoute));
-    return await callAIWithModel(questionData, initialRoute.model, initialRoute.imageDetail);
+    return await callAIWithModel(questionData, initialRoute.imageDetail);
   } catch (error) {
     const fallbackRoute = getFallbackAIRoute(questionData, error, initialRoute);
     if (!fallbackRoute) throw error;
     console.warn('[AI] fallback ->', JSON.stringify({
-      from: initialRoute.model,
-      to: fallbackRoute.model,
       reason: fallbackRoute.reason,
       error: error.type || error.message
     }));
-    return callAIWithModel(questionData, fallbackRoute.model, fallbackRoute.imageDetail);
+    return callAIWithModel(questionData, fallbackRoute.imageDetail);
   }
 }
 
@@ -454,11 +521,9 @@ function parseSnapshotPayload(raw) {
   }
 }
 
-async function callSnapshotAI(imageData, model, imageDetail = 'low') {
-  const { base64, mimeType } = await fetchImageAsBase64(imageData);
+async function callSnapshotAI(imageData, imageDetail = 'low') {
+  const { base64, mimeType } = await fetchImageAsBase64(imageData, imageDetail);
   const body = {
-    model,
-    temperature: 0,
     max_completion_tokens: 160,
     messages: [
       {
@@ -475,25 +540,24 @@ async function callSnapshotAI(imageData, model, imageDetail = 'low') {
     ]
   };
 
-  console.log('[AI Snapshot] ->', JSON.stringify({ model, imageDetail, size: imageData.length }));
+  console.log('[AI Snapshot] ->', JSON.stringify({ model: MODEL, imageDetail, size: imageData.length }));
   const raw = await requestChatCompletion(body);
   console.log('[AI Snapshot] <-', raw.substring(0, 160));
   return parseSnapshotPayload(raw);
 }
 
 async function solveSnapshotImage(imageData) {
-  const initialRoute = { model: ACCURATE_MODEL, imageDetail: 'low', reason: 'focusscan' };
+  const initialRoute = { imageDetail: 'low', reason: 'focusscan' };
   try {
     console.log('[AI Snapshot Route]', JSON.stringify(initialRoute));
-    return await callSnapshotAI(imageData, initialRoute.model, initialRoute.imageDetail);
+    return await callSnapshotAI(imageData, initialRoute.imageDetail);
   } catch (error) {
     if (error.type !== 'INVALID_RESPONSE' || initialRoute.imageDetail === 'high') throw error;
     console.warn('[AI Snapshot] retry ->', JSON.stringify({
-      model: ACCURATE_MODEL,
       reason: 'image-high-detail',
       error: error.type || error.message
     }));
-    return callSnapshotAI(imageData, ACCURATE_MODEL, 'high');
+    return callSnapshotAI(imageData, 'high');
   }
 }
 
@@ -527,8 +591,6 @@ async function callExplanationAI(text, options, answer, type, explanationLanguag
   const languageHint = languageInstruction(explanationLanguage);
 
   const body = {
-    model: BASE_MODEL,
-    temperature: 0,
     max_completion_tokens: 80,
     messages: [
       { role: 'system', content: `Explain briefly why this answer is correct. Max 2 sentences. Be concise. ${languageHint}` },
@@ -554,8 +616,6 @@ async function callFollowUpAI({ text, options, answer, type, prompt, previousExp
   ].filter(Boolean).join('\n\n');
 
   const body = {
-    model: BASE_MODEL,
-    temperature: 0,
     max_completion_tokens: 160,
     messages: [
       { role: 'system', content: `You are a concise quiz tutor. Answer the follow-up using the provided correct answer. Max 4 short sentences. ${languageHint}` },
