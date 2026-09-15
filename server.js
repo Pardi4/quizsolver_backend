@@ -67,6 +67,7 @@ const PAGE_SLUGS = {
   socrative: 'socrative-quiz-solver',
   kahoot: 'kahoot-ai-bot',
   quizizz: 'quizizz-solver',
+  mobileInstall: 'mobile-install',
   blog: 'blog',
   blogCategory: 'blog/category/:category',
   blogPost: 'blog/:slug'
@@ -118,6 +119,7 @@ const INDEXED_PAGE_KEYS = [
   'socrative',
   'kahoot',
   'quizizz',
+  'mobileInstall',
   'privacy',
   'terms',
   'blog'
