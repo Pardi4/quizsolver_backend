@@ -271,10 +271,11 @@ app.use(helmet({
       fontSrc: ["'self'", 'data:'],
       // Angular prerender output contains inline hydration scripts and a CSS onload handler.
       // Google Analytics 4 / Consent Mode v2 requires googletagmanager.com
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.googletagmanager.com', 'https://www.clarity.ms', 'https://*.clarity.ms'],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://*.googletagmanager.com', 'https://*.clarity.ms', 'https://*.clarity.ms'],
       scriptSrcAttr: ["'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:', 'https://*.google-analytics.com', 'https://*.googletagmanager.com', 'https://*.clarity.ms'],
       connectSrc: ["'self'", 'https://*.google-analytics.com', 'https://*.analytics.google.com', 'https://*.googletagmanager.com', 'https://*.clarity.ms'],
+      frameSrc: ["'self'", 'https://www.youtube.com', 'https://www.youtube-nocookie.com'],
       frameAncestors: ["'self'"],
       upgradeInsecureRequests: null
     }
