@@ -76,6 +76,28 @@
       }
     }
 
+    function formatAnswer(q) {
+      if (!q.aiAnswer && q.aiAnswer !== 0) return '';
+      let answer = q.aiAnswer;
+      try {
+        if (typeof answer === 'string' && (answer.startsWith('[') || answer.includes(','))) {
+          const parsed = JSON.parse(answer.startsWith('[') ? answer : '[' + answer + ']');
+          if (Array.isArray(parsed)) answer = parsed;
+        }
+      } catch(e) {}
+      
+      const type = q.type;
+      const options = q.options || [];
+      if (type === 'radio' || (typeof answer === 'number' || (typeof answer === 'string' && !isNaN(answer)))) {
+        const idx = Number(answer);
+        return options[idx] !== undefined ? options[idx] : String(answer);
+      }
+      if ((type === 'checkbox' || Array.isArray(answer)) && Array.isArray(answer)) {
+        return answer.map(idx => options[Number(idx)] !== undefined ? options[Number(idx)] : String(idx)).join(', ');
+      }
+      return String(answer);
+    }
+
     window.showDetails = (idx) => {
       const d = dataset[idx];
       const body = document.getElementById('modal-body');
@@ -90,9 +112,10 @@
             <div style="background:#0f172a; padding:16px; border-radius:8px; margin-bottom:16px;">
               <h5>Q${i+1} (${q.type})</h5>
               <p><strong>Text:</strong> ${q.text}</p>
-              <p><strong>Options:</strong> ${q.options ? q.options.join(' | ') : 'None'}</p>
+              <p><strong>Options:</strong> ${q.options ? q.options.map((opt, idx) => `[${idx}] ${opt}`).join(' | ') : 'None'}</p>
               ${q.imageUrl ? `<img src="${q.imageUrl}" />` : ''}
-              ${q.aiAnswer ? `<p style="color:#10b981;font-weight:bold;">Likely Answer: ${q.aiAnswer}</p>` : ''}
+              ${(q.aiAnswer !== undefined && q.aiAnswer !== '') ? `<p style="color:#10b981;font-weight:bold;font-size:1.1em;border-left:4px solid #10b981;padding-left:8px;">AI Answer: ${formatAnswer(q)} <span style="font-size:0.8em;color:#94a3b8;font-weight:normal;">(Raw: ${q.aiAnswer})</span></p>` : ''}
+              <details><summary>Debug JSON</summary><pre>${JSON.stringify({ ...q, containerHtml: undefined }, null, 2)}</pre></details>
               <details><summary>View Container HTML (${(q.containerHtml || '').length} chars)</summary>
                 <pre>${(q.containerHtml || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
               </details>
