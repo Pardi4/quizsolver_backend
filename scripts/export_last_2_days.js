@@ -447,6 +447,27 @@ async function main() {
       pageHtml = readSnapshotHtml(note.snapshot, fileMap);
     }
 
+    // Fallback: search through all parsed raw snapshots for a matching URL around the same time
+    if (!pageHtml && (note?.sourceUrl || matchedEvent?.url)) {
+      const urlToMatch = note?.sourceUrl || matchedEvent?.url;
+      const ts = new Date(cache.createdAt || cache.lastUsedAt || new Date()).getTime();
+      
+      let bestSnap = null;
+      let minDiff = Infinity;
+      for (const snap of parsedSnapshots) {
+        if (snap.url === urlToMatch || (snap.url && urlToMatch && snap.url.split('?')[0] === urlToMatch.split('?')[0])) {
+          const diff = Math.abs(new Date(snap.createdAt).getTime() - ts);
+          if (diff < 10 * 60 * 1000 && diff < minDiff) { // within 10 minutes
+            minDiff = diff;
+            bestSnap = snap;
+          }
+        }
+      }
+      if (bestSnap) {
+        pageHtml = bestSnap.html;
+      }
+    }
+
     // Correlate bug report
     const associatedBug = (matchedEvent && bugReportsByEventId.get(String(matchedEvent._id))) ||
                           (note?.sourceUrl && bugReportsByUrl.get(note.sourceUrl)) ||
@@ -500,7 +521,22 @@ async function main() {
   for (const event of parserEvents) {
     if (matchedEventIds.has(String(event._id))) continue;
 
-    const pageHtml = readSnapshotHtml(event.snapshot, fileMap);
+    let pageHtml = readSnapshotHtml(event.snapshot, fileMap);
+    if (!pageHtml && event.url) {
+      const ts = new Date(event.createdAt).getTime();
+      let bestSnap = null;
+      let minDiff = Infinity;
+      for (const snap of parsedSnapshots) {
+        if (snap.url === event.url || (snap.url && event.url && snap.url.split('?')[0] === event.url.split('?')[0])) {
+          const diff = Math.abs(new Date(snap.createdAt).getTime() - ts);
+          if (diff < 10 * 60 * 1000 && diff < minDiff) {
+            minDiff = diff;
+            bestSnap = snap;
+          }
+        }
+      }
+      if (bestSnap) pageHtml = bestSnap.html;
+    }
     const associatedBug = bugReportsByEventId.get(String(event._id)) ||
                           (event.url && bugReportsByUrl.get(event.url)) ||
                           null;
