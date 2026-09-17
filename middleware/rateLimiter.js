@@ -113,7 +113,7 @@ const webhookLimiter = rateLimit({
 
 const adminLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: 5000,
   message: { error: 'Too many admin requests.' },
   standardHeaders: true,
   legacyHeaders: false,
