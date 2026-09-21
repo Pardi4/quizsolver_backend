@@ -79,6 +79,15 @@ function cleanSnapshot(snapshot = {}) {
     questionTexts: cleanStringArray(snapshot.questionTexts, 8, 300),
     optionsSample: cleanStringArray(snapshot.optionsSample, 20, 180),
     selectorSummary,
+    questionsData: Array.isArray(snapshot.questionsData) ? snapshot.questionsData.map(q => ({
+      text: cleanText(q.text, 2000),
+      options: cleanStringArray(q.options, 20, 1000),
+      type: cleanToken(q.type, 40),
+      imageUrl: cleanToken(q.imageUrl, 500),
+      imageAlt: cleanText(q.imageAlt, 500),
+      aiAnswer: q.aiAnswer,
+      containerHtml: cleanHtml(q.containerHtml, 40000)
+    })).slice(0, 100) : [],
     fullHtmlFile: snapshot.fullHtmlFile && typeof snapshot.fullHtmlFile === 'object' ? {
       id: cleanToken(snapshot.fullHtmlFile.id || '', 100),
       filename: cleanText(snapshot.fullHtmlFile.filename || '', 140),

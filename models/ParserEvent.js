@@ -92,6 +92,15 @@ const parserEventSchema = new mongoose.Schema({
     questionTexts: { type: [String], default: [] },
     optionsSample: { type: [String], default: [] },
     selectorSummary: { type: mongoose.Schema.Types.Mixed, default: {} },
+    questionsData: [{
+      text: { type: String, default: '' },
+      options: { type: [String], default: [] },
+      type: { type: String, default: '' },
+      imageUrl: { type: String, default: '' },
+      imageAlt: { type: String, default: '' },
+      aiAnswer: { type: mongoose.Schema.Types.Mixed, default: '' },
+      containerHtml: { type: String, default: '' }
+    }],
     fullHtmlFile: {
       id: { type: String, default: '', maxlength: 100 },
       filename: { type: String, default: '', maxlength: 140 },
