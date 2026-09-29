@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { webhookLimiter } = require('../middleware/rateLimiter');
 const Purchase = require('../models/Purchase');
 const User = require('../models/User');
-const { packFromCredits, packFromLemonVariantId } = require('../config/creditPacks');
+const { packFromLemonVariantId } = require('../config/creditPacks');
 
 const router = express.Router();
 
@@ -83,26 +83,22 @@ function orderTotalUsd(attributes, packInfo) {
 function resolvePack(payload) {
   const attributes = orderAttributes(payload);
   const custom = customData(payload);
-  
+
   // 1. Always prioritize the actual product variant purchased
   const byVariant = packFromLemonVariantId(orderVariantId(attributes));
   if (byVariant) return byVariant;
 
-  // 2. Fallback to amount paid
+  // 2. Fallback to amount paid (October 2026 prices)
   const amountUsd = orderTotalUsd(attributes, null);
-  if (amountUsd >= 9) return { id: 'pro', credits: 2000, price: 9.99 };
-  if (amountUsd >= 4) return { id: 'popular', credits: 500, price: 4.99 };
-  if (amountUsd >= 1) return { id: 'starter', credits: 100, price: 1.99 };
-  
+  if (amountUsd >= 14) return { id: 'pro',     credits: 2000, price: 14.99 };
+  if (amountUsd >= 6)  return { id: 'popular', credits: 500,  price: 6.99 };
+  if (amountUsd >= 2)  return { id: 'starter', credits: 100,  price: 2.99 };
+
   // 3. Only if no price and no variant (e.g. manual admin invoice), trust custom data safely
   const customPack = String(custom.pack || '').trim();
   const customCredits = parseInt(custom.credits, 10);
   if (customPack && Number.isFinite(customCredits) && customCredits > 0 && amountUsd >= (customCredits * 0.001)) {
-    return {
-      id: customPack,
-      credits: customCredits,
-      price: amountUsd
-    };
+    return { id: customPack, credits: customCredits, price: amountUsd };
   }
 
   return null;

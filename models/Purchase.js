@@ -9,7 +9,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   pack: {
     type: String,
-    enum: ['starter', 'popular', 'pro', 'admin_grant', 'referral_bonus'],
+    enum: ['starter', 'popular', 'pro', 'subscription', 'admin_grant', 'referral_bonus'],
     required: true
   },
   credits: {

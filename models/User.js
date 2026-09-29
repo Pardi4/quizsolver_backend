@@ -53,6 +53,18 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Purchase'
   }],
+  subscription: {
+    status: {
+      type: String,
+      enum: ['active', 'cancelled', 'past_due', 'expired', 'paused', null],
+      default: null
+    },
+    lemonSubscriptionId: { type: String, default: '', maxlength: 120 },
+    variantId: { type: String, default: '', maxlength: 120 },
+    currentPeriodEnd: { type: Date, default: null },
+    cancelAtPeriodEnd: { type: Boolean, default: false },
+    renewedAt: { type: Date, default: null }
+  },
   extensionLastSeenAt: { type: Date, default: null, index: true },
   extensionLastSeenReason: { type: String, default: '', maxlength: 50 },
   extensionLastSeenUrl: { type: String, default: '', maxlength: 500 },
@@ -202,6 +214,13 @@ userSchema.methods.toPublicJSON = function() {
     streak: this.streak,
     referralCode: this.referralCode,
     stats: this.stats,
+    subscription: this.subscription
+      ? {
+          status: this.subscription.status || null,
+          currentPeriodEnd: this.subscription.currentPeriodEnd || null,
+          cancelAtPeriodEnd: !!this.subscription.cancelAtPeriodEnd
+        }
+      : null,
     createdAt: this.createdAt
   };
 };

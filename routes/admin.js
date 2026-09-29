@@ -246,7 +246,7 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
@@ -255,6 +255,23 @@ router.get('/users', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching users.' });
+  }
+});
+
+router.get('/users/:userId', async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      return res.status(400).json({ error: 'Invalid user ID.' });
+    }
+    const user = await User.findById(req.params.userId).select(
+      'email displayName role marketingConsent credits stats createdAt isBanned streak ' +
+      'extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform ' +
+      'authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt'
+    );
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    res.json({ success: true, user: serializeAdminUser(user) });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching user.' });
   }
 });
 
