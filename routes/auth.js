@@ -549,6 +549,137 @@ router.get('/google/callback', async (req, res) => {
   }
 });
 
+
+// ==================== DISCORD LOGIN ====================
+
+router.get('/discord/start', authLimiter, (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  if (!clientId) return res.status(503).send('Discord login is not configured.');
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${SITE_URL}/api/auth/discord/callback`;
+  const redirect = safeRedirectPath(req.query.redirect || '/dashboard');
+  const extensionWebAuth = req.query.extensionWebAuth === '1' || req.query.source === 'extension';
+  const extensionState = extensionWebAuth ? safeExtensionState(req.query.extensionState) : '';
+  if (extensionWebAuth && !extensionState) {
+    return res.status(400).send('Missing extension login state.');
+  }
+  const rawExtensionRedirect = req.query.extensionRedirect;
+  const extensionRedirect = safeExtensionRedirect(rawExtensionRedirect);
+  const attemptedExtensionRedirect = parseExtensionRedirect(rawExtensionRedirect);
+  if (rawExtensionRedirect && attemptedExtensionRedirect && !extensionRedirect) {
+    return res.redirect(extensionErrorRedirect(attemptedExtensionRedirect.url, 'extension_not_configured'));
+  }
+  const state = generateToken(`discord:${crypto.randomBytes(12).toString('hex')}`, true);
+  const statePayload = Buffer.from(JSON.stringify({
+    state,
+    redirect,
+    extensionRedirect,
+    extensionWebAuth,
+    extensionState
+  })).toString('base64url');
+  
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'identify email',
+    state: statePayload
+  });
+  res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
+});
+
+router.get('/discord/callback', async (req, res) => {
+  let extensionWebAuth = false;
+  let extensionState = '';
+  try {
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    const redirectUri = process.env.DISCORD_REDIRECT_URI || `${SITE_URL}/api/auth/discord/callback`;
+    if (!clientId || !clientSecret) throw new Error('Discord login is not configured.');
+    const code = String(req.query.code || '');
+    if (!code) throw new Error('Missing Discord code.');
+    
+    let redirect = '/dashboard';
+    let extensionRedirect = '';
+    try {
+      const state = JSON.parse(Buffer.from(String(req.query.state || ''), 'base64url').toString('utf8'));
+      redirect = safeRedirectPath(state.redirect);
+      extensionRedirect = safeExtensionRedirect(state.extensionRedirect);
+      extensionWebAuth = state.extensionWebAuth === true;
+      extensionState = safeExtensionState(state.extensionState);
+    } catch {}
+
+    const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri
+      })
+    });
+    const tokenData = await tokenResponse.json();
+    if (!tokenResponse.ok) throw new Error(tokenData.error_description || 'Discord token exchange failed.');
+
+    const userResponse = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const discordProfile = await userResponse.json();
+    if (!userResponse.ok || !discordProfile.email) throw new Error('Could not read Discord profile email.');
+
+    const email = sanitizeEmail(discordProfile.email);
+    let user = await User.findOne({ $or: [{ discordId: discordProfile.id }, { email }] });
+    let isNewUser = false;
+    if (!user) {
+      isNewUser = true;
+      user = new User({
+        email,
+        discordId: discordProfile.id,
+        authProviders: ['discord'],
+        emailVerified: true,
+        passwordHash: ''
+      });
+    } else {
+      user.discordId = user.discordId || discordProfile.id;
+      if (!user.emailVerified) {
+        isNewUser = true;
+      }
+      user.emailVerified = true;
+      if (!user.authProviders?.includes('discord')) user.authProviders = [...(user.authProviders || []), 'discord'];
+    }
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = null;
+    user.resetFreeCreditsIfNeeded();
+    await user.save();
+
+    if (isNewUser) {
+      try {
+        const { sendEmail, welcomeTemplate } = require('../services/emailService');
+        sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) }).catch((e) => console.error(e));
+      } catch (err) {
+        console.error('Failed to send welcome email on discord auth:', err);
+      }
+    }
+
+    const token = generateToken(user._id, true);
+    if (extensionRedirect) {
+      return res.redirect(extensionTokenRedirect(extensionRedirect, token));
+    }
+    if (extensionWebAuth) {
+      return res.redirect(extensionWebAuthRedirect({ token, state: extensionState }));
+    }
+    res.set('Cache-Control', 'no-store').type('html').send(tokenLandingHtml(token, redirect));
+  } catch (error) {
+    const rawMessage = error.message || 'Discord login failed.';
+    if (extensionWebAuth) {
+      return res.redirect(extensionWebAuthRedirect({ error: rawMessage, state: extensionState }));
+    }
+    const hash = new URLSearchParams({ auth: 'login', error: rawMessage }).toString();
+    res.redirect(`${SITE_URL}/#${hash}`);
+  }
+});
+
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     req.user.resetFreeCreditsIfNeeded();

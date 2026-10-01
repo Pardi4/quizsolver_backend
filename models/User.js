@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  discordId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   emailVerified: {
     type: Boolean,
     default: false
