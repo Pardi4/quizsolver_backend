@@ -1536,7 +1536,6 @@ router.get('/dataset', async (req, res) => {
     res.status(500).json({ error: 'Failed to read dataset' });
   }
 });
-module.exports = router;
 
 router.get('/chart-stats', async (req, res) => {
   try {
@@ -1574,3 +1573,294 @@ router.get('/chart-stats', async (req, res) => {
 });
 
 
+
+
+/* ─────────────────────────────────────────────────────────────────
+   PARSER ANALYSIS ZIP EXPORT
+   GET /api/admin/parser/analysis-zip?days=N&includeHtml=true
+   ───────────────────────────────────────────────────────────────── */
+const zlib = require('zlib');
+
+function buildZip(files) {
+  const buffers = [];
+  const centralDir = [];
+  let offset = 0;
+
+  const u32 = n => { const b = Buffer.alloc(4); b.writeUInt32LE(n, 0); return b; };
+  const u16 = n => { const b = Buffer.alloc(2); b.writeUInt16LE(n, 0); return b; };
+
+  const now = new Date();
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+
+  const crcTable = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c;
+    }
+    return t;
+  })();
+
+  function crc32(buf) {
+    let crc = 0xffffffff;
+    for (const byte of buf) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  for (const file of files) {
+    const raw  = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data, 'utf8');
+    const comp = zlib.deflateRawSync(raw, { level: 6 });
+    const crc  = crc32(raw);
+    const name = Buffer.from(file.name, 'utf8');
+
+    const lh = Buffer.concat([
+      Buffer.from([0x50,0x4b,0x03,0x04]),
+      u16(20), u16(0), u16(8),
+      u16(dosTime), u16(dosDate),
+      u32(crc), u32(comp.length), u32(raw.length),
+      u16(name.length), u16(0),
+      name, comp,
+    ]);
+
+    centralDir.push(Buffer.concat([
+      Buffer.from([0x50,0x4b,0x01,0x02]),
+      u16(20), u16(20), u16(0), u16(8),
+      u16(dosTime), u16(dosDate),
+      u32(crc), u32(comp.length), u32(raw.length),
+      u16(name.length), u16(0), u16(0), u16(0), u16(0),
+      u32(0), u32(offset), name,
+    ]));
+
+    offset += lh.length;
+    buffers.push(lh);
+  }
+
+  const cdBuf = Buffer.concat(centralDir);
+  const eocd  = Buffer.concat([
+    Buffer.from([0x50,0x4b,0x05,0x06]),
+    u16(0), u16(0),
+    u16(files.length), u16(files.length),
+    u32(cdBuf.length), u32(offset), u16(0),
+  ]);
+
+  return Buffer.concat([...buffers, cdBuf, eocd]);
+}
+
+router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const days        = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
+    const includeHtml = req.query.includeHtml !== 'false';
+    const since       = new Date(Date.now() - days * 86400_000);
+
+    const [events, bugReports, recentAnswers] = await Promise.all([
+      ParserEvent.find({ createdAt: { $gte: since } })
+        .populate('userId', 'email')
+        .sort({ createdAt: -1 })
+        .limit(5000)
+        .lean(),
+      BugReport.find({ createdAt: { $gte: since } })
+        .populate('userId', 'email')
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .lean(),
+      CachedAnswer.find({ createdAt: { $gte: since } })
+        .sort({ hitCount: -1 })
+        .limit(200)
+        .select('questionText questionType options answer explanation platform hitCount createdAt')
+        .lean(),
+    ]);
+
+    const failedEvents  = events.filter(e => ['error','empty','weak'].includes(e.outcome));
+    const successEvents = events.filter(e => e.outcome === 'success');
+
+    // ── Aggregations ──────────────────────────────────────────
+    const byOutcome  = {};
+    const byPlatform = {};
+    let totalConf = 0, confCount = 0;
+
+    for (const e of events) {
+      byOutcome[e.outcome] = (byOutcome[e.outcome] || 0) + 1;
+      const pk = e.platform || 'universal';
+      if (!byPlatform[pk]) byPlatform[pk] = { total:0, success:0, failed:0, partial:0, confSum:0, confN:0 };
+      const pp = byPlatform[pk];
+      pp.total++;
+      if (e.outcome === 'success') pp.success++;
+      if (['error','empty','weak'].includes(e.outcome)) pp.failed++;
+      if (e.outcome === 'partial') pp.partial++;
+      if (e.confidence > 0) { pp.confSum += e.confidence; pp.confN++; totalConf += e.confidence; confCount++; }
+    }
+
+    const platformSummary = Object.entries(byPlatform).map(([plat, d]) => ({
+      platform: plat, total: d.total, success: d.success, failed: d.failed, partial: d.partial,
+      successRate: d.total ? (d.success/d.total*100).toFixed(1)+'%' : '—',
+      avgConfidence: d.confN ? (d.confSum/d.confN).toFixed(3) : '—',
+    })).sort((a,b) => b.total - a.total);
+
+    // Problem groups
+    const pgMap = {};
+    for (const e of failedEvents) {
+      const key = `${e.hostname}|${e.platform}|${e.outcome}`;
+      if (!pgMap[key]) pgMap[key] = { hostname: e.hostname, platform: e.platform, outcome: e.outcome, reason: e.reason, count: 0, lastSeenAt: e.createdAt, urls: [] };
+      pgMap[key].count++;
+      if (e.url && pgMap[key].urls.length < 3 && !pgMap[key].urls.includes(e.url)) pgMap[key].urls.push(e.url);
+      if (e.createdAt > pgMap[key].lastSeenAt) pgMap[key].lastSeenAt = e.createdAt;
+    }
+    const problemGroups = Object.values(pgMap).sort((a,b) => b.count - a.count).slice(0, 100);
+
+    // Confidence buckets
+    const confBuckets = { '0.0-0.2':0, '0.2-0.4':0, '0.4-0.6':0, '0.6-0.8':0, '0.8-1.0':0 };
+    for (const e of events) {
+      const c = e.confidence || 0;
+      if      (c < 0.2) confBuckets['0.0-0.2']++;
+      else if (c < 0.4) confBuckets['0.2-0.4']++;
+      else if (c < 0.6) confBuckets['0.4-0.6']++;
+      else if (c < 0.8) confBuckets['0.6-0.8']++;
+      else              confBuckets['0.8-1.0']++;
+    }
+
+    // Top failure reasons
+    const reasonMap = {};
+    for (const e of failedEvents) {
+      const r = e.reason || '(no reason)';
+      reasonMap[r] = (reasonMap[r] || 0) + 1;
+    }
+    const topReasons = Object.entries(reasonMap).sort((a,b) => b[1]-a[1]).slice(0,30)
+      .map(([reason, count]) => ({ reason, count }));
+
+    // Selector patterns from failed snapshots
+    const selectorPatterns = {};
+    for (const e of failedEvents) {
+      for (const [sel, cnt] of Object.entries(e.snapshot?.selectorSummary || {})) {
+        selectorPatterns[sel] = (selectorPatterns[sel] || 0) + Number(cnt);
+      }
+    }
+    const topSelectors = Object.entries(selectorPatterns).sort((a,b) => b[1]-a[1]).slice(0,20)
+      .map(([selector, count]) => ({ selector, count }));
+
+    // Daily breakdown
+    const dayMap = {};
+    for (const e of events) {
+      const d = (e.createdAt || new Date()).toISOString().slice(0,10);
+      if (!dayMap[d]) dayMap[d] = { date:d, total:0, success:0, failed:0, partial:0 };
+      dayMap[d].total++;
+      if (e.outcome === 'success')                      dayMap[d].success++;
+      if (['error','empty','weak'].includes(e.outcome)) dayMap[d].failed++;
+      if (e.outcome === 'partial')                      dayMap[d].partial++;
+    }
+    const dailyBreakdown = Object.values(dayMap).sort((a,b) => a.date.localeCompare(b.date));
+
+    // ── Serializers ────────────────────────────────────────────
+    const serEvent = (e, withSnap) => ({
+      id: e._id, outcome: e.outcome, platform: e.platform, detectorPlatform: e.detectorPlatform,
+      url: e.url, hostname: e.hostname, confidence: e.confidence, reason: e.reason,
+      questionCount: e.questionCount, supportedQuestionCount: e.supportedQuestionCount,
+      questionTypes: e.questionTypes, attemptedTypes: e.attemptedTypes,
+      parserVersion: e.parserVersion, extensionVersion: e.extensionVersion,
+      userEmail: e.userId?.email || 'unknown', createdAt: e.createdAt,
+      ...(withSnap && includeHtml ? {
+        snapshot_title:          e.snapshot?.title,
+        snapshot_bodyText:       (e.snapshot?.bodyText    || '').slice(0, 2000),
+        snapshot_htmlSnippet:    (e.snapshot?.htmlSnippet || '').slice(0, 4000),
+        snapshot_questionTexts:  e.snapshot?.questionTexts || [],
+        snapshot_optionsSample:  e.snapshot?.optionsSample || [],
+        snapshot_selectorSummary: e.snapshot?.selectorSummary || {},
+        snapshot_questionsData:  (e.snapshot?.questionsData || []).slice(0, 10),
+      } : {}),
+    });
+
+    const serBug = b => ({
+      id: b._id, isRead: b.isRead, platform: b.platform, sourceUrl: b.sourceUrl,
+      userEmail: b.userId?.email || 'unknown', description: b.description,
+      parserOutcome: b.parserOutcome, questionText: b.questionText,
+      hasSnapshot: !!(b.parserSnapshotFileId || b.snapshotId), createdAt: b.createdAt,
+    });
+
+    // ── README ─────────────────────────────────────────────────
+    const readme = [
+      '# Parser Analysis Export',
+      `Generated: ${new Date().toISOString()}`,
+      `Period: last ${days} days (${since.toISOString().slice(0,10)} → ${new Date().toISOString().slice(0,10)})`,
+      '',
+      '## Files',
+      '',
+      '| File | Description |',
+      '|------|-------------|',
+      '| summary.json | Totals, by-outcome counts, platform breakdown, daily trend |',
+      '| failed_events.jsonl | All error/empty/weak events with snapshot data — main debug source |',
+      '| success_sample.jsonl | 100 random successful events for comparison |',
+      '| bug_reports.json | User-submitted bug reports for the period |',
+      '| problem_groups.json | Failures aggregated by hostname+platform+outcome with sample URLs |',
+      '| confidence_distribution.json | Confidence score bucket histogram |',
+      '| top_failure_reasons.json | Most frequent parser reason strings ranked |',
+      '| selector_patterns.json | CSS selectors found on pages that failed parsing |',
+      '| daily_breakdown.json | Per-day event counts |',
+      '| cached_answers_sample.json | Recently cached correct answers (what the parser did get right) |',
+      '',
+      '## Outcome meanings',
+      '- **success**: questions + high-confidence answers found',
+      '- **partial**: questions found, answers incomplete or low confidence',
+      '- **empty**: page loaded, no quiz structure detected at all',
+      '- **weak**: found something but confidence below threshold',
+      '- **error**: exception or timeout during parsing',
+      '- **reported**: user manually submitted as incorrect',
+      '',
+      '## Key analysis areas',
+      '1. **problem_groups.json** — hosts with many failures → indicates platform-specific issues',
+      '2. **top_failure_reasons.json** — most common reason strings → shows what the parser gives up on',
+      '3. **selector_patterns.json** in failed events → which DOM selectors exist on failing pages',
+      '4. **snapshot_htmlSnippet** in failed_events.jsonl → actual HTML the parser saw',
+      '5. **snapshot_questionsData** — what the parser partially extracted before giving up',
+      '6. **bug_reports.json** — user-confirmed bad results, best have questionText for ground truth',
+      '7. Compare snapshot_selectorSummary between failed and success events for DOM pattern diffs',
+      '',
+      '## Stats at export time',
+      `- Total events: ${events.length}`,
+      `- Failed: ${failedEvents.length} (${events.length ? (failedEvents.length/events.length*100).toFixed(1) : 0}%)`,
+      `- Success: ${successEvents.length}`,
+      `- Bug reports: ${bugReports.length}`,
+    ].join('\n');
+
+    // ── Build ZIP ──────────────────────────────────────────────
+    const summary = {
+      exportedAt: new Date().toISOString(),
+      period: { days, since: since.toISOString(), until: new Date().toISOString() },
+      totals: {
+        events: events.length, failed: failedEvents.length, success: successEvents.length,
+        bugReports: bugReports.length,
+        avgConfidence: confCount ? Number((totalConf/confCount).toFixed(4)) : 0,
+        successRate: events.length ? (successEvents.length/events.length*100).toFixed(1)+'%' : '—',
+      },
+      byOutcome, platformSummary, dailyBreakdown,
+    };
+
+    const zipFiles = [
+      { name: 'README.md',                   data: readme },
+      { name: 'summary.json',                data: JSON.stringify(summary, null, 2) },
+      { name: 'failed_events.jsonl',         data: failedEvents.map(e => JSON.stringify(serEvent(e, true))).join('\n') || '// no failed events' },
+      { name: 'success_sample.jsonl',        data: successEvents.sort(() => Math.random()-.5).slice(0,100).map(e => JSON.stringify(serEvent(e, false))).join('\n') || '// no success events' },
+      { name: 'bug_reports.json',            data: JSON.stringify(bugReports.map(serBug), null, 2) },
+      { name: 'problem_groups.json',         data: JSON.stringify(problemGroups, null, 2) },
+      { name: 'confidence_distribution.json',data: JSON.stringify(confBuckets, null, 2) },
+      { name: 'top_failure_reasons.json',    data: JSON.stringify(topReasons, null, 2) },
+      { name: 'selector_patterns.json',      data: JSON.stringify(topSelectors, null, 2) },
+      { name: 'daily_breakdown.json',        data: JSON.stringify(dailyBreakdown, null, 2) },
+      { name: 'cached_answers_sample.json',  data: JSON.stringify(recentAnswers, null, 2) },
+    ];
+
+    const zipBuf  = buildZip(zipFiles);
+    const fname   = `parser-analysis-${days}d-${new Date().toISOString().slice(0,10)}.zip`;
+
+    res.setHeader('Content-Type',        'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+    res.setHeader('Content-Length',      zipBuf.length);
+    res.send(zipBuf);
+
+  } catch (err) {
+    console.error('[parser-zip]', err);
+    res.status(500).json({ error: 'Failed to generate analysis ZIP', detail: err.message });
+  }
+});
+
+module.exports = router;
