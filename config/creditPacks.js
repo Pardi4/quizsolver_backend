@@ -17,7 +17,7 @@ const CREDIT_PACKS = {
     id: 'pro',
     name: '2000 Credits',
     credits: 2000,
-    price: 15.00,
+    price: 14.99,
     lemonVariantEnv: 'LEMONSQUEEZY_VARIANT_2000'
   }
 };
