@@ -91,6 +91,11 @@ const studyNoteSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  extensionVersion: {
+    type: String,
+    default: '',
+    maxlength: 40
+  },
   seenCount: {
     type: Number,
     default: 1
@@ -142,6 +147,7 @@ studyNoteSchema.statics.upsertFromCache = async function(userId, cachedAnswer, u
 
   if (updates.sourceUrl !== undefined) set.sourceUrl = String(updates.sourceUrl || '').substring(0, 500);
   if (updates.platform !== undefined) set.platform = String(updates.platform || '').substring(0, 80);
+  if (updates.extensionVersion !== undefined) set.extensionVersion = String(updates.extensionVersion || '').substring(0, 40);
   if (updates.quizSessionId !== undefined) set.quizSessionId = updates.quizSessionId;
 
   if (updates.questionImageBase64 !== undefined && updates.questionImageBase64) {

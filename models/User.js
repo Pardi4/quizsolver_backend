@@ -74,6 +74,7 @@ const userSchema = new mongoose.Schema({
   extensionLastSeenReason: { type: String, default: '', maxlength: 50 },
   extensionLastSeenUrl: { type: String, default: '', maxlength: 500 },
   extensionLastSeenPlatform: { type: String, default: '', maxlength: 80 },
+  extensionVersion: { type: String, default: '', maxlength: 40 },
   referralCode: { type: String, unique: true, sparse: true },
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   streak: {

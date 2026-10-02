@@ -701,6 +701,7 @@ router.post('/extension-heartbeat', authMiddleware, async (req, res) => {
     req.user.extensionLastSeenReason = sanitizeHeartbeatToken(req.body?.reason || 'heartbeat');
     req.user.extensionLastSeenUrl = sanitizeExtensionUrl(req.body?.url || '');
     req.user.extensionLastSeenPlatform = sanitizeHeartbeatToken(req.body?.platform || '', 80);
+    if (req.body?.version) req.user.extensionVersion = sanitizeHeartbeatToken(req.body.version, 40);
     await req.user.save();
 
     res.json({

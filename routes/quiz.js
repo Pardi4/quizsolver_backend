@@ -368,7 +368,8 @@ async function saveStudyNote(userId, cachedAnswer, body, updates = {}) {
     ...imageUpdatesFromBody(body),
     ...updates,
     sourceUrl: sanitizeSourceUrl(body.url),
-    platform: body.platform
+    platform: body.platform,
+    extensionVersion: body.extensionVersion || body.version
   });
 }
 

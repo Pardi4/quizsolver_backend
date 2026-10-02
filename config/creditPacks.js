@@ -3,21 +3,21 @@ const CREDIT_PACKS = {
     id: 'starter',
     name: '100 Credits',
     credits: 100,
-    price: 2.49,
+    price: 1.99,
     lemonVariantEnv: 'LEMONSQUEEZY_VARIANT_100'
   },
   popular: {
     id: 'popular',
     name: '500 Credits',
     credits: 500,
-    price: 5.99,
+    price: 4.99,
     lemonVariantEnv: 'LEMONSQUEEZY_VARIANT_500'
   },
   pro: {
     id: 'pro',
     name: '2000 Credits',
     credits: 2000,
-    price: 14.99,
+    price: 15.00,
     lemonVariantEnv: 'LEMONSQUEEZY_VARIANT_2000'
   }
 };

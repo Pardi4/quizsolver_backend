@@ -22,6 +22,11 @@ const bugReportSchema = new mongoose.Schema({
     maxlength: 80,
     index: true
   },
+  extensionVersion: {
+    type: String,
+    default: '',
+    maxlength: 40
+  },
   parserDiagnostics: {
     outcome: { type: String, default: '', maxlength: 40 },
     confidence: { type: Number, default: 0, min: 0, max: 1 },

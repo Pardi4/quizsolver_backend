@@ -139,6 +139,7 @@ async function createParserBugReportIfNeeded(req, event) {
   await BugReport.create({
     userId: event.userId,
     url: event.url,
+    extensionVersion: event.extensionVersion || '',
     description: cleanText(`Automatic parser failure: ${event.reason || event.outcome}`, 1000),
     platform: event.platform || 'universal',
     source: 'parser-auto',

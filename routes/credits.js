@@ -325,6 +325,7 @@ router.post('/report-bug', async (req, res) => {
     await BugReport.create({
       userId: req.user._id,
       url: url.substring(0, 500),
+      extensionVersion: req.user.extensionVersion || req.body.version || '',
       description: description || '',
       platform,
       source: 'manual',

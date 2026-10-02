@@ -67,6 +67,7 @@ function serializeAdminUser(user) {
     extensionLastSeenReason: user.extensionLastSeenReason || '',
     extensionLastSeenUrl: user.extensionLastSeenUrl || '',
     extensionLastSeenPlatform: user.extensionLastSeenPlatform || '',
+    extensionVersion: user.extensionVersion || '',
     securityLogs: user.securityLogs || [],
     createdAt: user.createdAt
   };
@@ -107,6 +108,7 @@ function serializeAdminQuestion(note) {
     explainCount: note.explainCount || 0,
     lastSeenAt: note.lastSeenAt,
     lastExplainedAt: note.lastExplainedAt,
+    extensionVersion: note.extensionVersion || '',
     createdAt: note.createdAt
   };
 }
@@ -246,7 +248,7 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform extensionVersion authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
@@ -265,7 +267,7 @@ router.get('/users/:userId', async (req, res) => {
     }
     const user = await User.findById(req.params.userId).select(
       'email displayName role marketingConsent credits stats createdAt isBanned streak ' +
-      'extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform ' +
+      'extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform extensionVersion ' +
       'authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt'
     );
     if (!user) return res.status(404).json({ error: 'User not found.' });
@@ -1652,7 +1654,10 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
   try {
     const days        = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
     const includeHtml = req.query.includeHtml !== 'false';
-    const since       = new Date(Date.now() - days * 86400_000);
+    const version = req.query.version || null;
+    const since = new Date(Date.now() - days * 86400_000);
+    const matchFilter = { createdAt: { $gte: since } };
+    if (version) matchFilter.extensionVersion = version;
 
     const [events, bugReports, recentAnswers] = await Promise.all([
       ParserEvent.find({ createdAt: { $gte: since } })
@@ -1774,6 +1779,7 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       id: b._id, isRead: b.isRead, platform: b.platform, sourceUrl: b.sourceUrl,
       userEmail: b.userId?.email || 'unknown', description: b.description,
       parserOutcome: b.parserOutcome, questionText: b.questionText,
+      extensionVersion: b.extensionVersion || '',
       hasSnapshot: !!(b.parserSnapshotFileId || b.snapshotId), createdAt: b.createdAt,
     });
 
