@@ -1546,7 +1546,7 @@ router.get('/chart-stats', async (req, res) => {
     const Purchase = require('../models/Purchase');
     const User = require('../models/User');
     
-    const [purchases, users] = await Promise.all([
+    const [purchases, users, usages] = await Promise.all([
       Purchase.aggregate([
         { $match: { createdAt: { $gte: thirtyDaysAgo } } },
         { $group: { 
@@ -1565,10 +1565,19 @@ router.get('/chart-stats', async (req, res) => {
           }
         },
         { $sort: { _id: 1 } }
+      ]),
+      require('../models/CreditUsage').aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo }, status: 'charged' } },
+        { $group: { 
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            spentCredits: { $sum: '$credits' }
+          }
+        },
+        { $sort: { _id: 1 } }
       ])
     ]);
     
-    res.json({ success: true, purchases, users });
+    res.json({ success: true, purchases, users, usages });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching chart stats' });
   }
@@ -1870,3 +1879,4 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
 });
 
 module.exports = router;
+
