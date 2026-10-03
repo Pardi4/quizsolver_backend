@@ -619,7 +619,7 @@ router.get('/parser/health', async (req, res) => {
         .limit(30)
         .populate('userId', 'email')
         .lean(),
-      BugReport.find({ createdAt: { $gte: since } })
+      BugReport.find(matchFilter)
         .sort({ createdAt: -1 })
         .limit(12)
         .populate('userId', 'email')
@@ -1659,6 +1659,21 @@ function buildZip(files) {
   return Buffer.concat([...buffers, cdBuf, eocd]);
 }
 
+// List of extension versions seen in parser events / bug reports (newest first)
+router.get('/parser/versions', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const [a, b] = await Promise.all([
+      ParserEvent.distinct('extensionVersion'),
+      BugReport.distinct('extensionVersion'),
+    ]);
+    const cmp = (x, y) => y.localeCompare(x, undefined, { numeric: true });
+    const versions = [...new Set([...a, ...b].filter(v => typeof v === 'string' && v.trim()))].sort(cmp);
+    res.json({ success: true, versions });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching versions' });
+  }
+});
+
 router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) => {
   try {
     const days        = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
@@ -1669,22 +1684,30 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
     if (version) matchFilter.extensionVersion = version;
 
     const [events, bugReports, recentAnswers] = await Promise.all([
-      ParserEvent.find({ createdAt: { $gte: since } })
+      ParserEvent.find(matchFilter)
         .populate('userId', 'email')
         .sort({ createdAt: -1 })
         .limit(5000)
         .lean(),
-      BugReport.find({ createdAt: { $gte: since } })
+      BugReport.find(matchFilter)
         .populate('userId', 'email')
         .sort({ createdAt: -1 })
         .limit(500)
         .lean(),
-      CachedAnswer.find({ createdAt: { $gte: since } })
+      version ? Promise.resolve([]) : CachedAnswer.find({ createdAt: { $gte: since } })
         .sort({ hitCount: -1 })
         .limit(200)
         .select('questionText questionType options answer explanation platform hitCount createdAt')
         .lean(),
     ]);
+
+    // Questions saved by users (tagged with extension version); images excluded to keep ZIP small
+    const questionNotes = await StudyNote.find(matchFilter)
+      .populate('user', 'email')
+      .sort({ createdAt: -1 })
+      .limit(2000)
+      .select('-questionImageBase64 -personalNote -userNote')
+      .lean();
 
     const failedEvents  = events.filter(e => ['error','empty','weak'].includes(e.outcome));
     const successEvents = events.filter(e => e.outcome === 'success');
@@ -1811,6 +1834,7 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       '| top_failure_reasons.json | Most frequent parser reason strings ranked |',
       '| selector_patterns.json | CSS selectors found on pages that failed parsing |',
       '| daily_breakdown.json | Per-day event counts |',
+      '| questions.jsonl | Questions saved by users (with extensionVersion) - filtered to the selected version |',
       '| cached_answers_sample.json | Recently cached correct answers (what the parser did get right) |',
       '',
       '## Outcome meanings',
@@ -1843,7 +1867,7 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       period: { days, since: since.toISOString(), until: new Date().toISOString() },
       totals: {
         events: events.length, failed: failedEvents.length, success: successEvents.length,
-        bugReports: bugReports.length,
+        bugReports: bugReports.length, questions: questionNotes.length, extensionVersion: version || 'all',
         avgConfidence: confCount ? Number((totalConf/confCount).toFixed(4)) : 0,
         successRate: events.length ? (successEvents.length/events.length*100).toFixed(1)+'%' : '—',
       },
@@ -1861,6 +1885,7 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       { name: 'top_failure_reasons.json',    data: JSON.stringify(topReasons, null, 2) },
       { name: 'selector_patterns.json',      data: JSON.stringify(topSelectors, null, 2) },
       { name: 'daily_breakdown.json',        data: JSON.stringify(dailyBreakdown, null, 2) },
+      { name: 'questions.jsonl',             data: questionNotes.map(n => JSON.stringify({ id: n._id, extensionVersion: n.extensionVersion || '', userEmail: n.user?.email || 'unknown', questionType: n.questionType, questionText: n.questionText, options: n.options, prompts: n.prompts, rows: n.rows, answer: n.answer, explanation: n.explanation, sourceUrl: n.sourceUrl, platform: n.platform, createdAt: n.createdAt })).join('\n') || '// no questions' },
       { name: 'cached_answers_sample.json',  data: JSON.stringify(recentAnswers, null, 2) },
     ];
 
