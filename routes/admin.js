@@ -699,7 +699,8 @@ router.get('/parser/health', async (req, res) => {
       }))
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error fetching parser health.' });
+    console.error('Error fetching parser health:', error);
+    res.status(500).json({ error: 'Error fetching parser health.', details: error.message });
   }
 });
 
@@ -1970,4 +1971,5 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
 });
 
 module.exports = router;
+
 
