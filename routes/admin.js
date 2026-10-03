@@ -1539,6 +1539,72 @@ router.get('/dataset', async (req, res) => {
   }
 });
 
+/* ─────────────────────────────────────────────────────────────────
+   CONVERSION FUNNEL (cohort based)
+   GET /api/admin/funnel?days=30[&version=x.y.z]
+   Cohort = non-admin users registered in the period. Each step counts
+   distinct users from that cohort who reached it.
+   ───────────────────────────────────────────────────────────────── */
+router.get('/funnel', async (req, res) => {
+  try {
+    const CreditUsage = require('../models/CreditUsage');
+    const CheckoutStart = require('../models/CheckoutStart');
+    const Purchase = require('../models/Purchase');
+
+    const days = Math.min(Math.max(parseInt(req.query.days) || 30, 1), 365);
+    const since = new Date(Date.now() - days * 86400000);
+    const userMatch = { createdAt: { $gte: since }, role: { $ne: 'admin' } };
+    const version = typeof req.query.version === 'string' ? req.query.version.trim() : '';
+    if (version) userMatch.extensionVersion = version;
+
+    const cohort = await User.find(userMatch).select('_id credits stats.totalQuestionsSolved').limit(100000).lean();
+    const ids = cohort.map(u => u._id);
+
+    const signedUp = cohort.length;
+    const solvedSet = new Set(cohort.filter(u => (u.stats?.totalQuestionsSolved || 0) > 0).map(u => String(u._id)));
+
+    // "Out of credits": balance is 0 now OR a request was declined for lack of credits
+    const exhaustedSet = new Set(cohort.filter(u => (u.credits || 0) <= 0).map(u => String(u._id)));
+    const [declinedIds, checkoutIds, paidRows, firstCheckout] = await Promise.all([
+      CreditUsage.distinct('user', { user: { $in: ids }, status: 'declined' }),
+      CheckoutStart.distinct('user', { user: { $in: ids } }),
+      Purchase.find({
+        userId: { $in: ids },
+        paymentProvider: { $in: ['lemonsqueezy', 'whop'] },
+        priceUsd: { $gt: 0 },
+      }).select('userId priceUsd').lean(),
+      CheckoutStart.findOne().sort({ createdAt: 1 }).select('createdAt').lean(),
+    ]);
+    declinedIds.forEach(id => exhaustedSet.add(String(id)));
+
+    const paidSet = new Set(paidRows.map(p => String(p.userId)));
+    const revenue = paidRows.reduce((s, p) => s + (p.priceUsd || 0), 0);
+    const checkoutSet = new Set(checkoutIds.map(String));
+
+    const steps = [
+      { key: 'signup',    label: 'Rejestracja',            count: signedUp },
+      { key: 'solved',    label: 'Pierwsze rozwiązanie',   count: solvedSet.size },
+      { key: 'exhausted', label: 'Kredyty wyczerpane',     count: exhaustedSet.size },
+      { key: 'checkout',  label: 'Checkout rozpoczęty',    count: checkoutSet.size },
+      { key: 'purchase',  label: 'Zakup',                  count: paidSet.size },
+    ];
+
+    res.json({
+      success: true,
+      days,
+      version: version || null,
+      steps,
+      revenue: Number(revenue.toFixed(2)),
+      arpu: signedUp ? Number((revenue / signedUp).toFixed(3)) : 0,
+      payerValue: paidSet.size ? Number((revenue / paidSet.size).toFixed(2)) : 0,
+      // Checkout tracking started on deploy - earlier checkouts are not in the data
+      checkoutTrackedSince: firstCheckout?.createdAt || null,
+    });
+  } catch (error) {
+    console.error('[funnel]', error);
+    res.status(500).json({ error: 'Error building funnel' });
+  }
+});
 router.get('/chart-stats', async (req, res) => {
   try {
     const thirtyDaysAgo = new Date();

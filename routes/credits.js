@@ -1,6 +1,7 @@
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const Purchase = require('../models/Purchase');
+const CheckoutStart = require('../models/CheckoutStart');
 const BugReport = require('../models/BugReport');
 const User = require('../models/User');
 const ParserEvent = require('../models/ParserEvent');
@@ -223,6 +224,10 @@ router.post('/buy', async (req, res) => {
       console.error('[Credits] Lemon Squeezy checkout response missing URL.');
       return res.status(502).json({ error: 'Payment provider error. Try again later.' });
     }
+
+    // Funnel tracking (fire and forget - must never block the checkout)
+    CheckoutStart.create({ user: req.user._id, pack: packInfo.id, credits: packInfo.credits })
+      .catch((e) => console.error('[Credits] CheckoutStart log failed:', e.message));
 
     res.json({ success: true, checkoutUrl, pack: packInfo.id, credits: packInfo.credits });
   } catch (error) {

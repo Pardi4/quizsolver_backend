@@ -1,6 +1,6 @@
 const rateLimit = require('express-rate-limit');
 
-const QUIZ_REQUESTS_PER_MINUTE = 100;
+const QUIZ_REQUESTS_PER_MINUTE = 1000;
 const quizSolveEndpointPattern = /^\/api\/quiz\/(?:solve(?:-batch|-snapshot)?|explain|follow-up)(?:[/?#]|$)/i;
 
 const requestIp = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
@@ -73,7 +73,7 @@ const createStore = (prefix) => new RedisStore({
 
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: (req) => isQuizSolveEndpoint(req) ? QUIZ_REQUESTS_PER_MINUTE : 40,
+  max: (req) => isQuizSolveEndpoint(req) ? QUIZ_REQUESTS_PER_MINUTE : (req.headers.authorization ? 5000 : 200),
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -82,15 +82,39 @@ const generalLimiter = rateLimit({
 });
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  windowMs: 50 * 60 * 1000,
+  max: 50, // 50 attempts per 50 minutes
+  message: { error: 'Too many login attempts. Please try again in 50 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: requestIp,
   validate: false
 });
 
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1, // Max 1 registration per device/IP per 15 minutes
+  message: { error: 'Too many accounts created from this device recently. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Prefer deviceId for rate limiting registrations, fallback to IP
+    return req.body.deviceId ? `device_${req.body.deviceId}` : requestIp(req);
+  },
+  validate: false
+});
+
+// Extension -> website session handoff (one-time codes). Looser than authLimiter on purpose:
+// the extension requests a code every time a user runs out of credits.
+const handoffLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: requestIp,
+  validate: false
+});
 const quizLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: QUIZ_REQUESTS_PER_MINUTE,
@@ -103,7 +127,7 @@ const quizLimiter = rateLimit({
 
 const webhookLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 500,
   message: { error: 'Too many webhook requests.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -113,7 +137,7 @@ const webhookLimiter = rateLimit({
 
 const adminLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5000,
+  max: 1000000,
   message: { error: 'Too many admin requests.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -123,7 +147,7 @@ const adminLimiter = rateLimit({
 
 const parserSnapshotLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5000,
+  max: 1000000,
   message: { error: 'Too many parser snapshots uploaded from this IP.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -131,4 +155,6 @@ const parserSnapshotLimiter = rateLimit({
   validate: false
 });
 
-module.exports = { generalLimiter, authLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };
+module.exports = { generalLimiter, authLimiter, registerLimiter, handoffLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };
+
+

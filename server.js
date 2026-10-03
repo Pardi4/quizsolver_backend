@@ -443,7 +443,6 @@ function robotsTxt() {
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.dashboard[locale.code]),
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.success[locale.code]),
     ...SUPPORTED_LOCALES.map(locale => PAGE_ROUTES.notFound[locale.code]),
-    ...LEGACY_ADMIN_PATHS,
     '/api',
     '/api/',
     '/extension-auth/'

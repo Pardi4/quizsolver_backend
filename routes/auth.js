@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { authMiddleware, generateToken, revokeToken } = require('../middleware/auth');
-const { authLimiter } = require('../middleware/rateLimiter');
+const { authLimiter, registerLimiter, handoffLimiter } = require('../middleware/rateLimiter');
 const {
   SITE_URL,
   sendEmail,
@@ -184,7 +184,15 @@ location.replace(${JSON.stringify(safeRedirect)});
 </script><p>Signing you in...</p></body></html>`;
 }
 
-router.post('/register', authLimiter, async (req, res) => {
+let TEMP_MAIL_DOMAINS_SET = new Set();
+try {
+  const domains = require('../config/disposable_emails.json');
+  TEMP_MAIL_DOMAINS_SET = new Set(domains);
+} catch (e) {
+  console.error('Could not load disposable emails list', e);
+}
+
+router.post('/register', registerLimiter, async (req, res) => {
   try {
     const email = sanitizeEmail(req.body.email);
     const password = req.body.password;
@@ -193,6 +201,11 @@ router.post('/register', authLimiter, async (req, res) => {
 
     if (!email || !EMAIL_REGEX.test(email)) {
       return res.status(400).json({ error: 'Invalid email format.' });
+    }
+
+    const domain = email.split('@')[1];
+    if (domain && TEMP_MAIL_DOMAINS_SET.has(domain.toLowerCase())) {
+      return res.status(400).json({ error: 'Temporary email addresses are not allowed.' });
     }
 
     const passwordError = validatePassword(password);
@@ -978,4 +991,23 @@ router.post('/qr/confirm', authMiddleware, authLimiter, async (req, res) => {
   }
 });
 
+// ----------------------------------------------------------------------------
+// EXTENSION -> WEBSITE SESSION
+// The website and the extension keep separate sessions. The extension (already signed in) asks for a
+// website session of ITS OWN account and its content script stores it on the credits page.
+// Requires the extension's Bearer token, so it cannot be triggered cross-site, and nothing secret
+// is ever placed in a URL.
+// ----------------------------------------------------------------------------
+router.post('/web-session', authMiddleware, handoffLimiter, (req, res) => {
+  try {
+    // Short-lived (12h) on purpose; the user can always sign in again on the site.
+    const token = generateToken(req.user._id, false);
+    res.json({ success: true, token });
+  } catch (error) {
+    res.status(500).json({ error: 'Could not create website session.' });
+  }
+});
 module.exports = router;
+
+
+

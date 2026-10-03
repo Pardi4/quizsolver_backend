@@ -145,9 +145,12 @@ userSchema.methods.resetFreeCreditsIfNeeded = function() {
     return false;
   }
   if (this.freeCreditsLastReset !== currentMonth) {
-    const freeCredits = parseInt(process.env.FREE_MONTHLY_CREDITS) || 20;
-    this.credits += freeCredits;
+    // Free credits are granted once at signup (schema default). Monthly top-ups are OFF by default;
+    // set FREE_MONTHLY_CREDITS=<n> in the environment to re-enable them.
+    const freeCredits = parseInt(process.env.FREE_MONTHLY_CREDITS, 10) || 0;
     this.freeCreditsLastReset = currentMonth;
+    if (freeCredits <= 0) return false;
+    this.credits += freeCredits;
     return true;
   }
   return false;
