@@ -1377,39 +1377,6 @@ router.delete('/client-errors/:id', async (req, res) => {
   }
 });
 
-router.post('/users/:id/quick-grant', async (req, res) => {
-  try {
-    const { amount } = req.body;
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid credits amount' });
-    const Purchase = require('../models/Purchase');
-    const result = await Purchase.recordPurchase(req.params.id, 'admin_grant', amount, {
-      priceUsd: 0,
-      paymentProvider: 'manual',
-      grantedBy: req.user._id,
-      grantReason: 'Admin quick grant'
-    });
-    res.json({ success: true, purchase: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.post('/users/:id/grant-credits', async (req, res) => {
-  try {
-    const { credits, reason } = req.body;
-    if (!credits || credits <= 0) return res.status(400).json({ error: 'Invalid credits amount' });
-    const Purchase = require('../models/Purchase');
-    const result = await Purchase.recordPurchase(req.params.id, 'admin_grant', credits, {
-      priceUsd: 0,
-      paymentProvider: 'manual',
-      grantedBy: req.user._id,
-      grantReason: reason || 'Admin manual grant'
-    });
-    res.json({ success: true, purchase: result });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 router.delete('/support/messages/:messageId', async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.messageId)) {
@@ -1754,7 +1721,8 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       ParserEvent.find(matchFilter)
         .populate('userId', 'email')
         .sort({ createdAt: -1 })
-        .limit(5000)
+        .limit(3000) // Reduced from 5000 to prevent OOM
+        .select(includeHtml ? '' : '-snapshot.htmlSnippet -snapshot.bodyText')
         .lean(),
       BugReport.find(matchFilter)
         .populate('userId', 'email')
