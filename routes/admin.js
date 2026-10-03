@@ -619,7 +619,7 @@ router.get('/parser/health', async (req, res) => {
         .limit(30)
         .populate('userId', 'email')
         .lean(),
-      BugReport.find(matchFilter)
+      BugReport.find(match)
         .sort({ createdAt: -1 })
         .limit(12)
         .populate('userId', 'email')
@@ -1971,5 +1971,7 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
 });
 
 module.exports = router;
+
+
 
 
