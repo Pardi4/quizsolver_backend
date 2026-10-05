@@ -151,7 +151,7 @@ studyNoteSchema.statics.upsertFromCache = async function(userId, cachedAnswer, u
   if (updates.quizSessionId !== undefined) set.quizSessionId = updates.quizSessionId;
 
   if (updates.questionImageBase64 !== undefined && updates.questionImageBase64) {
-    const MAX = 2 * 1024 * 1024;
+    const MAX = 4 * 1024 * 1024;
     if (updates.questionImageBase64.length <= MAX) {
       set.questionImageBase64 = updates.questionImageBase64;
       set.imageExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);

@@ -207,7 +207,7 @@ function imageUpdatesFromBody(body = {}) {
   const updates = {};
   const dataImage = explicitImage || (questionImage.startsWith('data:image/') ? questionImage : '');
 
-  if (dataImage && dataImage.length <= 2 * 1024 * 1024) {
+  if (dataImage && dataImage.length <= 4 * 1024 * 1024) {
     updates.questionImageBase64 = dataImage;
   }
 
