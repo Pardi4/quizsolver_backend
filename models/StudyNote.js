@@ -60,8 +60,8 @@ const studyNoteSchema = new mongoose.Schema({
     type: String,
     default: '',
     validate: {
-      validator: function(v) { return !v || v.length <= MAX_IMAGE_BASE64; },
-      message: 'Question image too large (max ~1.5MB).'
+      validator: function(v) { return !v || v.length <= 4 * 1024 * 1024; },
+      message: 'Question image too large (max ~3MB).'
     }
   },
   questionImageUrl: {
