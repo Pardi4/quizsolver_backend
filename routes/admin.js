@@ -109,6 +109,8 @@ function serializeAdminQuestion(note) {
     lastSeenAt: note.lastSeenAt,
     lastExplainedAt: note.lastExplainedAt,
     extensionVersion: note.extensionVersion || '',
+    questionImageBase64: note.questionImageBase64 || '',
+    questionImageUrl: note.questionImageUrl || '',
     createdAt: note.createdAt
   };
 }
