@@ -26,7 +26,7 @@ function hasLemonSqueezyConfig(packInfo) {
 function redactSensitiveText(value) {
   return String(value || '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
-    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Za-z0-9_-]{32,})\b/g, '[token]')
+    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?![a-zA-Z-]+$)[A-Za-z0-9_-]{32,})\b/g, '[token]')
     .replace(/\b(?:\d[ -]?){13,19}\b/g, '[number]')
     .replace(/\+?\d[\d\s().-]{7,}\d/g, '[phone]');
 }

@@ -1011,7 +1011,7 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
 router.post('/solve', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
   try {
-    const { questionData, pageHtml, url, platform } = req.body;
+    const { questionData, pageHtml, url, platform, questionImageBase64 } = req.body; if (questionImageBase64 && questionData) { questionData.imageUrl = questionImageBase64; }
     const user = req.user;
 
     if (pageHtml) {
@@ -1225,7 +1225,7 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const user = req.user;
     const manualSelection = req.body.manualSelection === true || req.body.platform === 'selected-text';
-    const questionData = { text, options, type, prompts, rows, manualSelection };
+    const questionData = { text, options, type, prompts, rows, manualSelection, imageUrl: req.body.questionImageBase64 || req.body.imageUrl || req.body.questionImageUrl };
     const cleanupErr = normalizeQuestionPayload(questionData);
     if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 
@@ -1291,7 +1291,7 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     const previousExplanation = sanitizeText(String(req.body.previousExplanation || '')).substring(0, 1200);
     const user = req.user;
     const manualSelection = req.body.manualSelection === true || req.body.platform === 'selected-text';
-    const questionData = { text, options, type, prompts, rows, manualSelection };
+    const questionData = { text, options, type, prompts, rows, manualSelection, imageUrl: req.body.questionImageBase64 || req.body.imageUrl || req.body.questionImageUrl };
     const cleanupErr = normalizeQuestionPayload(questionData);
     if (cleanupErr) return sendQuestionPayloadError(res, cleanupErr);
 

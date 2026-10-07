@@ -16,7 +16,7 @@ const SNAPSHOT_DIR_RESOLVED = path.resolve(SNAPSHOT_DIR);
 function redactSensitiveText(value) {
   return String(value || '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
-    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|[A-Za-z0-9_-]{32,})\b/g, '[token]')
+    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?![a-zA-Z-]+$)[A-Za-z0-9_-]{32,})\b/g, '[token]')
     .replace(/\b(?:\d[ -]?){13,19}\b/g, '[number]')
     .replace(/\b(?:authorization|bearer|csrf|xsrf|token|jwt|secret|password|passwd|pass|apikey|api_key)\s*[:=]\s*["']?[^"'\s<]{8,}/gi, '$1=[redacted]');
 }
