@@ -93,10 +93,11 @@ const authLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1, // Max 1 registration per device/IP per 15 minutes
+  max: 2, // Max 1 registration per device/IP per 15 minutes
   message: { error: 'Too many accounts created from this device recently. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skipFailedRequests: true,
   keyGenerator: (req) => {
     // Prefer deviceId for rate limiting registrations, fallback to IP
     return req.body.deviceId ? `device_${req.body.deviceId}` : requestIp(req);
