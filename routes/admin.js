@@ -17,7 +17,7 @@ const router = express.Router();
 router.use(authMiddleware);
 router.use(adminOnly);
 
-const paidProviders = ['lemonsqueezy', 'whop'];
+const paidProviders = ['lemonsqueezy', 'whop', 'dpay'];
 const EXTENSION_ACTIVE_WINDOW_MS = 90 * 1000;
 const CREDIT_DUPLICATE_REVIEW_WINDOW_MS = 10 * 60 * 1000;
 const USER_SORTS = {

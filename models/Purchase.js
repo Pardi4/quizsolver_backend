@@ -21,9 +21,13 @@ const purchaseSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  currency: {
+    type: String,
+    default: 'USD'
+  },
   paymentProvider: {
     type: String,
-    enum: ['lemonsqueezy', 'whop', 'manual', 'free', 'referral'],
+    enum: ['lemonsqueezy', 'whop', 'manual', 'free', 'referral', 'dpay'],
     default: 'lemonsqueezy'
   },
   externalOrderId: {
@@ -151,6 +155,7 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
     pack,
     credits: normalizedCredits,
     priceUsd: details.priceUsd || 0,
+    currency: details.currency || (details.paymentProvider === 'dpay' ? 'PLN' : 'USD'),
     paymentProvider: details.paymentProvider || 'lemonsqueezy',
     grantedBy: details.grantedBy || null,
     grantReason: details.grantReason || null,

@@ -8,6 +8,7 @@ const { packFromLemonVariantId } = require('../config/creditPacks');
 const router = express.Router();
 
 router.use(express.raw({ type: 'application/json', limit: '100kb' }));
+router.use(express.urlencoded({ extended: true, limit: '100kb' }));
 router.use(webhookLimiter);
 
 function timingSafeEqualHex(a, b) {
@@ -219,6 +220,66 @@ router.post('/lemonsqueezy', async (req, res) => {
   } catch (error) {
     console.error('[LemonSqueezy] Error:', error.message);
     return res.status(200).json({ received: true });
+  }
+});
+
+router.post('/dpay', async (req, res) => {
+  try {
+    let payload = req.body;
+    if (Buffer.isBuffer(payload)) {
+      payload = parseJsonBody(payload) || {};
+    }
+    const data = { ...req.query, ...payload };
+    const transactionId = data.id || data.transaction_id || data.payment_id || '';
+    const status = String(data.status || '').toUpperCase();
+    const custom = data.custom || '';
+    const amount = parseFloat(data.amount || data.value || 0);
+
+    console.log(`[DPay] Webhook received: id=${transactionId}, status=${status}, custom=${custom}`);
+
+    if (status !== 'OK' && status !== 'SUCCESS' && status !== 'TRUE' && status !== '1') {
+      return res.status(200).send('OK');
+    }
+
+    if (!custom) {
+      console.warn('[DPay] Missing custom data in webhook.');
+      return res.status(200).send('OK');
+    }
+
+    const [userId, packId, creditsStr] = String(custom).split(':');
+    const credits = parseInt(creditsStr, 10);
+    if (!userId || !credits || isNaN(credits)) {
+      console.warn('[DPay] Invalid custom format:', custom);
+      return res.status(200).send('OK');
+    }
+
+    const externalOrderId = transactionId ? `dpay:${transactionId}` : `dpay:${Date.now()}`;
+    const existing = await Purchase.findOne({ externalOrderId });
+    if (existing) {
+      console.log(`[DPay] Duplicate purchase ignored: ${externalOrderId}`);
+      return res.status(200).send('OK');
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      console.error('[DPay] User not found for custom ID:', userId);
+      return res.status(200).send('OK');
+    }
+
+    const purchase = await Purchase.recordPurchase(targetUser._id, packId || 'popular', credits, {
+      priceUsd: amount > 0 ? (amount / 4) : 0,
+      currency: 'PLN',
+      paymentProvider: 'dpay',
+      externalOrderId
+    });
+
+    await grantReferralBonus(targetUser, credits, externalOrderId || purchase._id);
+
+    console.log(`[DPay] Successfully applied +${credits} credits to ${targetUser.email} (order: ${externalOrderId})`);
+    return res.status(200).send('OK');
+  } catch (error) {
+    console.error('[DPay] Webhook error:', error.message);
+    return res.status(200).send('OK');
   }
 });
 

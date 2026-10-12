@@ -287,12 +287,16 @@ router.get('/history', async (req, res) => {
         .select('action credits status creditType wasPaid afterPurchase balanceAfter chargedAt createdAt')
     ]);
 
-    const earliestPurchase = purchases.length > 0
-      ? purchases.reduce((min, p) => (!min || p.createdAt < min ? p.createdAt : min), null)
-      : null;
+    const earliestPurchaseTime = purchases.length > 0
+      ? purchases.reduce((min, p) => {
+          const t = p.createdAt ? new Date(p.createdAt).getTime() : Infinity;
+          return t < min ? t : min;
+        }, Infinity)
+      : Infinity;
 
     const usages = rawUsages.map(u => {
-      const isAfterPurchase = Boolean(u.afterPurchase || (earliestPurchase && u.createdAt >= earliestPurchase));
+      const uTime = u.createdAt ? new Date(u.createdAt).getTime() : 0;
+      const isAfterPurchase = Boolean(u.afterPurchase || (earliestPurchaseTime !== Infinity && uTime >= earliestPurchaseTime));
       const isPaid = Boolean(u.wasPaid || (isAfterPurchase && u.status === 'charged'));
       const actionName = ACTION_LABELS[u.action] || { pl: u.action, en: u.action };
 
