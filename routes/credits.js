@@ -23,6 +23,11 @@ function hasLemonSqueezyConfig(packInfo) {
     && !looksPlaceholder(process.env[packInfo.lemonVariantEnv]);
 }
 
+function hasDpayConfig() {
+  return !looksPlaceholder(process.env.DPAY_SERVICE_HASH)
+    && !looksPlaceholder(process.env.DPAY_SECRET_KEY);
+}
+
 function redactSensitiveText(value) {
   return String(value || '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
@@ -139,13 +144,30 @@ router.get('/balance', async (req, res) => {
 
 router.post('/buy', async (req, res) => {
   try {
-    const { pack } = req.body;
+    const { pack, discountCode, provider = 'lemonsqueezy' } = req.body;
 
     if (!pack || !PACKS[pack]) {
       return res.status(400).json({ error: 'Invalid credit top-up.' });
     }
 
     const packInfo = PACKS[pack];
+
+    if (provider === 'dpay') {
+      if (!hasDpayConfig()) {
+        return res.status(503).json({
+          error: 'Bramka DPay (BLIK / szybki przelew) jest w trakcie aktywacji przez operatora. Wybierz Lemon Squeezy (Karta / Apple Pay / Google Pay) lub skontaktuj się z nami na contact@getquizsolver.com.'
+        });
+      }
+
+      const serviceHash = String(process.env.DPAY_SERVICE_HASH).trim();
+      const plnPrices = { starter: '7.99', popular: '19.99', pro: '59.00' };
+      const amount = plnPrices[pack] || '19.99';
+      const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
+      const customData = `${req.user._id.toString()}:${packInfo.id}:${packInfo.credits}`;
+      const checkoutUrl = `https://secure.dpay.pl/?service_hash=${encodeURIComponent(serviceHash)}&amount=${encodeURIComponent(amount)}&email=${encodeURIComponent(req.user.email)}&custom=${encodeURIComponent(customData)}&return_url=${encodeURIComponent(successUrl)}`;
+
+      return res.json({ success: true, checkoutUrl, provider: 'dpay' });
+    }
 
     const apiKey = process.env.LEMONSQUEEZY_API_KEY;
     const storeId = String(process.env.LEMONSQUEEZY_STORE_ID || '').trim();
@@ -157,6 +179,8 @@ router.post('/buy', async (req, res) => {
     }
 
     const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
+
+    const normalizedDiscount = discountCode ? String(discountCode).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') : '';
 
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',
@@ -186,11 +210,13 @@ router.post('/buy', async (req, res) => {
             checkout_data: {
               email: req.user.email,
               name: req.user.displayName || req.user.email.split('@')[0],
+              ...(normalizedDiscount ? { discount_code: normalizedDiscount } : {}),
               custom: {
                 user_id: req.user._id.toString(),
                 pack: packInfo.id,
                 credits: String(packInfo.credits),
-                email: req.user.email
+                email: req.user.email,
+                ...(normalizedDiscount ? { discount_code: normalizedDiscount } : {})
               }
             }
           },

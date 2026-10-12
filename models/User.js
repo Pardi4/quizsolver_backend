@@ -211,6 +211,10 @@ userSchema.methods.addCredits = function(amount, options = {}) {
 
 userSchema.methods.toPublicJSON = function() {
   this.resetFreeCreditsIfNeeded();
+  const hasPurchasedCredits = Boolean(
+    (this.stats?.totalCreditsPurchased && this.stats.totalCreditsPurchased > 0) ||
+    (this.appliedCreditPurchases && this.appliedCreditPurchases.length > 0)
+  );
   return {
     id: this._id,
     email: this.email,
@@ -223,6 +227,7 @@ userSchema.methods.toPublicJSON = function() {
     streak: this.streak,
     referralCode: this.referralCode,
     stats: this.stats,
+    hasPurchasedCredits,
     subscription: this.subscription
       ? {
           status: this.subscription.status || null,
