@@ -54,6 +54,7 @@ function serializeAdminUser(user) {
     displayName: user.displayName || '',
     role: user.role,
     credits: user.role === 'admin' ? 'unlimited' : user.credits,
+    paidCredits: user.paidCredits || 0,
     stats: user.stats || {},
     streak: user.streak || {},
     isBanned: !!user.isBanned,
@@ -139,6 +140,10 @@ function serializeAdminCreditUsage(usage, note, cachedAnswer) {
     charged,
     credits: usage.credits || 1,
     creditsCharged: charged ? (usage.credits || 1) : 0,
+    creditType: usage.creditType || (usage.wasPaid ? 'paid' : (charged ? 'paid' : 'free')),
+    wasPaid: Boolean(usage.wasPaid),
+    afterPurchase: Boolean(usage.afterPurchase),
+    balanceAfter: usage.balanceAfter ?? null,
     questionHash: usage.questionHash,
     questionText: source.questionText || 'Question not saved',
     questionType,
@@ -250,7 +255,7 @@ router.get('/users', async (req, res) => {
       { email: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
       { displayName: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
     ]} : {};
-    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform extensionVersion authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt');
+    const users = await User.find(query).sort(USER_SORTS[sort]).skip((page - 1) * limit).limit(limit).select('email displayName role marketingConsent credits paidCredits stats createdAt isBanned streak extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform extensionVersion authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt');
     const total = await User.countDocuments(query);
     res.json({
       success: true,
@@ -268,7 +273,7 @@ router.get('/users/:userId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid user ID.' });
     }
     const user = await User.findById(req.params.userId).select(
-      'email displayName role marketingConsent credits stats createdAt isBanned streak ' +
+      'email displayName role marketingConsent credits paidCredits stats createdAt isBanned streak ' +
       'extensionLastSeenAt extensionLastSeenReason extensionLastSeenUrl extensionLastSeenPlatform extensionVersion ' +
       'authProviders emailVerified securityLogs pendingNewEmail accountDeletionScheduledAt'
     );
@@ -304,6 +309,80 @@ router.get('/users/:userId/questions', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching user questions.' });
+  }
+});
+
+router.get('/users/:userId/credits', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid user id.' });
+    }
+
+    const [user, purchases, usages] = await Promise.all([
+      User.findById(userId).select('email displayName credits paidCredits role createdAt').lean(),
+      Purchase.find({ userId }).sort({ createdAt: -1 }).limit(100).lean(),
+      CreditUsage.find({ user: userId }).sort({ createdAt: -1 }).limit(100).lean()
+    ]);
+
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const questionHashes = [...new Set(usages.map(u => u.questionHash).filter(Boolean))];
+    const notes = questionHashes.length > 0
+      ? await StudyNote.find({ user: userId, questionHash: { $in: questionHashes } }).lean()
+      : [];
+    const notesByHash = new Map(notes.map(n => [n.questionHash, n]));
+
+    const formattedPurchases = purchases.map(p => ({
+      id: p._id,
+      pack: p.pack,
+      credits: p.credits,
+      priceUsd: p.priceUsd,
+      provider: p.paymentProvider,
+      currency: p.currency || (p.paymentProvider === 'dpay' ? 'PLN' : 'USD'),
+      date: p.createdAt,
+      creditsApplied: p.creditsApplied !== false,
+      creditsAppliedAt: p.creditsAppliedAt || null,
+      orderId: p.orderId || p.paymentId || ''
+    }));
+
+    const formattedUsages = usages.map(u => {
+      const note = notesByHash.get(u.questionHash);
+      const isCharged = isChargedCreditUsage(u);
+      return {
+        id: u._id,
+        action: u.action || 'solve',
+        status: u.status || (isCharged ? 'charged' : 'claimed'),
+        charged: isCharged,
+        credits: u.credits || 1,
+        creditType: u.creditType || (u.wasPaid ? 'paid' : (isCharged ? 'paid' : 'free')),
+        wasPaid: Boolean(u.wasPaid),
+        afterPurchase: Boolean(u.afterPurchase),
+        balanceAfter: u.balanceAfter ?? null,
+        questionHash: u.questionHash || '',
+        questionText: note?.questionText || '',
+        platform: note?.platform || '',
+        createdAt: u.createdAt,
+        time: creditUsageTime(u)
+      };
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        displayName: user.displayName,
+        credits: user.role === 'admin' ? 'unlimited' : (user.credits || 0),
+        paidCredits: user.paidCredits || 0,
+        role: user.role
+      },
+      purchases: formattedPurchases,
+      usages: formattedUsages
+    });
+  } catch (error) {
+    console.error('[Admin] User credits error:', error);
+    res.status(500).json({ error: 'Error fetching user credits.' });
   }
 });
 
