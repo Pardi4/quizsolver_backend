@@ -4,6 +4,7 @@ const Purchase = require('../models/Purchase');
 const CheckoutStart = require('../models/CheckoutStart');
 const BugReport = require('../models/BugReport');
 const User = require('../models/User');
+const CreditUsage = require('../models/CreditUsage');
 const ParserEvent = require('../models/ParserEvent');
 const { CREDIT_PACKS } = require('../config/creditPacks');
 const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
@@ -262,15 +263,64 @@ router.post('/buy', async (req, res) => {
   }
 });
 
+const ACTION_LABELS = {
+  'solve': { pl: 'Rozwiązanie pytania (AI)', en: 'AI Question Solve' },
+  'solve-snapshot': { pl: 'Skan FocusScan (OCR)', en: 'FocusScan OCR Solve' },
+  'solve-batch': { pl: 'Pakiet pytań (AI)', en: 'Batch Solve' },
+  'explain': { pl: 'Wyjaśnienie pytania (AI)', en: 'AI Explanation' },
+  'follow-up': { pl: 'Pytanie dopytujące (AI)', en: 'Follow-up Query' }
+};
+
 router.get('/history', async (req, res) => {
   try {
-    const purchases = await Purchase.find({ userId: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .select('pack credits priceUsd paymentProvider createdAt');
+    const [purchases, rawUsages] = await Promise.all([
+      Purchase.find({ userId: req.user._id })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select('pack credits priceUsd paymentProvider createdAt creditsApplied creditsAppliedAt'),
+      CreditUsage.find({
+        user: req.user._id,
+        status: { $in: ['charged', 'waived'] }
+      })
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .select('action credits status creditType wasPaid afterPurchase balanceAfter chargedAt createdAt')
+    ]);
 
-    res.json({ success: true, purchases });
+    const earliestPurchase = purchases.length > 0
+      ? purchases.reduce((min, p) => (!min || p.createdAt < min ? p.createdAt : min), null)
+      : null;
+
+    const usages = rawUsages.map(u => {
+      const isAfterPurchase = Boolean(u.afterPurchase || (earliestPurchase && u.createdAt >= earliestPurchase));
+      const isPaid = Boolean(u.wasPaid || (isAfterPurchase && u.status === 'charged'));
+      const actionName = ACTION_LABELS[u.action] || { pl: u.action, en: u.action };
+
+      return {
+        id: u._id,
+        action: u.action,
+        actionLabelPl: actionName.pl,
+        actionLabelEn: actionName.en,
+        credits: u.credits || 1,
+        status: u.status,
+        creditType: isPaid ? 'paid' : (u.status === 'waived' ? 'waived' : 'free'),
+        wasPaid: isPaid,
+        afterPurchase: isAfterPurchase,
+        balanceAfter: u.balanceAfter,
+        date: u.chargedAt || u.createdAt
+      };
+    });
+
+    res.json({
+      success: true,
+      purchases,
+      usages,
+      paidCreditsRemaining: req.user.paidCredits || 0,
+      freeCreditsRemaining: Math.max(0, (req.user.credits || 0) - (req.user.paidCredits || 0)),
+      hasPurchasedCredits: purchases.length > 0
+    });
   } catch (error) {
+    console.error('[Credits] Error fetching history:', error);
     res.status(500).json({ error: 'Error fetching history.' });
   }
 });

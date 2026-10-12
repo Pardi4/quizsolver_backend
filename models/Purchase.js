@@ -75,6 +75,7 @@ purchaseSchema.statics.applyCredits = async function(purchaseOrId) {
     {
       $inc: {
         credits: purchase.credits,
+        paidCredits: purchase.credits,
         'stats.totalCreditsPurchased': purchase.credits
       },
       $addToSet: { appliedCreditPurchases: purchase._id }
@@ -116,6 +117,7 @@ purchaseSchema.statics.revokeCredits = async function(purchaseOrId) {
     {
       $inc: {
         credits: -purchase.credits,
+        paidCredits: -purchase.credits,
         'stats.totalCreditsPurchased': -purchase.credits
       },
       $pull: { appliedCreditPurchases: purchase._id }

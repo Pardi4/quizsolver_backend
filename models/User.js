@@ -47,6 +47,11 @@ const userSchema = new mongoose.Schema({
     default: 10,
     min: 0
   },
+  paidCredits: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   freeCreditsLastReset: {
     type: String,
     default: () => new Date().toISOString().slice(0, 7)
@@ -224,6 +229,7 @@ userSchema.methods.toPublicJSON = function() {
     emailVerified: !!this.emailVerified,
     accountDeletionScheduledAt: this.accountDeletionScheduledAt,
     credits: this.role === 'admin' ? Infinity : this.credits,
+    paidCredits: this.role === 'admin' ? Infinity : (this.paidCredits || 0),
     streak: this.streak,
     referralCode: this.referralCode,
     stats: this.stats,

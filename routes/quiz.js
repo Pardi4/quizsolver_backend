@@ -583,19 +583,38 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
     return { ok: false, status: 404, body: { error: 'User not found.', limitReached: false, remaining: 0 } };
   }
 
+  const freshUser = await User.findById(user._id);
+  if (!freshUser) {
+    await releaseCreditUsage(claim.usage, 'user_not_found', 'declined');
+    return { ok: false, status: 404, body: { error: 'User not found.', limitReached: false, remaining: 0 } };
+  }
+
+  const paidAvailable = Math.max(0, parseInt(freshUser.paidCredits, 10) || 0);
+  const paidDeduct = Math.min(paidAvailable, count);
+  const isPaid = paidDeduct > 0;
+  const hasPurchasedBefore = Boolean(
+    (freshUser.stats?.totalCreditsPurchased && freshUser.stats.totalCreditsPurchased > 0) ||
+    (freshUser.appliedCreditPurchases && freshUser.appliedCreditPurchases.length > 0)
+  );
+
+  const incUpdate = { credits: -count };
+  if (paidDeduct > 0) {
+    incUpdate.paidCredits = -paidDeduct;
+  }
+
   const lockedUser = await User.findOneAndUpdate(
     { _id: user._id, role: { $ne: 'admin' }, credits: { $gte: count } },
-    { $inc: { credits: -count } },
+    { $inc: incUpdate },
     { new: true }
   );
 
   if (!lockedUser) {
     await releaseCreditUsage(claim.usage, 'no_credits', 'declined');
-    const freshUser = await User.findById(user._id);
+    const retryUser = await User.findById(user._id);
     return {
       ok: false,
       status: 429,
-      body: { error: 'No credits remaining.', limitReached: true, remaining: remainingFor(freshUser) }
+      body: { error: 'No credits remaining.', limitReached: true, remaining: remainingFor(retryUser) }
     };
   }
 
@@ -613,7 +632,16 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
     }
   }
 
-  return { ok: true, shouldCharge: true, usage: claim.usage, user: lockedUser, count };
+  return {
+    ok: true,
+    shouldCharge: true,
+    usage: claim.usage,
+    user: lockedUser,
+    count,
+    isPaid,
+    paidDeduct,
+    afterPurchase: hasPurchasedBefore
+  };
 }
 
 async function completeCreditUsage(user, creditUsage, options = {}) {
@@ -660,7 +688,11 @@ async function completeCreditUsage(user, creditUsage, options = {}) {
   await markCreditUsage(creditUsage.usage, {
     status: 'charged',
     charged: true,
-    chargedAt: new Date()
+    chargedAt: new Date(),
+    creditType: creditUsage.isPaid ? 'paid' : 'free',
+    wasPaid: Boolean(creditUsage.isPaid),
+    afterPurchase: Boolean(creditUsage.afterPurchase),
+    balanceAfter: chargedUser.credits
   });
 
   if (options.updateStreak) {
@@ -679,9 +711,14 @@ async function abortCreditUsage(creditUsage) {
   if (creditUsage?.shouldCharge && creditUsage.usage) {
     if (!creditUsage.adminWaive) {
       const count = Math.max(parseInt(creditUsage.count, 10) || 1, 1);
+      const paidRefund = creditUsage.paidDeduct || (creditUsage.isPaid ? count : 0);
+      const incUpdate = { credits: count };
+      if (paidRefund > 0) {
+        incUpdate.paidCredits = paidRefund;
+      }
       await User.updateOne(
         { _id: creditUsage.user._id, role: { $ne: 'admin' } },
-        { $inc: { credits: count } }
+        { $inc: incUpdate }
       );
     }
     await releaseCreditUsage(creditUsage.usage, 'processing_failed', 'aborted');

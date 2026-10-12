@@ -49,6 +49,26 @@ const creditUsageSchema = new mongoose.Schema({
     default: false,
     index: true
   },
+  creditType: {
+    type: String,
+    enum: ['paid', 'free', 'bonus'],
+    default: 'paid',
+    index: true
+  },
+  wasPaid: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  afterPurchase: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  balanceAfter: {
+    type: Number,
+    default: null
+  },
   waivedReason: {
     type: String,
     default: '',
