@@ -155,7 +155,7 @@ router.post('/buy', async (req, res) => {
     if (provider === 'dpay') {
       if (!hasDpayConfig()) {
         return res.status(503).json({
-          error: 'Bramka DPay (BLIK / szybki przelew) jest w trakcie aktywacji przez operatora. Wybierz Lemon Squeezy (Karta / Apple Pay / Google Pay) lub skontaktuj się z nami na contact@getquizsolver.com.'
+          error: 'Bramka DPay (BLIK / szybki przelew) jest w trakcie aktywacji przez operatora. Wybierz Lemon Squeezy (Karta / Apple Pay / Google Pay) lub skontaktuj się z nami na support@getquizsolver.com.'
         });
       }
 
