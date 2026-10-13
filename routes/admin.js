@@ -971,6 +971,15 @@ router.post('/support/messages/:messageId/reply', async (req, res) => {
           maxRedemptions: 1,
           expiresAt
         });
+
+        const PromoCode = require('../models/PromoCode');
+        await PromoCode.create({
+          code,
+          discountPercent: 10,
+          description: `Support discount for ${message.fromEmail}`,
+          maxUses: 1,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        }).catch((e) => console.warn('[Admin] PromoCode create notice:', e.message));
         
         const discountBox = `<div style="margin-top:20px;padding:15px;border:1px dashed #06b6d4;border-radius:8px;background:rgba(6,182,212,0.05);color:#06b6d4;text-align:center;">
           <strong>TwĂłj kod rabatowy (-10%, waĹĽny 7 dni):</strong><br>
@@ -1538,7 +1547,18 @@ router.post('/marketing/send', async (req, res) => {
         maxRedemptions: discountMaxUses || 0,
         expiresAt
       });
+
+      const PromoCode = require('../models/PromoCode');
+      await PromoCode.create({
+        code: globalCode,
+        discountPercent: discountPercent || 10,
+        description: `Global ${discountPrefix || 'PROMO'} Campaign`,
+        maxUses: discountMaxUses || 0,
+        expiresAt: expiresAt ? new Date(expiresAt) : null
+      }).catch((e) => console.warn('[Admin] Global PromoCode create notice:', e.message));
     } else if (discountType === 'unique') {
+      const PromoCode = require('../models/PromoCode');
+      const promoDocs = [];
       for (let i = 0; i < users.length; i++) {
         const code = generateRandomCode(discountPrefix || 'PROMO');
         uniqueCodes.push(code);
@@ -1549,6 +1569,16 @@ router.post('/marketing/send', async (req, res) => {
           maxRedemptions: 1,
           expiresAt
         });
+        promoDocs.push({
+          code,
+          discountPercent: discountPercent || 10,
+          description: `Unique promo for ${users[i].email}`,
+          maxUses: 1,
+          expiresAt: expiresAt ? new Date(expiresAt) : null
+        });
+      }
+      if (promoDocs.length > 0) {
+        await PromoCode.insertMany(promoDocs, { ordered: false }).catch((e) => console.warn('[Admin] Unique PromoCode insert notice:', e.message));
       }
     }
 

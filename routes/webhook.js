@@ -291,53 +291,67 @@ router.post('/dpay', async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    if (!custom) {
-      console.warn('[DPay IPN] Missing custom data in webhook.');
-      return res.status(200).send('OK');
-    }
+    const externalOrderId = transactionId ? `dpay:${transactionId}` : '';
 
-    const [userId, packId, creditsStr] = String(custom).split(':');
-    const credits = parseInt(creditsStr, 10);
-    if (!userId || !credits || isNaN(credits) || credits <= 0) {
-      console.warn('[DPay IPN] Invalid custom format:', custom);
-      return res.status(200).send('OK');
-    }
-
-    const externalOrderId = transactionId ? `dpay:${transactionId}` : `dpay:${Date.now()}`;
-    const existing = await Purchase.findOne({ externalOrderId });
-    if (existing) {
-      if (existing.creditsApplied === false) {
-        await Purchase.applyCredits(existing);
-        console.log(`[DPay IPN] Duplicate recovered unapplied credits: ${externalOrderId}`);
-      } else {
-        console.log(`[DPay IPN] Duplicate purchase already applied: ${externalOrderId}`);
+    // 1. First priority: Check if we have a pre-recorded pending purchase for this transactionId
+    if (externalOrderId) {
+      const existing = await Purchase.findOne({ externalOrderId });
+      if (existing) {
+        if (existing.creditsApplied === false) {
+          await Purchase.applyCredits(existing);
+          console.log(`[DPay IPN] Successfully applied pending credits for user ${existing.userId}: ${externalOrderId}`);
+        } else {
+          console.log(`[DPay IPN] Purchase already credited: ${externalOrderId}`);
+        }
+        return res.status(200).send('OK');
       }
-      return res.status(200).send('OK');
     }
 
+    // 2. Second priority: Fallback to custom data (userId:packId:credits)
     let targetUser = null;
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      targetUser = await User.findById(userId);
+    let credits = 0;
+    let packId = 'popular';
+
+    if (custom) {
+      const [customUserId, customPackId, customCreditsStr] = String(custom).split(':');
+      if (mongoose.Types.ObjectId.isValid(customUserId)) {
+        targetUser = await User.findById(customUserId);
+      }
+      if (customCreditsStr && !isNaN(parseInt(customCreditsStr, 10))) {
+        credits = parseInt(customCreditsStr, 10);
+      }
+      if (customPackId) {
+        packId = customPackId;
+      }
     }
+
+    // 3. Third priority: Fallback to email if user not found via custom ID
     if (!targetUser && data.email) {
       targetUser = await User.findOne({ email: String(data.email).trim().toLowerCase() });
     }
 
     if (!targetUser) {
-      console.error('[DPay IPN] User not found for custom ID / email:', userId, data.email);
+      console.error('[DPay IPN] User not found for transaction:', transactionId, 'custom:', custom, 'email:', data.email);
       return res.status(200).send('OK');
     }
 
-    const packInfo = CREDIT_PACKS[packId] || { id: packId || 'popular', credits, price: amountPln > 0 ? (amountPln / 4.0) : 4.99 };
+    if (!credits || credits <= 0) {
+      const packFromAmount = Object.values(CREDIT_PACKS).find(p => Math.abs(p.pricePln - amountPln) < 0.5);
+      credits = packFromAmount ? packFromAmount.credits : (amountPln >= 35 ? 2000 : (amountPln >= 12 ? 500 : 100));
+      packId = packFromAmount ? packFromAmount.id : (amountPln >= 35 ? 'pro' : (amountPln >= 12 ? 'popular' : 'starter'));
+    }
 
-    const purchase = await Purchase.recordPurchase(targetUser._id, packInfo.id, credits, {
+    const orderIdToRecord = externalOrderId || `dpay:${Date.now()}`;
+    const packInfo = CREDIT_PACKS[packId] || { id: packId, credits, price: amountPln > 0 ? (amountPln / 4.0) : 4.99 };
+
+    await Purchase.recordPurchase(targetUser._id, packInfo.id, credits, {
       priceUsd: amountPln > 0 ? (amountPln / 4.0) : packInfo.price,
       currency: 'PLN',
       paymentProvider: 'dpay',
-      externalOrderId
+      externalOrderId: orderIdToRecord
     });
 
-    console.log(`[DPay IPN] Successfully credited +${credits} credits to ${targetUser.email} (order: ${externalOrderId})`);
+    console.log(`[DPay IPN] Successfully recorded +${credits} credits to ${targetUser.email} (order: ${orderIdToRecord})`);
     return res.status(200).send('OK');
   } catch (error) {
     console.error('[DPay IPN] Webhook processing error:', error.message);

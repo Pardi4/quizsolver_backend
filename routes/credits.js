@@ -9,6 +9,7 @@ const ParserEvent = require('../models/ParserEvent');
 const { CREDIT_PACKS } = require('../config/creditPacks');
 const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
 const dpayService = require('../services/dpayService');
+const promoService = require('../services/promoService');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -143,6 +144,64 @@ router.get('/balance', async (req, res) => {
   }
 });
 
+router.post('/validate-promo', async (req, res) => {
+  try {
+    const { code, pack = 'popular' } = req.body;
+    if (!code) {
+      return res.status(400).json({ valid: false, error: 'Wpisz kod rabatowy.' });
+    }
+
+    const promoResult = await promoService.validatePromoCode(code, req.user, pack);
+    if (!promoResult.valid) {
+      return res.status(400).json({
+        valid: false,
+        error: promoResult.message || 'Nieprawidłowy lub wygasły kod rabatowy.'
+      });
+    }
+
+    const packId = PACKS[pack]?.id || pack;
+    const discountPercent = promoResult.discountPercent;
+    const basePricePln = promoService.BASE_PLN_PRICES[packId] || 14.99;
+    const finalPricePln = promoService.calculatePlnPrice(packId, discountPercent);
+    const savingsPln = Math.round((basePricePln - finalPricePln) * 100) / 100;
+
+    const basePriceUsd = promoService.BASE_USD_PRICES[packId] || 4.99;
+    const finalPriceUsd = promoService.calculateUsdPrice(packId, discountPercent);
+    const savingsUsd = Math.round((basePriceUsd - finalPriceUsd) * 100) / 100;
+
+    return res.json({
+      success: true,
+      valid: true,
+      code: promoResult.code,
+      discountPercent,
+      description: promoResult.description,
+      packId,
+      prices: {
+        pln: {
+          base: basePricePln,
+          baseFormatted: `${basePricePln.toFixed(2).replace('.', ',')} zł`,
+          final: finalPricePln,
+          finalFormatted: `${finalPricePln.toFixed(2).replace('.', ',')} zł`,
+          savings: savingsPln,
+          savingsFormatted: `${savingsPln.toFixed(2).replace('.', ',')} zł`
+        },
+        usd: {
+          base: basePriceUsd,
+          baseFormatted: `$${basePriceUsd.toFixed(2)}`,
+          final: finalPriceUsd,
+          finalFormatted: `$${finalPriceUsd.toFixed(2)}`,
+          savings: savingsUsd,
+          savingsFormatted: `$${savingsUsd.toFixed(2)}`
+        }
+      },
+      message: `Kod rabatowy ${promoResult.code} (-${discountPercent}%) naliczony!`
+    });
+  } catch (err) {
+    console.error('[Credits] validate-promo error:', err.message);
+    res.status(500).json({ valid: false, error: 'Błąd weryfikacji kodu rabatowego.' });
+  }
+});
+
 router.post('/buy', async (req, res) => {
   try {
     const { pack, discountCode, provider = 'lemonsqueezy' } = req.body;
@@ -152,6 +211,20 @@ router.post('/buy', async (req, res) => {
     }
 
     const packInfo = PACKS[pack];
+
+    // Validate discount code if provided
+    let validDiscountCode = null;
+    let validDiscountPercent = 0;
+
+    if (discountCode) {
+      const promoValidation = await promoService.validatePromoCode(discountCode, req.user, packInfo.id);
+      if (promoValidation.valid) {
+        validDiscountCode = promoValidation.code;
+        validDiscountPercent = promoValidation.discountPercent;
+      } else {
+        return res.status(400).json({ error: promoValidation.message || 'Nieprawidłowy kod rabatowy.' });
+      }
+    }
 
     if (provider === 'dpay') {
       if (!hasDpayConfig()) {
@@ -167,7 +240,8 @@ router.post('/buy', async (req, res) => {
       const paymentResult = await dpayService.createPayment({
         user: req.user,
         pack: packInfo,
-        discountCode,
+        discountCode: validDiscountCode,
+        discountPercent: validDiscountPercent,
         successUrl,
         failUrl
       });
@@ -177,6 +251,28 @@ router.post('/buy', async (req, res) => {
         return res.status(502).json({
           error: paymentResult.error || 'Nie udało się połączyć z bramką DPay. Spróbuj ponownie za chwilę.'
         });
+      }
+
+      // Pre-record pending purchase so user is 100% guaranteed to be credited even if email differs on dpay
+      if (paymentResult.transactionId) {
+        await Purchase.create({
+          userId: req.user._id,
+          pack: packInfo.id,
+          credits: packInfo.credits,
+          priceUsd: paymentResult.amount ? (parseFloat(paymentResult.amount) / 4.0) : packInfo.price,
+          currency: 'PLN',
+          paymentProvider: 'dpay',
+          externalOrderId: `dpay:${paymentResult.transactionId}`,
+          discountCode: validDiscountCode,
+          discountPercent: validDiscountPercent,
+          creditsApplied: false
+        }).catch((err) => {
+          console.warn('[Credits] Pending purchase pre-record notice:', err.message);
+        });
+
+        if (validDiscountCode) {
+          promoService.markPromoUsed(validDiscountCode).catch(() => {});
+        }
       }
 
       // Funnel tracking (fire and forget - must never block the checkout)
@@ -204,7 +300,7 @@ router.post('/buy', async (req, res) => {
 
     const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
 
-    const normalizedDiscount = discountCode ? String(discountCode).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') : '';
+    const codeToSend = validDiscountCode || (discountCode ? String(discountCode).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') : '');
 
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',
@@ -234,13 +330,13 @@ router.post('/buy', async (req, res) => {
             checkout_data: {
               email: req.user.email,
               name: req.user.displayName || req.user.email.split('@')[0],
-              ...(normalizedDiscount ? { discount_code: normalizedDiscount } : {}),
+              ...(codeToSend ? { discount_code: codeToSend } : {}),
               custom: {
                 user_id: req.user._id.toString(),
                 pack: packInfo.id,
                 credits: String(packInfo.credits),
                 email: req.user.email,
-                ...(normalizedDiscount ? { discount_code: normalizedDiscount } : {})
+                ...(codeToSend ? { discount_code: codeToSend } : {})
               }
             }
           },

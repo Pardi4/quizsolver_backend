@@ -60,17 +60,24 @@ function calculateRegistrationChecksum(service, secret, value, urlSuccess, urlFa
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
+const promoService = require('./promoService');
+
 /**
- * Calculates PLN price for a given pack with optional discount code
+ * Calculates PLN price for a given pack with optional discount code or percent
  */
-function getPlnPrice(packId, discountCode) {
-  const basePrice = PLN_PACK_PRICES[packId] || (CREDIT_PACKS[packId]?.pricePln) || 19.99;
-  const normalizedDiscount = discountCode ? String(discountCode).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') : '';
-  
-  if (normalizedDiscount === 'WELCOME10') {
-    return Math.round(basePrice * 0.90 * 100) / 100;
+function getPlnPrice(packId, discountCodeOrPercent = 0) {
+  let percent = 0;
+  if (typeof discountCodeOrPercent === 'number') {
+    percent = discountCodeOrPercent;
+  } else if (discountCodeOrPercent) {
+    const code = promoService.normalizePromoCode(discountCodeOrPercent);
+    if (code && promoService.BUILTIN_PROMO_CODES[code]) {
+      percent = promoService.BUILTIN_PROMO_CODES[code].percent;
+    } else if (code === 'WELCOME10') {
+      percent = 10;
+    }
   }
-  return basePrice;
+  return promoService.calculatePlnPrice(packId, percent);
 }
 
 /**
@@ -80,6 +87,7 @@ async function createPayment({
   user,
   pack,
   discountCode,
+  discountPercent = 0,
   successUrl,
   failUrl,
   ipnUrl
@@ -100,7 +108,18 @@ async function createPayment({
   const finalFailUrl = failUrl || `${siteUrl}/pl/credits?status=cancelled`;
   const finalIpnUrl = ipnUrl || process.env.DPAY_IPN_URL || `${siteUrl}/api/webhook/dpay`;
 
-  const amountNumber = getPlnPrice(packInfo.id, discountCode);
+  // Resolve discount percentage
+  let effectiveDiscountPercent = Number(discountPercent) || 0;
+  let normalizedCode = discountCode ? promoService.normalizePromoCode(discountCode) : '';
+
+  if (normalizedCode && effectiveDiscountPercent <= 0) {
+    const promoValidation = await promoService.validatePromoCode(normalizedCode, user, packInfo.id);
+    if (promoValidation.valid) {
+      effectiveDiscountPercent = promoValidation.discountPercent;
+    }
+  }
+
+  const amountNumber = promoService.calculatePlnPrice(packInfo.id, effectiveDiscountPercent);
   const formattedValue = amountNumber.toFixed(2);
 
   const checksum = calculateRegistrationChecksum(
@@ -113,7 +132,10 @@ async function createPayment({
   );
 
   const customData = `${user._id.toString()}:${packInfo.id}:${packInfo.credits}`;
-  const description = `QuizSolver - ${packInfo.credits} kredytów (${user.email})`;
+  let description = `QuizSolver - ${packInfo.credits} kredytów (${user.email})`;
+  if (normalizedCode && effectiveDiscountPercent > 0) {
+    description += ` [Kod: ${normalizedCode} -${effectiveDiscountPercent}%]`;
+  }
 
   const payload = {
     service,
@@ -184,7 +206,9 @@ async function createPayment({
       checkoutUrl,
       transactionId: responseData.transactionId || '',
       amount: formattedValue,
-      currency: 'PLN'
+      currency: 'PLN',
+      discountCode: normalizedCode || null,
+      discountPercent: effectiveDiscountPercent
     };
   }
 

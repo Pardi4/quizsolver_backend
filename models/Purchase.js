@@ -34,6 +34,14 @@ const purchaseSchema = new mongoose.Schema({
     type: String,
     default: undefined
   },
+  discountCode: {
+    type: String,
+    default: null
+  },
+  discountPercent: {
+    type: Number,
+    default: 0
+  },
   creditsApplied: {
     type: Boolean,
     default: true,
@@ -159,6 +167,8 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
     paymentProvider: details.paymentProvider || 'lemonsqueezy',
     grantedBy: details.grantedBy || null,
     grantReason: details.grantReason || null,
+    discountCode: details.discountCode || null,
+    discountPercent: Number(details.discountPercent) || 0,
     creditsApplied: false,
     creditsAppliedAt: null
   };
