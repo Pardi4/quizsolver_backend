@@ -13,7 +13,7 @@ const promoCodeSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 1,
-    max: 50,
+    max: 100,
     default: 10
   },
   description: {
