@@ -6,6 +6,7 @@ const Purchase = require('../models/Purchase');
 const User = require('../models/User');
 const { packFromLemonVariantId, CREDIT_PACKS } = require('../config/creditPacks');
 const dpayService = require('../services/dpayService');
+const promoService = require('../services/promoService');
 
 const router = express.Router();
 
@@ -81,6 +82,17 @@ function orderTotalUsd(attributes, packInfo) {
     || centsToUsd(attributes.total)
     || packInfo?.price
     || 0;
+}
+
+function orderDiscountCode(payload) {
+  const custom = customData(payload);
+  const attributes = orderAttributes(payload);
+  return String(
+    custom.discount_code ||
+    attributes.discount_code ||
+    attributes.first_order_item?.discount_name ||
+    ''
+  ).trim().toUpperCase();
 }
 
 function resolvePack(payload) {
@@ -209,11 +221,18 @@ router.post('/lemonsqueezy', async (req, res) => {
       return res.status(200).json({ received: true, ignored: true });
     }
 
+    const discountCode = orderDiscountCode(payload);
     const purchase = await Purchase.recordPurchase(targetUser._id, packInfo.id, packInfo.credits, {
       priceUsd: orderTotalUsd(attributes, packInfo),
       paymentProvider: 'lemonsqueezy',
-      externalOrderId
+      externalOrderId,
+      discountCode: discountCode || null
     });
+
+    if (discountCode) {
+      await promoService.markPromoUsed(discountCode, 'lemonsqueezy');
+      console.log(`[LemonSqueezy] Counted promo code redemption: ${discountCode}`);
+    }
 
     await grantReferralBonus(targetUser, packInfo.credits, externalOrderId || purchase._id);
 
@@ -299,6 +318,10 @@ router.post('/dpay', async (req, res) => {
       if (existing) {
         if (existing.creditsApplied === false) {
           await Purchase.applyCredits(existing);
+          if (existing.discountCode) {
+            await promoService.markPromoUsed(existing.discountCode, 'dpay');
+            console.log(`[DPay IPN] Counted promo code redemption: ${existing.discountCode}`);
+          }
           console.log(`[DPay IPN] Successfully applied pending credits for user ${existing.userId}: ${externalOrderId}`);
         } else {
           console.log(`[DPay IPN] Purchase already credited: ${externalOrderId}`);

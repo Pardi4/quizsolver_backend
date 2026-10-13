@@ -62,7 +62,26 @@ function generateRandomCode(prefix = 'PROMO') {
   return `${cleanPrefix}${randomPart}`;
 }
 
+async function deleteLemonSqueezyDiscount(discountId) {
+  const apiKey = process.env.LEMONSQUEEZY_API_KEY;
+  if (!apiKey || !discountId) return false;
+  try {
+    const res = await fetch(`https://api.lemonsqueezy.com/v1/discounts/${discountId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/vnd.api+json'
+      }
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('[LemonSqueezy] Failed to delete discount:', err.message);
+    return false;
+  }
+}
+
 module.exports = {
   createLemonSqueezyDiscount,
+  deleteLemonSqueezyDiscount,
   generateRandomCode
 };

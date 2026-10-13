@@ -1510,7 +1510,20 @@ router.get('/marketing/stats', async (req, res) => {
 
 router.post('/marketing/send', async (req, res) => {
   try {
-    const { subject, html, targetCount, targetEmail, ignoreConsent, discountType, discountPrefix, discountExactCode, discountPercent, discountExpiresDays, discountMaxUses } = req.body;
+    const {
+      subject,
+      html,
+      targetCount,
+      targetEmail,
+      ignoreConsent,
+      discountType,
+      discountPrefix,
+      discountExactCode,
+      discountPercent,
+      discountExpiresDays,
+      discountMaxUses,
+      platforms
+    } = req.body;
     if (!subject || !html) return res.status(400).json({ error: 'Subject and HTML required.' });
     
     let users = [];
@@ -1533,6 +1546,11 @@ router.post('/marketing/send', async (req, res) => {
     const { sendMarketingBatch } = require('../services/emailService');
     const { createLemonSqueezyDiscount, generateRandomCode } = require('../services/lemonSqueezyService');
 
+    let selectedPlatforms = Array.isArray(platforms) && platforms.length > 0
+      ? platforms.filter(p => ['dpay', 'lemonsqueezy'].includes(p))
+      : ['dpay', 'lemonsqueezy'];
+    if (selectedPlatforms.length === 0) selectedPlatforms = ['dpay', 'lemonsqueezy'];
+
     let globalCode = null;
     let uniqueCodes = [];
     
@@ -1540,21 +1558,32 @@ router.post('/marketing/send', async (req, res) => {
 
     if (discountType === 'global') {
       globalCode = discountExactCode ? (discountPrefix || 'PROMO') : generateRandomCode(discountPrefix || 'PROMO');
-      await createLemonSqueezyDiscount({
-        name: `Global ${discountPrefix || 'PROMO'} Campaign`,
-        code: globalCode,
-        amountPercent: discountPercent || 10,
-        maxRedemptions: discountMaxUses || 0,
-        expiresAt
-      });
+      let lemonDiscountId = null;
+      if (selectedPlatforms.includes('lemonsqueezy')) {
+        try {
+          const lemonRes = await createLemonSqueezyDiscount({
+            name: `Global ${discountPrefix || 'PROMO'} Campaign`,
+            code: globalCode,
+            amountPercent: discountPercent || 10,
+            maxRedemptions: discountMaxUses || 0,
+            expiresAt
+          });
+          lemonDiscountId = lemonRes?.id ? String(lemonRes.id) : null;
+        } catch (lemonErr) {
+          console.warn('[Admin] Global Lemon discount create notice:', lemonErr.message);
+        }
+      }
 
       const PromoCode = require('../models/PromoCode');
       await PromoCode.create({
         code: globalCode,
         discountPercent: discountPercent || 10,
         description: `Global ${discountPrefix || 'PROMO'} Campaign`,
+        platforms: selectedPlatforms,
+        lemonDiscountId,
         maxUses: discountMaxUses || 0,
-        expiresAt: expiresAt ? new Date(expiresAt) : null
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        active: true
       }).catch((e) => console.warn('[Admin] Global PromoCode create notice:', e.message));
     } else if (discountType === 'unique') {
       const PromoCode = require('../models/PromoCode');
@@ -1562,19 +1591,30 @@ router.post('/marketing/send', async (req, res) => {
       for (let i = 0; i < users.length; i++) {
         const code = generateRandomCode(discountPrefix || 'PROMO');
         uniqueCodes.push(code);
-        await createLemonSqueezyDiscount({
-          name: `Unique ${discountPrefix || 'PROMO'} for ${users[i].email}`,
-          code: code,
-          amountPercent: discountPercent || 10,
-          maxRedemptions: 1,
-          expiresAt
-        });
+        let lemonDiscountId = null;
+        if (selectedPlatforms.includes('lemonsqueezy')) {
+          try {
+            const lemonRes = await createLemonSqueezyDiscount({
+              name: `Unique ${discountPrefix || 'PROMO'} for ${users[i].email}`,
+              code: code,
+              amountPercent: discountPercent || 10,
+              maxRedemptions: 1,
+              expiresAt
+            });
+            lemonDiscountId = lemonRes?.id ? String(lemonRes.id) : null;
+          } catch (lemonErr) {
+            console.warn('[Admin] Unique Lemon discount create notice:', lemonErr.message);
+          }
+        }
         promoDocs.push({
           code,
           discountPercent: discountPercent || 10,
           description: `Unique promo for ${users[i].email}`,
+          platforms: selectedPlatforms,
+          lemonDiscountId,
           maxUses: 1,
-          expiresAt: expiresAt ? new Date(expiresAt) : null
+          expiresAt: expiresAt ? new Date(expiresAt) : null,
+          active: true
         });
       }
       if (promoDocs.length > 0) {
@@ -2042,10 +2082,144 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
     res.setHeader('Content-Length',      zipBuf.length);
     res.send(zipBuf);
-
   } catch (err) {
     console.error('[parser-zip]', err);
     res.status(500).json({ error: 'Failed to generate analysis ZIP', detail: err.message });
+  }
+});
+
+// ── Promo Code Management ────────────────────────────────────
+router.get('/promos', async (req, res) => {
+  try {
+    const PromoCode = require('../models/PromoCode');
+    const promos = await PromoCode.find().sort({ createdAt: -1 }).lean();
+    res.json({ success: true, promos });
+  } catch (err) {
+    console.error('[Admin] Error fetching promos:', err);
+    res.status(500).json({ error: 'Błąd podczas pobierania kodów rabatowych.' });
+  }
+});
+
+router.post('/promos', async (req, res) => {
+  try {
+    const PromoCode = require('../models/PromoCode');
+    const { createLemonSqueezyDiscount, generateRandomCode } = require('../services/lemonSqueezyService');
+    const promoService = require('../services/promoService');
+
+    let {
+      code,
+      discountPercent,
+      maxUses,
+      expiresAt,
+      platforms,
+      description,
+      firstPurchaseOnly,
+      autoGenerate
+    } = req.body;
+
+    if (autoGenerate || !code) {
+      code = generateRandomCode(code || 'PROMO');
+    }
+
+    const normalizedCode = promoService.normalizePromoCode(code);
+    if (!normalizedCode) {
+      return res.status(400).json({ error: 'Nieprawidłowy kod rabatowy.' });
+    }
+
+    const existing = await PromoCode.findOne({ code: normalizedCode });
+    if (existing) {
+      return res.status(400).json({ error: `Kod ${normalizedCode} już istnieje.` });
+    }
+
+    const percent = Math.min(Math.max(parseInt(discountPercent, 10) || 10, 1), 50);
+    const uses = Math.max(parseInt(maxUses, 10) || 0, 0);
+    const expirationDate = expiresAt ? new Date(expiresAt) : null;
+
+    let selectedPlatforms = Array.isArray(platforms) && platforms.length > 0
+      ? platforms.filter(p => ['dpay', 'lemonsqueezy'].includes(p))
+      : ['dpay', 'lemonsqueezy'];
+
+    if (selectedPlatforms.length === 0) {
+      selectedPlatforms = ['dpay', 'lemonsqueezy'];
+    }
+
+    let lemonDiscountId = null;
+    if (selectedPlatforms.includes('lemonsqueezy')) {
+      try {
+        const lemonRes = await createLemonSqueezyDiscount({
+          name: `Admin Promo: ${normalizedCode} (${percent}%)`,
+          code: normalizedCode,
+          amountPercent: percent,
+          maxRedemptions: uses,
+          expiresAt: expirationDate ? expirationDate.toISOString() : null
+        });
+        lemonDiscountId = lemonRes?.id ? String(lemonRes.id) : null;
+      } catch (lemonErr) {
+        console.warn('[Admin] Failed to create discount on Lemon Squeezy:', lemonErr.message);
+      }
+    }
+
+    const promo = await PromoCode.create({
+      code: normalizedCode,
+      discountPercent: percent,
+      description: String(description || '').trim(),
+      platforms: selectedPlatforms,
+      lemonDiscountId,
+      maxUses: uses,
+      expiresAt: expirationDate,
+      firstPurchaseOnly: Boolean(firstPurchaseOnly),
+      active: true
+    });
+
+    auditLog(req.user, 'PROMO_CREATED', { code: normalizedCode, percent, platforms: selectedPlatforms });
+    res.json({ success: true, promo });
+  } catch (err) {
+    console.error('[Admin] Error creating promo:', err);
+    res.status(500).json({ error: err.message || 'Błąd podczas tworzenia kodu rabatowego.' });
+  }
+});
+
+router.patch('/promos/:id/toggle', async (req, res) => {
+  try {
+    const PromoCode = require('../models/PromoCode');
+    const { deleteLemonSqueezyDiscount } = require('../services/lemonSqueezyService');
+
+    const promo = await PromoCode.findById(req.params.id);
+    if (!promo) return res.status(404).json({ error: 'Nie znaleziono kodu rabatowego.' });
+
+    promo.active = !promo.active;
+    await promo.save();
+
+    if (!promo.active && promo.lemonDiscountId) {
+      await deleteLemonSqueezyDiscount(promo.lemonDiscountId).catch(() => {});
+    }
+
+    auditLog(req.user, 'PROMO_TOGGLED', { code: promo.code, active: promo.active });
+    res.json({ success: true, promo });
+  } catch (err) {
+    console.error('[Admin] Error toggling promo:', err);
+    res.status(500).json({ error: 'Błąd podczas aktualizacji kodu.' });
+  }
+});
+
+router.delete('/promos/:id', async (req, res) => {
+  try {
+    const PromoCode = require('../models/PromoCode');
+    const { deleteLemonSqueezyDiscount } = require('../services/lemonSqueezyService');
+
+    const promo = await PromoCode.findById(req.params.id);
+    if (!promo) return res.status(404).json({ error: 'Nie znaleziono kodu rabatowego.' });
+
+    if (promo.lemonDiscountId) {
+      await deleteLemonSqueezyDiscount(promo.lemonDiscountId).catch(() => {});
+    }
+
+    await PromoCode.findByIdAndDelete(req.params.id);
+    auditLog(req.user, 'PROMO_DELETED', { code: promo.code });
+    res.json({ success: true, deleted: true });
+  } catch (err) {
+    console.error('[Admin] Error deleting promo:', err);
+    res.status(500).json({ error: 'Błąd podczas usuwania kodu.' });
   }
 });
 

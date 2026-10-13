@@ -269,10 +269,6 @@ router.post('/buy', async (req, res) => {
         }).catch((err) => {
           console.warn('[Credits] Pending purchase pre-record notice:', err.message);
         });
-
-        if (validDiscountCode) {
-          promoService.markPromoUsed(validDiscountCode).catch(() => {});
-        }
       }
 
       // Funnel tracking (fire and forget - must never block the checkout)

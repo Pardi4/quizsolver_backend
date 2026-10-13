@@ -85,7 +85,7 @@ function isUserFirstPurchase(user) {
 /**
  * Validates a promo code against MongoDB and built-in list
  */
-async function validatePromoCode(rawCode, user = null, packId = null) {
+async function validatePromoCode(rawCode, user = null, packId = null, provider = null) {
   const code = normalizePromoCode(rawCode);
   if (!code) {
     return { valid: false, message: 'Wpisz kod rabatowy.' };
@@ -108,6 +108,10 @@ async function validatePromoCode(rawCode, user = null, packId = null) {
         if (dbPromo.firstPurchaseOnly && !isUserFirstPurchase(user)) {
           return { valid: false, message: 'Ten kod rabatowy jest przeznaczony wyłącznie na pierwsze doładowanie.' };
         }
+        if (provider && Array.isArray(dbPromo.platforms) && dbPromo.platforms.length > 0 && !dbPromo.platforms.includes(provider)) {
+          const provLabel = provider === 'dpay' ? 'BLIK' : 'Lemon Squeezy';
+          return { valid: false, message: `Ten kod rabatowy nie obowiązuje dla metody ${provLabel}.` };
+        }
 
         const percent = Math.min(Math.max(Number(dbPromo.discountPercent) || 10, 1), 50);
         return {
@@ -115,6 +119,7 @@ async function validatePromoCode(rawCode, user = null, packId = null) {
           code: dbPromo.code,
           discountPercent: percent,
           description: dbPromo.description || `Rabat ${percent}%`,
+          platforms: dbPromo.platforms || ['dpay', 'lemonsqueezy'],
           fromDb: true
         };
       }
@@ -134,6 +139,7 @@ async function validatePromoCode(rawCode, user = null, packId = null) {
       code,
       discountPercent: builtin.percent,
       description: builtin.description,
+      platforms: ['dpay', 'lemonsqueezy'],
       fromDb: false
     };
   }
@@ -145,6 +151,7 @@ async function validatePromoCode(rawCode, user = null, packId = null) {
       code,
       discountPercent: 10,
       description: 'Kod wsparcia QuizSolver (-10%)',
+      platforms: ['dpay', 'lemonsqueezy'],
       fromDb: false
     };
   }
@@ -173,14 +180,38 @@ function calculateUsdPrice(packId, discountPercent = 0) {
 }
 
 /**
- * Increments usage count for MongoDB promo codes
+ * Increments usage count for MongoDB promo codes across both payment providers
  */
-async function markPromoUsed(rawCode) {
+async function markPromoUsed(rawCode, provider = 'dpay') {
   const code = normalizePromoCode(rawCode);
   if (!code) return;
   if (mongoose.connection && mongoose.connection.readyState === 1) {
     try {
-      await PromoCode.updateOne({ code }, { $inc: { usedCount: 1 } });
+      const incObj = { usedCount: 1 };
+      if (provider === 'dpay') {
+        incObj.usedCountDpay = 1;
+      } else if (provider === 'lemonsqueezy') {
+        incObj.usedCountLemon = 1;
+      }
+
+      const updated = await PromoCode.findOneAndUpdate(
+        { code },
+        { $inc: incObj },
+        { new: true }
+      );
+
+      // If code reached maxUses, deactivate it so neither platform can redeem it
+      if (updated && updated.maxUses > 0 && updated.usedCount >= updated.maxUses) {
+        if (updated.active) {
+          updated.active = false;
+          await updated.save();
+          console.log(`[PromoService] Promo code ${code} reached max uses (${updated.usedCount}/${updated.maxUses}) and was deactivated.`);
+        }
+        if (updated.lemonDiscountId) {
+          const { deleteLemonSqueezyDiscount } = require('./lemonSqueezyService');
+          await deleteLemonSqueezyDiscount(updated.lemonDiscountId).catch(() => {});
+        }
+      }
     } catch (err) {
       console.warn('[PromoService] markPromoUsed failed:', err.message);
     }

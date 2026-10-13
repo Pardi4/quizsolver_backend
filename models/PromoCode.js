@@ -21,11 +21,28 @@ const promoCodeSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  platforms: {
+    type: [String],
+    enum: ['dpay', 'lemonsqueezy'],
+    default: ['dpay', 'lemonsqueezy']
+  },
+  lemonDiscountId: {
+    type: String,
+    default: null
+  },
   maxUses: {
     type: Number,
     default: 0 // 0 = unlimited
   },
   usedCount: {
+    type: Number,
+    default: 0
+  },
+  usedCountDpay: {
+    type: Number,
+    default: 0
+  },
+  usedCountLemon: {
     type: Number,
     default: 0
   },
