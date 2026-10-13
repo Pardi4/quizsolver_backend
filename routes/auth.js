@@ -192,6 +192,27 @@ try {
   console.error('Could not load disposable emails list', e);
 }
 
+const DISPOSABLE_EMAIL_MESSAGES = {
+  en: 'Temporary email addresses are not allowed.',
+  pl: 'Tymczasowe adresy e-mail są niedozwolone.',
+  de: 'Temporäre E-Mail-Adressen sind nicht erlaubt.',
+  es: 'No se permiten direcciones de correo electrónico temporales.',
+  fr: 'Les adresses e-mail temporaires ne sont pas autorisées.',
+  it: 'Gli indirizzi e-mail temporanei non sono consentiti.',
+  uk: 'Тимчасові адреси електронної пошти заборонені.',
+  pt: 'Endereços de e-mail temporários não são permitidos.',
+  ar: 'عناوين البريد الإلكتروني المؤقتة غير مسموح بها.',
+  tr: 'Geçici e-posta adreslerine izin verilmez.',
+  ja: '使い捨て（一時的な）メールアドレスは使用できません。',
+  ko: '임시 이메일 주소는 사용할 수 없습니다.'
+};
+
+function getDisposableEmailMessage(req) {
+  const rawLocale = String(req.body?.locale || req.query?.locale || req.headers['accept-language'] || 'en').toLowerCase().trim();
+  const lang = rawLocale.slice(0, 2);
+  return DISPOSABLE_EMAIL_MESSAGES[lang] || DISPOSABLE_EMAIL_MESSAGES.en;
+}
+
 router.post('/register', registerLimiter, async (req, res) => {
   try {
     const email = sanitizeEmail(req.body.email);
@@ -205,7 +226,10 @@ router.post('/register', registerLimiter, async (req, res) => {
 
     const domain = email.split('@')[1];
     if (domain && TEMP_MAIL_DOMAINS_SET.has(domain.toLowerCase())) {
-      return res.status(400).json({ error: 'Temporary email addresses are not allowed.' });
+      return res.status(400).json({
+        error: getDisposableEmailMessage(req),
+        code: 'DISPOSABLE_EMAIL_NOT_ALLOWED'
+      });
     }
 
     const passwordError = validatePassword(password);
@@ -779,6 +803,14 @@ router.patch('/me', authMiddleware, async (req, res) => {
       const newEmail = String(req.body.requestEmailChange).toLowerCase().trim();
       if (newEmail === user.email) return res.status(400).json({ error: 'This is already your email.' });
       
+      const newDomain = newEmail.split('@')[1];
+      if (newDomain && TEMP_MAIL_DOMAINS_SET.has(newDomain.toLowerCase())) {
+        return res.status(400).json({
+          error: getDisposableEmailMessage(req),
+          code: 'DISPOSABLE_EMAIL_NOT_ALLOWED'
+        });
+      }
+
       const existing = await User.findOne({ email: newEmail });
       if (existing) return res.status(400).json({ error: 'Email is already in use.' });
       
