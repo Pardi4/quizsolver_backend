@@ -226,6 +226,28 @@ router.post('/buy', async (req, res) => {
       }
     }
 
+    if (validDiscountPercent === 100) {
+      const freePurchase = await Purchase.recordPurchase(req.user._id, packInfo.id, packInfo.credits, {
+        priceUsd: 0,
+        currency: 'PLN',
+        paymentProvider: 'promo_free',
+        externalOrderId: `free:${Date.now()}:${req.user._id}`,
+        discountCode: validDiscountCode,
+        discountPercent: 100
+      });
+      await Purchase.applyCredits(freePurchase);
+      if (validDiscountCode) {
+        await promoService.markPromoUsed(validDiscountCode, provider);
+      }
+
+      const siteUrl = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
+      return res.json({
+        success: true,
+        freeApplied: true,
+        checkoutUrl: `${siteUrl}/pl/success?provider=free&credits=${packInfo.credits}`
+      });
+    }
+
     if (provider === 'dpay') {
       if (!hasDpayConfig()) {
         return res.status(503).json({

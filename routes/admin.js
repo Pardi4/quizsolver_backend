@@ -2131,7 +2131,7 @@ router.post('/promos', async (req, res) => {
       return res.status(400).json({ error: `Kod ${normalizedCode} już istnieje.` });
     }
 
-    const percent = Math.min(Math.max(parseInt(discountPercent, 10) || 10, 1), 50);
+    const percent = Math.min(Math.max(parseInt(discountPercent, 10) || 10, 1), 100);
     const uses = Math.max(parseInt(maxUses, 10) || 0, 0);
     const expirationDate = expiresAt ? new Date(expiresAt) : null;
 

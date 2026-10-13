@@ -113,7 +113,7 @@ async function validatePromoCode(rawCode, user = null, packId = null, provider =
           return { valid: false, message: `Ten kod rabatowy nie obowiązuje dla metody ${provLabel}.` };
         }
 
-        const percent = Math.min(Math.max(Number(dbPromo.discountPercent) || 10, 1), 50);
+        const percent = Math.min(Math.max(Number(dbPromo.discountPercent) || 10, 1), 100);
         return {
           valid: true,
           code: dbPromo.code,
@@ -164,7 +164,7 @@ async function validatePromoCode(rawCode, user = null, packId = null, provider =
  */
 function calculatePlnPrice(packId, discountPercent = 0) {
   const base = BASE_PLN_PRICES[packId] || 14.99;
-  const clampedPercent = Math.min(Math.max(Number(discountPercent) || 0, 0), 50);
+  const clampedPercent = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
   if (clampedPercent <= 0) return base;
   return Math.round(base * (1 - clampedPercent / 100) * 100) / 100;
 }
@@ -174,7 +174,7 @@ function calculatePlnPrice(packId, discountPercent = 0) {
  */
 function calculateUsdPrice(packId, discountPercent = 0) {
   const base = BASE_USD_PRICES[packId] || 4.99;
-  const clampedPercent = Math.min(Math.max(Number(discountPercent) || 0, 0), 50);
+  const clampedPercent = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
   if (clampedPercent <= 0) return base;
   return Math.round(base * (1 - clampedPercent / 100) * 100) / 100;
 }
