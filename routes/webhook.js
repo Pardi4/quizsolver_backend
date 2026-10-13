@@ -231,20 +231,37 @@ router.post('/dpay', async (req, res) => {
     if (Buffer.isBuffer(payload)) {
       payload = parseJsonBody(payload) || {};
     }
-    const data = { ...req.query, ...payload };
-    const transactionId = String(data.id || data.transaction_id || data.payment_id || '').trim();
-    const status = String(data.status || '').toUpperCase();
-    const custom = String(data.custom || '').trim();
-    const rawAmount = data.amount || data.value || 0;
+    const nestedData = (payload && payload.data && typeof payload.data === 'object') ? payload.data : {};
+    const data = { ...req.query, ...nestedData, ...payload };
+    const transactionId = String(data.id || data.transaction_id || data.payment_id || nestedData.id || nestedData.transaction_id || '').trim();
+    const eventType = String(payload.event || payload.type || '').toLowerCase();
+    const status = String(data.status || nestedData.status || (eventType === 'payment.succeeded' ? 'SUCCESS' : '')).toUpperCase();
+    const custom = String(data.custom || nestedData.custom || '').trim();
+    const rawAmount = data.amount || data.value || nestedData.amount || nestedData.value || 0;
     const amountPln = parseFloat(rawAmount) || 0;
 
-    console.log(`[DPay IPN] Webhook received: id=${transactionId}, amount=${amountPln}, type=${data.type || 'transfer'}, custom=${custom}`);
+    console.log(`[DPay IPN] Webhook received: id=${transactionId}, amount=${amountPln}, type=${data.type || eventType || 'transfer'}, custom=${custom}`);
 
-    // If DPay is configured, strictly verify the cryptographic signature
+    // If DPay is configured, strictly verify cryptographic signature
     if (dpayService.isConfigured()) {
-      const isValid = dpayService.verifyIpnSignature(data);
+      const sigHeader = req.headers['webhook-signature'] || req.headers['x-dpay-signature'] || req.headers['dpay-signature'] || req.headers['signature'];
+      let isValid = false;
+
+      // 1. Try HMAC signature if header and DPAY_WEBHOOK_SECRET are present
+      if ((sigHeader || req.headers['webhook-id']) && process.env.DPAY_WEBHOOK_SECRET) {
+        isValid = dpayService.verifyHmacWebhook(req.rawBody || req.body, req.headers);
+        if (isValid) {
+          console.log('[DPay IPN] Verified via HMAC webhook signature header.');
+        }
+      }
+
+      // 2. Try official dPay IPN signature formula with Klucz Hash
       if (!isValid) {
-        // Fallback check: verify directly with dPay API in case of format anomaly
+        isValid = dpayService.verifyIpnSignature(data);
+      }
+
+      // 3. Fallback check: verify directly with dPay API in case of signature anomaly
+      if (!isValid) {
         let verifiedViaApi = false;
         if (transactionId) {
           try {
@@ -259,7 +276,7 @@ router.post('/dpay', async (req, res) => {
         }
 
         if (!verifiedViaApi) {
-          console.warn(`[DPay IPN] REJECTED: Invalid signature for transaction ${transactionId}. Received signature: ${data.signature || data.checksum}`);
+          console.warn(`[DPay IPN] REJECTED: Invalid signature for transaction ${transactionId}. Received signature: ${data.signature || data.checksum || sigHeader}`);
           // Return 200 'OK' per dPay docs so it doesn't repeatedly retry, but do NOT credit user!
           return res.status(200).send('OK');
         }

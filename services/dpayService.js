@@ -287,14 +287,87 @@ async function getTransactionDetails(transactionId) {
   }
 }
 
+function getWebhookSecret() {
+  return String(process.env.DPAY_WEBHOOK_SECRET || '').trim();
+}
+
+function timingSafeEqualRaw(a, b) {
+  const left = Buffer.from(String(a || '').trim(), 'utf8');
+  const right = Buffer.from(String(b || '').trim(), 'utf8');
+  if (left.length === 0 || right.length === 0 || left.length !== right.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(left, right);
+}
+
+function verifyHmacWebhook(rawBody, headers = {}) {
+  const webhookSecret = getWebhookSecret();
+  if (!webhookSecret) return false;
+
+  const sigHeader = typeof headers === 'string'
+    ? headers
+    : (headers['webhook-signature'] || headers['x-dpay-signature'] || headers['dpay-signature'] || headers['signature'] || '');
+
+  if (!sigHeader) return false;
+
+  try {
+    const raw = typeof rawBody === 'string' ? rawBody : (Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : JSON.stringify(rawBody));
+    const msgId = typeof headers === 'object' ? (headers['webhook-id'] || headers['x-dpay-webhook-id'] || headers['svix-id'] || '') : '';
+    const msgTimestamp = typeof headers === 'object' ? (headers['webhook-timestamp'] || headers['x-dpay-webhook-timestamp'] || headers['svix-timestamp'] || '') : '';
+
+    const keyBytes = webhookSecret.startsWith('whsec_')
+      ? Buffer.from(webhookSecret.slice(6), 'base64')
+      : Buffer.from(webhookSecret, 'utf8');
+
+    // 1. Standard Svix signature (${msgId}.${msgTimestamp}.${body})
+    if (msgId && msgTimestamp) {
+      const toSign = `${msgId}.${msgTimestamp}.${raw}`;
+      const expectedBase64 = crypto.createHmac('sha256', keyBytes).update(toSign).digest('base64');
+      const expectedHex = crypto.createHmac('sha256', keyBytes).update(toSign).digest('hex');
+
+      const signatures = String(sigHeader).split(/\s+/);
+      for (const item of signatures) {
+        const val = item.includes('v1,') ? item.split('v1,')[1] : (item.includes('v1=') ? item.split('v1=')[1] : item);
+        if (timingSafeEqualRaw(expectedBase64, val) || timingSafeEqualHex(expectedHex, val)) {
+          return true;
+        }
+      }
+    }
+
+    // 2. Direct HMAC on body (hex or base64)
+    const directHex = crypto.createHmac('sha256', keyBytes).update(raw).digest('hex');
+    const directBase64 = crypto.createHmac('sha256', keyBytes).update(raw).digest('base64');
+    const cleanSig = String(sigHeader).replace(/^v1[,=]/, '').trim();
+
+    if (timingSafeEqualHex(directHex, cleanSig) || timingSafeEqualRaw(directBase64, cleanSig)) {
+      return true;
+    }
+
+    // 3. Fallback with raw secret string if whsec_ wasn't base64 decoded
+    const rawSecretHex = crypto.createHmac('sha256', webhookSecret).update(raw).digest('hex');
+    if (timingSafeEqualHex(rawSecretHex, cleanSig)) {
+      return true;
+    }
+
+    return false;
+  } catch (err) {
+    console.warn('[DPay] HMAC verify error:', err.message);
+    return false;
+  }
+}
+
+
 module.exports = {
   isConfigured,
   getService,
   getSecret,
+  getWebhookSecret,
   calculateRegistrationChecksum,
   verifyIpnSignature,
+  verifyHmacWebhook,
   createPayment,
   getTransactionDetails,
   getPlnPrice,
   PLN_PACK_PRICES
 };
+

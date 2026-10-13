@@ -3,12 +3,12 @@ const dpayService = require('./services/dpayService');
 
 async function testDpay() {
   console.log('--- Test konfiguracji dPay ---');
-  console.log('DPAY_SERVICE_HASH:', process.env.DPAY_SERVICE_HASH ? `${process.env.DPAY_SERVICE_HASH.substring(0, 4)}...` : '(BRAK)');
-  console.log('DPAY_SECRET_KEY:', process.env.DPAY_SECRET_KEY ? '****** (ustawiony)' : '(BRAK)');
+  console.log('Parametr "service" (Nazwa serwisu):', dpayService.getService() || '(BRAK)');
+  console.log('Parametr "hash" (Klucz Hash):', dpayService.getSecret() ? '****** (ustawiony)' : '(BRAK)');
   console.log('DPAY_IPN_URL:', process.env.DPAY_IPN_URL || '(domyślny)');
 
   if (!dpayService.isConfigured()) {
-    console.log('\n❌ DPAY_SERVICE_HASH lub DPAY_SECRET_KEY nie są jeszcze wpisane w pliku backend/.env!');
+    console.log('\n❌ Brak nazwy serwisu lub klucza hash w backend/.env!');
     console.log('Wpisz je w backend/.env i uruchom ten skrypt ponownie: node test-dpay.js');
     return;
   }
