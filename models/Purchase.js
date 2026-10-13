@@ -182,16 +182,22 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
   if (purchase.creditsApplied && buyer.referredBy && pack !== 'referral_bonus' && normalizedCredits > 0) {
     try {
       const bonusCredits = Math.max(1, Math.floor(normalizedCredits * 0.10));
-      const bonusPurchase = await this.create({
-        userId: buyer.referredBy,
-        pack: 'referral_bonus',
-        credits: bonusCredits,
-        priceUsd: 0,
-        paymentProvider: 'referral',
-        grantReason: `Referral bonus from purchase ${purchaseData.externalOrderId || 'unknown'} by ${buyer.email}`
-      });
-      await this.applyCredits(bonusPurchase);
-      console.log(`[Referral] Granted ${bonusCredits} bonus credits to referrer ${buyer.referredBy}`);
+      const refOrderId = `referral:${buyer.referredBy}:${purchaseData.externalOrderId || purchase._id}`;
+      const existingRef = await this.findOne({ externalOrderId: refOrderId });
+      if (!existingRef) {
+        const bonusPurchase = await this.create({
+          userId: buyer.referredBy,
+          pack: 'referral_bonus',
+          credits: bonusCredits,
+          priceUsd: 0,
+          currency: 'USD',
+          paymentProvider: 'referral',
+          externalOrderId: refOrderId,
+          grantReason: `Referral bonus from purchase ${purchaseData.externalOrderId || 'unknown'} by ${buyer.email}`
+        });
+        await this.applyCredits(bonusPurchase);
+        console.log(`[Referral] Granted ${bonusCredits} bonus credits to referrer ${buyer.referredBy}`);
+      }
     } catch (err) {
       console.error('[Referral] Failed to grant referral bonus:', err);
     }

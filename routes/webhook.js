@@ -1,9 +1,11 @@
 const express = require('express');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const { webhookLimiter } = require('../middleware/rateLimiter');
 const Purchase = require('../models/Purchase');
 const User = require('../models/User');
-const { packFromLemonVariantId } = require('../config/creditPacks');
+const { packFromLemonVariantId, CREDIT_PACKS } = require('../config/creditPacks');
+const dpayService = require('../services/dpayService');
 
 const router = express.Router();
 
@@ -230,55 +232,98 @@ router.post('/dpay', async (req, res) => {
       payload = parseJsonBody(payload) || {};
     }
     const data = { ...req.query, ...payload };
-    const transactionId = data.id || data.transaction_id || data.payment_id || '';
+    const transactionId = String(data.id || data.transaction_id || data.payment_id || '').trim();
     const status = String(data.status || '').toUpperCase();
-    const custom = data.custom || '';
-    const amount = parseFloat(data.amount || data.value || 0);
+    const custom = String(data.custom || '').trim();
+    const rawAmount = data.amount || data.value || 0;
+    const amountPln = parseFloat(rawAmount) || 0;
 
-    console.log(`[DPay] Webhook received: id=${transactionId}, status=${status}, custom=${custom}`);
+    console.log(`[DPay IPN] Webhook received: id=${transactionId}, amount=${amountPln}, type=${data.type || 'transfer'}, custom=${custom}`);
 
-    if (status !== 'OK' && status !== 'SUCCESS' && status !== 'TRUE' && status !== '1') {
+    // If DPay is configured, strictly verify the cryptographic signature
+    if (dpayService.isConfigured()) {
+      const isValid = dpayService.verifyIpnSignature(data);
+      if (!isValid) {
+        // Fallback check: verify directly with dPay API in case of format anomaly
+        let verifiedViaApi = false;
+        if (transactionId) {
+          try {
+            const details = await dpayService.getTransactionDetails(transactionId);
+            if (details && (details.status === true || String(details.status).toUpperCase() === 'PAID' || String(details.status).toUpperCase() === 'SUCCESS')) {
+              verifiedViaApi = true;
+              console.log(`[DPay IPN] Verified transaction ${transactionId} via dPay status API fallback.`);
+            }
+          } catch (apiErr) {
+            console.warn('[DPay IPN] Status API fallback failed:', apiErr.message);
+          }
+        }
+
+        if (!verifiedViaApi) {
+          console.warn(`[DPay IPN] REJECTED: Invalid signature for transaction ${transactionId}. Received signature: ${data.signature || data.checksum}`);
+          // Return 200 'OK' per dPay docs so it doesn't repeatedly retry, but do NOT credit user!
+          return res.status(200).send('OK');
+        }
+      }
+    } else {
+      console.warn('[DPay IPN] DPay secrets are not set in environment. Skipping signature verification.');
+    }
+
+    // IPN is only sent on success, but guard against explicit failures if present
+    if (status && !['OK', 'SUCCESS', 'TRUE', '1', 'PAID'].includes(status)) {
+      console.log(`[DPay IPN] Ignored non-success status: ${status}`);
       return res.status(200).send('OK');
     }
 
     if (!custom) {
-      console.warn('[DPay] Missing custom data in webhook.');
+      console.warn('[DPay IPN] Missing custom data in webhook.');
       return res.status(200).send('OK');
     }
 
     const [userId, packId, creditsStr] = String(custom).split(':');
     const credits = parseInt(creditsStr, 10);
-    if (!userId || !credits || isNaN(credits)) {
-      console.warn('[DPay] Invalid custom format:', custom);
+    if (!userId || !credits || isNaN(credits) || credits <= 0) {
+      console.warn('[DPay IPN] Invalid custom format:', custom);
       return res.status(200).send('OK');
     }
 
     const externalOrderId = transactionId ? `dpay:${transactionId}` : `dpay:${Date.now()}`;
     const existing = await Purchase.findOne({ externalOrderId });
     if (existing) {
-      console.log(`[DPay] Duplicate purchase ignored: ${externalOrderId}`);
+      if (existing.creditsApplied === false) {
+        await Purchase.applyCredits(existing);
+        console.log(`[DPay IPN] Duplicate recovered unapplied credits: ${externalOrderId}`);
+      } else {
+        console.log(`[DPay IPN] Duplicate purchase already applied: ${externalOrderId}`);
+      }
       return res.status(200).send('OK');
     }
 
-    const targetUser = await User.findById(userId);
+    let targetUser = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      targetUser = await User.findById(userId);
+    }
+    if (!targetUser && data.email) {
+      targetUser = await User.findOne({ email: String(data.email).trim().toLowerCase() });
+    }
+
     if (!targetUser) {
-      console.error('[DPay] User not found for custom ID:', userId);
+      console.error('[DPay IPN] User not found for custom ID / email:', userId, data.email);
       return res.status(200).send('OK');
     }
 
-    const purchase = await Purchase.recordPurchase(targetUser._id, packId || 'popular', credits, {
-      priceUsd: amount > 0 ? (amount / 4) : 0,
+    const packInfo = CREDIT_PACKS[packId] || { id: packId || 'popular', credits, price: amountPln > 0 ? (amountPln / 4.0) : 4.99 };
+
+    const purchase = await Purchase.recordPurchase(targetUser._id, packInfo.id, credits, {
+      priceUsd: amountPln > 0 ? (amountPln / 4.0) : packInfo.price,
       currency: 'PLN',
       paymentProvider: 'dpay',
       externalOrderId
     });
 
-    await grantReferralBonus(targetUser, credits, externalOrderId || purchase._id);
-
-    console.log(`[DPay] Successfully applied +${credits} credits to ${targetUser.email} (order: ${externalOrderId})`);
+    console.log(`[DPay IPN] Successfully credited +${credits} credits to ${targetUser.email} (order: ${externalOrderId})`);
     return res.status(200).send('OK');
   } catch (error) {
-    console.error('[DPay] Webhook error:', error.message);
+    console.error('[DPay IPN] Webhook processing error:', error.message);
     return res.status(200).send('OK');
   }
 });

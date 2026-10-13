@@ -2,8 +2,39 @@ const { OpenAI } = require('openai');
 const sharp = require('sharp');
 const { cleanQuizText } = require('../utils/textSanitizer');
 
-// Hardcoded single model for all operations
-const MODEL = 'gpt-5.6-luna';
+// Primary fast & cost-efficient model + fallback model for refusals/errors
+const PRIMARY_MODEL = process.env.OPENAI_MODEL_PRIMARY || process.env.OPENAI_MODEL || 'gpt-6-luna';
+const FALLBACK_MODEL = process.env.OPENAI_MODEL_FALLBACK || 'gpt-5.6-luna';
+
+const REFUSAL_PATTERNS = [
+  /cannot answer/i,
+  /unable to answer/i,
+  /can't assist/i,
+  /cannot assist/i,
+  /can't help with/i,
+  /cannot help with/i,
+  /as an ai/i,
+  /as a language model/i,
+  /safety guidelines/i,
+  /content policy/i,
+  /against (?:our|my|the) policy/i,
+  /nie mog[eę] odpowiedzie[cć]/i,
+  /nie jestem w stanie/i,
+  /nie mog[eę] udzieli[cć] odpowiedzi/i,
+  /przepraszam.*nie mog/i,
+  /i am unable to provide/i,
+  /i cannot provide/i,
+  /i cannot fulfill/i,
+  /harmful content/i,
+  /violates our/i
+];
+
+function isRefusalResponse(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  return REFUSAL_PATTERNS.some(pattern => pattern.test(clean));
+}
+
 const MAX_IMAGE_DATA_URL_LENGTH = 5.5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -320,6 +351,10 @@ function parseAnswer(raw, type, options, expectedCount = null) {
     throw new AIError('QUESTION_RETRY_NEEDED', 'AI could not identify a real answerable question.');
   }
 
+  if (isRefusalResponse(text) || isRefusalResponse(raw)) {
+    throw new AIError('CENSORED_OR_REFUSAL', `AI refused to answer: "${raw}"`);
+  }
+
   if (/^(uncertain|unknown|not sure|nie wiem|niepewne)\b/i.test(text)) {
     throw new AIError('INVALID_RESPONSE', `Uncertain AI response: "${raw}"`);
   }
@@ -441,40 +476,65 @@ async function buildQuestionContent(questionData, imageDetail = 'low') {
   return userContent;
 }
 
-async function requestChatCompletion(body) {
+async function requestChatCompletion(body, model = PRIMARY_MODEL) {
   const openai = getOpenAI();
   try {
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      // no `temperature` — this model only supports the default (1)
-      reasoning_effort: 'none', // suppress hidden reasoning tokens; this model
-      // burns tokens on internal reasoning by default (unlike gpt-4o, which had
-      // none of this). 'minimal' keeps it fast/cheap for short classification-
-      // style answers. If this model doesn't support the param, the API will
-      // reject it by name the same way it did with `temperature` earlier.
+    const params = {
+      model,
       max_completion_tokens: body.max_completion_tokens,
       messages: body.messages,
-    }, { timeout: 30000 });
+    };
+    if (body.reasoning_effort !== undefined) {
+      params.reasoning_effort = body.reasoning_effort;
+    } else {
+      params.reasoning_effort = 'none';
+    }
 
-    const choice = response.choices[0];
+    let response;
+    try {
+      response = await openai.chat.completions.create(params, { timeout: 30000 });
+    } catch (createErr) {
+      // If the model rejects reasoning_effort (e.g. gpt-6-luna or other model versions)
+      if (createErr?.message && /reasoning_effort/i.test(createErr.message)) {
+        delete params.reasoning_effort;
+        response = await openai.chat.completions.create(params, { timeout: 30000 });
+      } else {
+        throw createErr;
+      }
+    }
+
+    const choice = response.choices?.[0];
+    const finishReason = choice?.finish_reason;
     const content = choice?.message?.content?.trim() || '';
 
+    // Check for refusal from OpenAI API choice
+    if (finishReason === 'content_filter' || choice?.message?.refusal) {
+      throw new AIError('CENSORED_OR_REFUSAL', choice?.message?.refusal || 'Content filtered by safety policy.');
+    }
+
     if (!content) {
-      // Diagnostic for empty responses — if finishReason is 'length' and
-      // usage shows reasoning_tokens near maxCompletionTokens, the budget
-      // was consumed by hidden reasoning before any visible text was written.
       console.warn('[AI] empty content', JSON.stringify({
-        finishReason: choice?.finish_reason,
+        finishReason,
         usage: response.usage,
-        maxCompletionTokens: body.max_completion_tokens
+        maxCompletionTokens: body.max_completion_tokens,
+        model
       }));
+      throw new AIError('EMPTY_RESPONSE', 'Empty AI response from model.');
+    }
+
+    if (isRefusalResponse(content)) {
+      throw new AIError('CENSORED_OR_REFUSAL', `AI refused to answer: "${content.substring(0, 100)}"`);
     }
 
     return content;
   } catch (err) {
+    if (err instanceof AIError) throw err;
     const message = String(err?.message || '');
     if (err?.status === 408 || message.includes('timeout')) {
       throw new AIError('AI_TIMEOUT', 'AI request timed out (30s).');
+    }
+    if (/content_filter|policy|safety|refusal|filtered/i.test(message)) {
+      throw new AIError('CENSORED_OR_REFUSAL', message);
     }
     throw new AIError('MODEL_ERROR', message || 'AI request failed.');
   }
@@ -482,7 +542,7 @@ async function requestChatCompletion(body) {
 const pLimit = require('p-limit').default || require('p-limit');
 const aiConcurrencyLimit = pLimit(20);
 
-async function callAIWithModel(questionData, imageDetail = 'low') {
+async function callAIWithModel(questionData, imageDetail = 'low', model = PRIMARY_MODEL) {
   return aiConcurrencyLimit(async () => {
     const { type, imageUrl, text, options } = questionData;
     const body = {
@@ -493,8 +553,8 @@ async function callAIWithModel(questionData, imageDetail = 'low') {
       ]
     };
 
-    console.log('[AI] ->', JSON.stringify({ model: MODEL, type, hasImage: !!imageUrl, imageDetail, textLen: text.length }));
-    const raw = await requestChatCompletion(body);
+    console.log('[AI] ->', JSON.stringify({ model, type, hasImage: !!imageUrl, imageDetail, textLen: text.length }));
+    const raw = await requestChatCompletion(body, model);
     console.log('[AI] <-', raw.substring(0, 120));
     const expectedCount = Array.isArray(questionData.prompts)
       ? questionData.prompts.length
@@ -508,16 +568,17 @@ async function callAIWithModel(questionData, imageDetail = 'low') {
 async function callAI(questionData) {
   const initialRoute = getInitialAIRoute(questionData);
   try {
-    console.log('[AI Route]', JSON.stringify(initialRoute));
-    return await callAIWithModel(questionData, initialRoute.imageDetail);
+    console.log('[AI Route]', JSON.stringify({ ...initialRoute, model: PRIMARY_MODEL }));
+    return await callAIWithModel(questionData, initialRoute.imageDetail, PRIMARY_MODEL);
   } catch (error) {
-    const fallbackRoute = getFallbackAIRoute(questionData, error, initialRoute);
-    if (!fallbackRoute) throw error;
-    console.warn('[AI] fallback ->', JSON.stringify({
-      reason: fallbackRoute.reason,
-      error: error.type || error.message
-    }));
-    return callAIWithModel(questionData, fallbackRoute.imageDetail);
+    console.warn(`[AI] Primary model (${PRIMARY_MODEL}) failed/refused (${error.type}: ${error.message}). Switching to fallback model (${FALLBACK_MODEL})...`);
+    try {
+      const fallbackImageDetail = (questionData.imageUrl && error.type === 'INVALID_RESPONSE') ? 'high' : initialRoute.imageDetail;
+      return await callAIWithModel(questionData, fallbackImageDetail, FALLBACK_MODEL);
+    } catch (fallbackError) {
+      console.error(`[AI] Fallback model (${FALLBACK_MODEL}) also failed:`, fallbackError.message);
+      throw fallbackError;
+    }
   }
 }
 
@@ -545,7 +606,7 @@ function parseSnapshotPayload(raw) {
   }
 }
 
-async function callSnapshotAI(imageData, imageDetail = 'low') {
+async function callSnapshotAI(imageData, imageDetail = 'low', model = PRIMARY_MODEL) {
   const { base64, mimeType } = await fetchImageAsBase64(imageData, imageDetail);
   const body = {
     max_completion_tokens: 400, // headroom for hidden reasoning tokens, see getMaxTokens
@@ -564,8 +625,8 @@ async function callSnapshotAI(imageData, imageDetail = 'low') {
     ]
   };
 
-  console.log('[AI Snapshot] ->', JSON.stringify({ model: MODEL, imageDetail, size: imageData.length }));
-  const raw = await requestChatCompletion(body);
+  console.log('[AI Snapshot] ->', JSON.stringify({ model, imageDetail, size: imageData.length }));
+  const raw = await requestChatCompletion(body, model);
   console.log('[AI Snapshot] <-', raw.substring(0, 160));
   return parseSnapshotPayload(raw);
 }
@@ -573,15 +634,16 @@ async function callSnapshotAI(imageData, imageDetail = 'low') {
 async function solveSnapshotImage(imageData) {
   const initialRoute = { imageDetail: 'low', reason: 'focusscan' };
   try {
-    console.log('[AI Snapshot Route]', JSON.stringify(initialRoute));
-    return await callSnapshotAI(imageData, initialRoute.imageDetail);
+    console.log('[AI Snapshot Route]', JSON.stringify({ ...initialRoute, model: PRIMARY_MODEL }));
+    return await callSnapshotAI(imageData, initialRoute.imageDetail, PRIMARY_MODEL);
   } catch (error) {
-    if (error.type !== 'INVALID_RESPONSE' || initialRoute.imageDetail === 'high') throw error;
-    console.warn('[AI Snapshot] retry ->', JSON.stringify({
-      reason: 'image-high-detail',
-      error: error.type || error.message
-    }));
-    return callSnapshotAI(imageData, 'high');
+    console.warn(`[AI Snapshot] Primary model (${PRIMARY_MODEL}) failed/refused (${error.type}: ${error.message}). Falling back to ${FALLBACK_MODEL}...`);
+    try {
+      return await callSnapshotAI(imageData, 'high', FALLBACK_MODEL);
+    } catch (fallbackError) {
+      console.error(`[AI Snapshot] Fallback model (${FALLBACK_MODEL}) also failed:`, fallbackError.message);
+      throw fallbackError;
+    }
   }
 }
 
@@ -611,9 +673,7 @@ function languageInstruction(explanationLanguage = 'auto') {
 
 async function callExplanationAI(text, options, answer, type, explanationLanguage = 'auto', meta = {}) {
   const answerText = answerTextForPrompt(options, answer, type, meta);
-
   const languageHint = languageInstruction(explanationLanguage);
-
   const body = {
     max_completion_tokens: 250, // headroom for hidden reasoning tokens, see getMaxTokens
     messages: [
@@ -622,8 +682,16 @@ async function callExplanationAI(text, options, answer, type, explanationLanguag
     ]
   };
 
-  const raw = await requestChatCompletion(body);
-  return raw || 'No explanation available.';
+  try {
+    return await requestChatCompletion(body, PRIMARY_MODEL);
+  } catch (err) {
+    console.warn(`[AI Explanation] Primary model (${PRIMARY_MODEL}) failed/refused (${err.type || err.message}), trying fallback (${FALLBACK_MODEL})...`);
+    try {
+      return await requestChatCompletion(body, FALLBACK_MODEL);
+    } catch (fallbackErr) {
+      return 'No explanation available.';
+    }
+  }
 }
 
 async function callFollowUpAI({ text, options, answer, type, prompt, previousExplanation, explanationLanguage = 'auto', prompts, rows }) {
@@ -647,8 +715,16 @@ async function callFollowUpAI({ text, options, answer, type, prompt, previousExp
     ]
   };
 
-  const raw = await requestChatCompletion(body);
-  return raw || 'No follow-up available.';
+  try {
+    return await requestChatCompletion(body, PRIMARY_MODEL);
+  } catch (err) {
+    console.warn(`[AI FollowUp] Primary model (${PRIMARY_MODEL}) failed/refused (${err.type || err.message}), trying fallback (${FALLBACK_MODEL})...`);
+    try {
+      return await requestChatCompletion(body, FALLBACK_MODEL);
+    } catch (fallbackErr) {
+      return 'No follow-up available.';
+    }
+  }
 }
 
 module.exports = {

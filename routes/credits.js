@@ -8,6 +8,7 @@ const CreditUsage = require('../models/CreditUsage');
 const ParserEvent = require('../models/ParserEvent');
 const { CREDIT_PACKS } = require('../config/creditPacks');
 const { storeParserSnapshotHtml } = require('../utils/parserSnapshotFiles');
+const dpayService = require('../services/dpayService');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -25,8 +26,7 @@ function hasLemonSqueezyConfig(packInfo) {
 }
 
 function hasDpayConfig() {
-  return !looksPlaceholder(process.env.DPAY_SERVICE_HASH)
-    && !looksPlaceholder(process.env.DPAY_SECRET_KEY);
+  return dpayService.isConfigured();
 }
 
 function redactSensitiveText(value) {
@@ -160,14 +160,37 @@ router.post('/buy', async (req, res) => {
         });
       }
 
-      const serviceHash = String(process.env.DPAY_SERVICE_HASH).trim();
-      const plnPrices = { starter: '7.99', popular: '19.99', pro: '59.00' };
-      const amount = plnPrices[pack] || '19.99';
-      const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com'}/success`;
-      const customData = `${req.user._id.toString()}:${packInfo.id}:${packInfo.credits}`;
-      const checkoutUrl = `https://secure.dpay.pl/?service_hash=${encodeURIComponent(serviceHash)}&amount=${encodeURIComponent(amount)}&email=${encodeURIComponent(req.user.email)}&custom=${encodeURIComponent(customData)}&return_url=${encodeURIComponent(successUrl)}`;
+      const siteUrl = (process.env.PUBLIC_SITE_URL || 'https://getquizsolver.com').replace(/\/+$/, '');
+      const successUrl = process.env.CHECKOUT_SUCCESS_URL || `${siteUrl}/pl/success?provider=dpay`;
+      const failUrl = `${siteUrl}/pl/credits?status=cancelled`;
 
-      return res.json({ success: true, checkoutUrl, provider: 'dpay' });
+      const paymentResult = await dpayService.createPayment({
+        user: req.user,
+        pack: packInfo,
+        discountCode,
+        successUrl,
+        failUrl
+      });
+
+      if (!paymentResult.success || !paymentResult.checkoutUrl) {
+        console.error('[Credits] dPay error:', paymentResult.error);
+        return res.status(502).json({
+          error: paymentResult.error || 'Nie udało się połączyć z bramką DPay. Spróbuj ponownie za chwilę.'
+        });
+      }
+
+      // Funnel tracking (fire and forget - must never block the checkout)
+      CheckoutStart.create({ user: req.user._id, pack: packInfo.id, credits: packInfo.credits })
+        .catch((e) => console.error('[Credits] CheckoutStart log failed:', e.message));
+
+      return res.json({
+        success: true,
+        checkoutUrl: paymentResult.checkoutUrl,
+        transactionId: paymentResult.transactionId,
+        provider: 'dpay',
+        pack: packInfo.id,
+        credits: packInfo.credits
+      });
     }
 
     const apiKey = process.env.LEMONSQUEEZY_API_KEY;
