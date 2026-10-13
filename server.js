@@ -44,7 +44,10 @@ const SUPPORTED_LOCALES = [
   { code: 'it', prefix: '/it', htmlLang: 'it' },
   { code: 'uk', prefix: '/uk', htmlLang: 'uk' },
   { code: 'pt', prefix: '/pt', htmlLang: 'pt' },
-  { code: 'ar', prefix: '/ar', htmlLang: 'ar' }
+  { code: 'ar', prefix: '/ar', htmlLang: 'ar' },
+  { code: 'tr', prefix: '/tr', htmlLang: 'tr' },
+  { code: 'ja', prefix: '/ja', htmlLang: 'ja' },
+  { code: 'ko', prefix: '/ko', htmlLang: 'ko' }
 ];
 const LOCALE_CODES = SUPPORTED_LOCALES.map(locale => locale.code);
 
