@@ -1,5 +1,6 @@
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
+const { promoLimiter } = require('../middleware/rateLimiter');
 const Purchase = require('../models/Purchase');
 const CheckoutStart = require('../models/CheckoutStart');
 const BugReport = require('../models/BugReport');
@@ -144,7 +145,7 @@ router.get('/balance', async (req, res) => {
   }
 });
 
-router.post('/validate-promo', async (req, res) => {
+router.post('/validate-promo', promoLimiter, async (req, res) => {
   try {
     const { code, pack = 'popular' } = req.body;
     if (!code) {
@@ -235,7 +236,6 @@ router.post('/buy', async (req, res) => {
         discountCode: validDiscountCode,
         discountPercent: 100
       });
-      await Purchase.applyCredits(freePurchase);
       if (validDiscountCode) {
         await promoService.markPromoUsed(validDiscountCode, provider);
       }

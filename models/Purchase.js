@@ -27,7 +27,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   paymentProvider: {
     type: String,
-    enum: ['lemonsqueezy', 'whop', 'manual', 'free', 'referral', 'dpay'],
+    enum: ['lemonsqueezy', 'whop', 'manual', 'free', 'referral', 'dpay', 'promo_free'],
     default: 'lemonsqueezy'
   },
   externalOrderId: {

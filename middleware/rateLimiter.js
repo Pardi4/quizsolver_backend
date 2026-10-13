@@ -156,6 +156,16 @@ const parserSnapshotLimiter = rateLimit({
   validate: false
 });
 
-module.exports = { generalLimiter, authLimiter, registerLimiter, handoffLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter };
+const promoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { valid: false, error: 'Zbyt wiele prób sprawdzenia kodu. Odczekaj chwilę.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  validate: false
+});
+
+module.exports = { generalLimiter, authLimiter, registerLimiter, handoffLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter, promoLimiter };
 
 

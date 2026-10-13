@@ -261,47 +261,48 @@ router.post('/dpay', async (req, res) => {
 
     console.log(`[DPay IPN] Webhook received: id=${transactionId}, amount=${amountPln}, type=${data.type || eventType || 'transfer'}, custom=${custom}`);
 
-    // If DPay is configured, strictly verify cryptographic signature
-    if (dpayService.isConfigured()) {
-      const sigHeader = req.headers['webhook-signature'] || req.headers['x-dpay-signature'] || req.headers['dpay-signature'] || req.headers['signature'];
-      let isValid = false;
+    // DPay must be configured to process webhooks
+    if (!dpayService.isConfigured()) {
+      console.warn('[DPay IPN] REJECTED: DPay is not configured in environment.');
+      return res.status(200).send('OK');
+    }
 
-      // 1. Try HMAC signature if header and DPAY_WEBHOOK_SECRET are present
-      if ((sigHeader || req.headers['webhook-id']) && process.env.DPAY_WEBHOOK_SECRET) {
-        isValid = dpayService.verifyHmacWebhook(req.rawBody || req.body, req.headers);
-        if (isValid) {
-          console.log('[DPay IPN] Verified via HMAC webhook signature header.');
-        }
+    const sigHeader = req.headers['webhook-signature'] || req.headers['x-dpay-signature'] || req.headers['dpay-signature'] || req.headers['signature'];
+    let isValid = false;
+
+    // 1. Try HMAC signature if header and DPAY_WEBHOOK_SECRET are present
+    if ((sigHeader || req.headers['webhook-id']) && process.env.DPAY_WEBHOOK_SECRET) {
+      isValid = dpayService.verifyHmacWebhook(req.rawBody || req.body, req.headers);
+      if (isValid) {
+        console.log('[DPay IPN] Verified via HMAC webhook signature header.');
       }
+    }
 
-      // 2. Try official dPay IPN signature formula with Klucz Hash
-      if (!isValid) {
-        isValid = dpayService.verifyIpnSignature(data);
-      }
+    // 2. Try official dPay IPN signature formula with Klucz Hash
+    if (!isValid) {
+      isValid = dpayService.verifyIpnSignature(data);
+    }
 
-      // 3. Fallback check: verify directly with dPay API in case of signature anomaly
-      if (!isValid) {
-        let verifiedViaApi = false;
-        if (transactionId) {
-          try {
-            const details = await dpayService.getTransactionDetails(transactionId);
-            if (details && (details.status === true || String(details.status).toUpperCase() === 'PAID' || String(details.status).toUpperCase() === 'SUCCESS')) {
-              verifiedViaApi = true;
-              console.log(`[DPay IPN] Verified transaction ${transactionId} via dPay status API fallback.`);
-            }
-          } catch (apiErr) {
-            console.warn('[DPay IPN] Status API fallback failed:', apiErr.message);
+    // 3. Fallback check: verify directly with dPay API in case of signature anomaly
+    if (!isValid) {
+      let verifiedViaApi = false;
+      if (transactionId) {
+        try {
+          const details = await dpayService.getTransactionDetails(transactionId);
+          if (details && (details.status === true || String(details.status).toUpperCase() === 'PAID' || String(details.status).toUpperCase() === 'SUCCESS')) {
+            verifiedViaApi = true;
+            console.log(`[DPay IPN] Verified transaction ${transactionId} via dPay status API fallback.`);
           }
-        }
-
-        if (!verifiedViaApi) {
-          console.warn(`[DPay IPN] REJECTED: Invalid signature for transaction ${transactionId}. Received signature: ${data.signature || data.checksum || sigHeader}`);
-          // Return 200 'OK' per dPay docs so it doesn't repeatedly retry, but do NOT credit user!
-          return res.status(200).send('OK');
+        } catch (apiErr) {
+          console.warn('[DPay IPN] Status API fallback failed:', apiErr.message);
         }
       }
-    } else {
-      console.warn('[DPay IPN] DPay secrets are not set in environment. Skipping signature verification.');
+
+      if (!verifiedViaApi) {
+        console.warn(`[DPay IPN] REJECTED: Invalid signature for transaction ${transactionId}. Received signature: ${data.signature || data.checksum || sigHeader}`);
+        // Return 200 'OK' per dPay docs so it doesn't repeatedly retry, but do NOT credit user!
+        return res.status(200).send('OK');
+      }
     }
 
     // IPN is only sent on success, but guard against explicit failures if present
