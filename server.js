@@ -16,6 +16,7 @@ const creditsRoutes = require('./routes/credits');
 const webhookRoutes = require('./routes/webhook');
 const supportRoutes = require('./routes/support');
 const parserRoutes = require('./routes/parser');
+const feedbackRoutes = require('./routes/feedback');
 
 const User = require('./models/User');
 
@@ -680,6 +681,7 @@ app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/credits', creditsRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/parser', parserRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 app.get('/api/stats/public', async (req, res) => {
   try {

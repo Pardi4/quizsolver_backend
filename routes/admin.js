@@ -9,6 +9,7 @@ const SupportMessage = require('../models/SupportMessage');
 const StudyNote = require('../models/StudyNote');
 const CreditUsage = require('../models/CreditUsage');
 const ParserEvent = require('../models/ParserEvent');
+const UninstallFeedback = require('../models/UninstallFeedback');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
 const { sendParserSnapshotFile } = require('../utils/parserSnapshotFiles');
 
@@ -2343,6 +2344,83 @@ router.post('/telegram/set-admin', (req, res) => {
     res.json({ success: true, adminChatId: chatId });
   } catch (err) {
     res.status(500).json({ error: 'Błąd zapisu czatu Telegram.' });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   UNINSTALL FEEDBACK
+   ───────────────────────────────────────────────────────────────── */
+router.get('/uninstall-feedback', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit, 10) || 25));
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.reason) {
+      query.reasons = req.query.reason;
+    }
+    if (req.query.search) {
+      const searchRegex = new RegExp(String(req.query.search).trim(), 'i');
+      query.$or = [
+        { feedback: searchRegex },
+        { customReason: searchRegex },
+        { platformUsed: searchRegex },
+        { email: searchRegex }
+      ];
+    }
+
+    const now = new Date();
+    const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [items, total, last7d, last30d, reasonBreakdown, totalAllTime] = await Promise.all([
+      UninstallFeedback.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      UninstallFeedback.countDocuments(query),
+      UninstallFeedback.countDocuments({ createdAt: { $gte: d7 } }),
+      UninstallFeedback.countDocuments({ createdAt: { $gte: d30 } }),
+      UninstallFeedback.aggregate([
+        { $unwind: '$reasons' },
+        { $group: { _id: '$reasons', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      UninstallFeedback.countDocuments()
+    ]);
+
+    const reasonCounts = {};
+    for (const r of reasonBreakdown) {
+      if (r._id) reasonCounts[r._id] = r.count;
+    }
+
+    res.json({
+      success: true,
+      items,
+      total,
+      page,
+      pages: Math.ceil(total / limit) || 1,
+      stats: {
+        totalAllTime,
+        last7d,
+        last30d,
+        reasonCounts
+      }
+    });
+  } catch (err) {
+    console.error('[Admin] Error fetching uninstall feedback:', err);
+    res.status(500).json({ error: 'Błąd pobierania ankiet odinstalowań.' });
+  }
+});
+
+router.delete('/uninstall-feedback/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID.' });
+    }
+    await UninstallFeedback.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd usuwania wpisu.' });
   }
 });
 

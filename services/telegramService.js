@@ -18,7 +18,52 @@ let isPollingActive = false;
 let pollingAbortController = null;
 let scheduledTimeout = null;
 
-// Load persisted adminChatId from disk if not set in environment
+const DEFAULT_SETTINGS = {
+  dailyReport: true,
+  purchases: true,
+  support: true,
+  bugs: true,
+  uninstalls: true
+};
+
+const SETTING_METADATA = {
+  dailyReport: {
+    label: 'Raport dzienny (08:00)',
+    shortLabel: 'Raport 08:00',
+    icon: '📊'
+  },
+  purchases: {
+    label: 'Zakupy kredytów ($ / zł)',
+    shortLabel: 'Zakupy ($ / zł)',
+    icon: '💰'
+  },
+  support: {
+    label: 'Wiadomości supportu i maile',
+    shortLabel: 'Support i maile',
+    icon: '📬'
+  },
+  bugs: {
+    label: 'Błędy i alerty parsera',
+    shortLabel: 'Błędy i parser',
+    icon: '🐛'
+  },
+  uninstalls: {
+    label: 'Ankiety odinstalowania',
+    shortLabel: 'Odinstalowania',
+    icon: '📉'
+  }
+};
+
+let adminSettings = { ...DEFAULT_SETTINGS };
+
+function isNotificationEnabled(key) {
+  if (adminSettings && typeof adminSettings[key] === 'boolean') {
+    return adminSettings[key];
+  }
+  return true;
+}
+
+// Load persisted adminChatId and settings from disk if available
 function loadPersistedState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
@@ -27,20 +72,33 @@ function loadPersistedState() {
         adminChatId = String(data.adminChatId).trim();
         console.log(`[TelegramBot] Loaded persisted adminChatId: ${adminChatId}`);
       }
+      if (data?.settings && typeof data.settings === 'object') {
+        adminSettings = { ...DEFAULT_SETTINGS, ...data.settings };
+      }
     }
   } catch (err) {
     console.warn('[TelegramBot] Could not read telegram_state.json:', err.message);
   }
 }
 
-function persistAdminChatId(id) {
+function persistCurrentState() {
   try {
-    adminChatId = String(id).trim();
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ adminChatId, boundAt: new Date().toISOString() }, null, 2), 'utf8');
-    console.log(`[TelegramBot] Persisted adminChatId: ${adminChatId}`);
+    const payload = {
+      adminChatId: adminChatId || '',
+      adminUsername: 'kam567122',
+      updatedAt: new Date().toISOString(),
+      settings: adminSettings
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(payload, null, 2), 'utf8');
   } catch (err) {
     console.warn('[TelegramBot] Failed to persist telegram_state.json:', err.message);
   }
+}
+
+function persistAdminChatId(id) {
+  adminChatId = String(id).trim();
+  persistCurrentState();
+  console.log(`[TelegramBot] Persisted adminChatId: ${adminChatId}`);
 }
 
 // Timezone & Date Helpers (Europe/Warsaw)
@@ -145,6 +203,7 @@ async function sendAdminAlert(htmlText) {
 // Real-time alert: New Credit Purchase
 async function notifyPurchase(purchase, buyer) {
   try {
+    if (!isNotificationEnabled('purchases')) return;
     if (!purchase || purchase.pack === 'referral_bonus' || purchase.paymentProvider === 'referral' || purchase.paymentProvider === 'admin') return;
 
     let buyerEmail = buyer?.email || '';
@@ -185,6 +244,7 @@ async function notifyPurchase(purchase, buyer) {
 // Real-time alert: New Support Message / Email
 async function notifySupportMessage(message, options = {}) {
   try {
+    if (!isNotificationEnabled('support')) return;
     if (!message) return;
     const fromEmail = message.fromEmail || options.fromEmail || 'Nieznany nadawca';
     const fromName = message.fromName || '';
@@ -223,6 +283,7 @@ const recentBugAlerts = new Map();
 // Real-time alert: Bug Report or Parser Failure
 async function notifyBugReport(bugReport, user) {
   try {
+    if (!isNotificationEnabled('bugs')) return;
     if (!bugReport) return;
 
     const dedupeKey = `${bugReport.platform || ''}_${bugReport.url || ''}_${bugReport.source || ''}`;
@@ -272,6 +333,55 @@ async function notifyBugReport(bugReport, user) {
     await sendAdminAlert(text);
   } catch (err) {
     console.error('[TelegramBot] notifyBugReport error:', err.message);
+  }
+}
+
+// Real-time alert: Extension Uninstall Feedback
+async function notifyUninstallFeedback(item) {
+  try {
+    if (!isNotificationEnabled('uninstalls')) return;
+    if (!item) return;
+
+    const REASON_LABELS = {
+      not_working: 'Nie działało na teście/stronie',
+      too_expensive: 'Za drogo / za mało kredytów',
+      hard_to_use: 'Skomplikowane w obsłudze',
+      exams_finished: 'Koniec sesji / egzaminów',
+      inaccurate_ai: 'Błędne odpowiedzi AI',
+      alternative_found: 'Znalazłem inne narzędzie',
+      privacy_concern: 'Obawy o prywatność',
+      other: 'Inny powód'
+    };
+
+    const reasonsList = Array.isArray(item.reasons) && item.reasons.length
+      ? item.reasons.map(r => REASON_LABELS[r] || r).join(', ')
+      : 'Nie wybrano';
+
+    const feedbackText = item.feedback || item.customReason || 'Brak dodatkowego komentarza';
+    const shortFeedback = feedbackText.substring(0, 350) + (feedbackText.length > 350 ? '...' : '');
+
+    const adminUrl = process.env.NODE_ENV === 'production' ? 'https://getquizsolver.com' : 'http://localhost:3000';
+    const nowWarsaw = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' });
+
+    const platform = item.platformUsed ? `\n• 🌐 <b>Platforma:</b> <b>${escapeHtml(item.platformUsed)}</b>` : '';
+    const emailInfo = item.email ? `\n• 👤 <b>Email kontaktowy:</b> <code>${escapeHtml(item.email)}</code>` : '';
+    const langInfo = item.lang ? `\n• 🌍 <b>Język:</b> <code>${escapeHtml(String(item.lang).toUpperCase())}</code>` : '';
+
+    const text = `
+📉 <b>NOWA ANKIETA ODINSTALOWANIA!</b>
+
+• 🏷 <b>Powody:</b> ${escapeHtml(reasonsList)}${platform}${emailInfo}${langInfo}
+• ⚙️ <b>Wersja:</b> ${escapeHtml(item.extensionVersion || 'b/d')}
+• ⏰ <b>Godzina:</b> ${nowWarsaw}
+• 💬 <b>Komentarz:</b>
+<blockquote>${escapeHtml(shortFeedback)}</blockquote>
+
+🔗 <a href="${adminUrl}">Zobacz ankiety w Panelu Admina</a>
+`.trim();
+
+    await sendAdminAlert(text);
+  } catch (err) {
+    console.error('[TelegramBot] notifyUninstallFeedback error:', err.message);
   }
 }
 
@@ -422,6 +532,103 @@ ${titlePrefix} — <b>QUIZSOLVER PRO</b>
 `.trim();
 }
 
+// View for interactive settings with inline toggle buttons
+function renderSettingsView() {
+  const lines = [
+    '⚙️ <b>Ustawienia powiadomień QuizSolver</b>',
+    '',
+    'Wybierz, które alerty chcesz otrzymywać na Telegramie. Kliknij w przycisk, aby włączyć lub wyłączyć powiadomienia:',
+    ''
+  ];
+
+  for (const [key, meta] of Object.entries(SETTING_METADATA)) {
+    const isEnabled = adminSettings[key] !== false;
+    const statusIcon = isEnabled ? '🟢' : '🔴';
+    const statusText = isEnabled ? 'WŁĄCZONE' : 'WYŁĄCZONE';
+    lines.push(`• ${meta.icon} <b>${escapeHtml(meta.label)}:</b> ${statusIcon} <i>${statusText}</i>`);
+  }
+
+  lines.push('');
+  lines.push('💡 <i>Zmiany są zapisywane automatycznie i chronione wyłącznie dla @kam567122.</i>');
+
+  const keyboard = [];
+  for (const [key, meta] of Object.entries(SETTING_METADATA)) {
+    const isEnabled = adminSettings[key] !== false;
+    const btnText = `${isEnabled ? '🟢' : '🔴'} ${meta.shortLabel}`;
+    keyboard.push([{ text: btnText, callback_data: `toggle_${key}` }]);
+  }
+  keyboard.push([
+    { text: '🔄 Odśwież stan', callback_data: 'refresh_settings' }
+  ]);
+
+  return {
+    text: lines.join('\n'),
+    reply_markup: {
+      inline_keyboard: keyboard
+    }
+  };
+}
+
+// Callback Query Handler for Telegram Inline Buttons
+async function handleCallbackQuery(cq) {
+  if (!cq || !cq.from) return;
+  const cqId = cq.id;
+  const senderUsername = String(cq.from.username || '').replace(/^@/, '').toLowerCase().trim();
+  const allowedAdminUsername = String(process.env.TELEGRAM_ADMIN_USERNAME || 'kam567122').replace(/^@/, '').toLowerCase().trim();
+
+  // STRICT SECURITY GUARD: Only @kam567122 can use interactive controls!
+  if (senderUsername !== allowedAdminUsername) {
+    await callTelegram('answerCallbackQuery', {
+      callback_query_id: cqId,
+      text: '⛔ Brak uprawnień administratora.',
+      show_alert: true
+    });
+    return;
+  }
+
+  const data = String(cq.data || '');
+  if (data.startsWith('toggle_')) {
+    const key = data.replace('toggle_', '');
+    if (key in adminSettings) {
+      adminSettings[key] = !adminSettings[key];
+      persistCurrentState();
+
+      const newStatus = adminSettings[key] ? 'WŁĄCZONE 🟢' : 'WYŁĄCZONE 🔴';
+      const label = SETTING_METADATA[key]?.shortLabel || key;
+      await callTelegram('answerCallbackQuery', {
+        callback_query_id: cqId,
+        text: `${label}: ${newStatus}`
+      });
+
+      if (cq.message && cq.message.chat && cq.message.message_id) {
+        const view = renderSettingsView();
+        await callTelegram('editMessageText', {
+          chat_id: cq.message.chat.id,
+          message_id: cq.message.message_id,
+          text: view.text,
+          parse_mode: 'HTML',
+          reply_markup: view.reply_markup
+        });
+      }
+    }
+  } else if (data === 'refresh_settings') {
+    await callTelegram('answerCallbackQuery', {
+      callback_query_id: cqId,
+      text: 'Zaktualizowano statusy!'
+    });
+    if (cq.message && cq.message.chat && cq.message.message_id) {
+      const view = renderSettingsView();
+      await callTelegram('editMessageText', {
+        chat_id: cq.message.chat.id,
+        message_id: cq.message.message_id,
+        text: view.text,
+        parse_mode: 'HTML',
+        reply_markup: view.reply_markup
+      });
+    }
+  }
+}
+
 // Handler for incoming messages from Telegram users
 async function handleIncomingMessage(msg) {
   if (!msg || !msg.chat) return;
@@ -463,6 +670,18 @@ https://getquizsolver.com 🚀
 
   const cmd = text.toLowerCase().split(' ')[0].replace(/@\w+$/, '');
 
+  // Command: /settings, /ustawienia, /opcje
+  if (cmd === '/settings' || cmd === '/ustawienia' || cmd === '/opcje') {
+    const view = renderSettingsView();
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text: view.text,
+      parse_mode: 'HTML',
+      reply_markup: view.reply_markup
+    });
+    return;
+  }
+
   // Command: /raport (yesterday's report)
   if (cmd === '/raport' || cmd === '/report') {
     await sendMessage(chatId, '⏳ Generuję raport za wczorajszy dzień...');
@@ -485,8 +704,9 @@ https://getquizsolver.com 🚀
 
 • <code>/raport</code> — wyślij raport za wczoraj
 • <code>/dzis</code> — wyślij statystyki z dzisiaj
+• <code>/settings</code> — zarządzaj powiadomieniami (włącz/wyłącz)
 
-Raport dzienny przychodzi automatycznie o <b>08:00 rano</b>.
+Raport dzienny przychodzi automatycznie o <b>08:00 rano</b> (jeśli włączony w ustawieniach).
 `.trim();
     await sendMessage(chatId, helpMsg);
     return;
@@ -502,6 +722,7 @@ Codziennie o <b>08:00 rano</b> będziesz otrzymywać tutaj automatyczne podsumow
 <b>Dostępne polecenia:</b>
 • <code>/raport</code> — raport za wczoraj
 • <code>/dzis</code> — raport z dzisiaj
+• <code>/settings</code> — ustawienia powiadomień
 • <code>/pomoc</code> — lista funkcji
 `.trim();
   await sendMessage(chatId, greeting);
@@ -529,6 +750,11 @@ async function pollUpdates() {
         if (update.message) {
           handleIncomingMessage(update.message).catch(err => {
             console.error('[TelegramBot] Error handling message:', err.message);
+          });
+        }
+        if (update.callback_query) {
+          handleCallbackQuery(update.callback_query).catch(err => {
+            console.error('[TelegramBot] Error handling callback query:', err.message);
           });
         }
       }
@@ -572,9 +798,13 @@ function scheduleNext8AM() {
   scheduledTimeout = setTimeout(async () => {
     try {
       if (adminChatId) {
-        console.log('[TelegramBot] Triggering scheduled 08:00 AM daily report...');
-        const report = await generateDailyReport({ isToday: false });
-        await sendMessage(adminChatId, report);
+        if (!isNotificationEnabled('dailyReport')) {
+          console.log('[TelegramBot] Scheduled 08:00 AM daily report skipped (disabled in admin settings).');
+        } else {
+          console.log('[TelegramBot] Triggering scheduled 08:00 AM daily report...');
+          const report = await generateDailyReport({ isToday: false });
+          await sendMessage(adminChatId, report);
+        }
       } else {
         console.warn('[TelegramBot] 08:00 AM reached, but adminChatId is not set yet. Write to @getQuizSolverbot to bind.');
       }
@@ -612,7 +842,10 @@ module.exports = {
   notifyPurchase,
   notifySupportMessage,
   notifyBugReport,
+  notifyUninstallFeedback,
   generateDailyReport,
   getAdminChatId: () => adminChatId,
-  setAdminChatId: persistAdminChatId
+  setAdminChatId: persistAdminChatId,
+  getSettings: () => ({ ...adminSettings }),
+  isNotificationEnabled
 };
