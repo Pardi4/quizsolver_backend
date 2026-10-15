@@ -6,7 +6,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const connectDB = require('./config/db');
-const { generalLimiter, adminLimiter, parserSnapshotLimiter } = require('./middleware/rateLimiter');
+const { generalLimiter, adminLimiter, parserSnapshotLimiter, parserDatasetLimiter } = require('./middleware/rateLimiter');
+const { authMiddleware } = require('./middleware/auth');
 
 const authRoutes = require('./routes/auth');
 const { router: quizRoutes, publicRouter: quizPublicRoutes } = require('./routes/quiz');
@@ -581,25 +582,91 @@ function extensionAuthCallbackHtml() {
 
 app.use('/api/webhook', webhookRoutes);
 
-// Telemetry Dataset Endpoint
-app.post('/api/telemetry/parser-dataset', express.json({ limit: '50mb' }), async (req, res) => {
-  try {
-    const fs = require('fs');
-    const path = require('path');
-    const data = req.body;
-    const dirPath = path.join(__dirname, 'data');
-    const filePath = path.join(dirPath, 'parser_dataset.jsonl');
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath);
+// Telemetry Dataset Endpoint (secured with rate limiting, authentication, 2MB body limit, schema validation & async file append)
+app.post(
+  '/api/telemetry/parser-dataset',
+  parserDatasetLimiter,
+  authMiddleware,
+  express.json({ limit: '2mb' }),
+  async (req, res) => {
+    try {
+      const data = req.body;
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        return res.status(400).json({ error: 'Invalid payload format' });
+      }
+
+      // Schema validation and field bounding
+      const action = String(data.action || '').substring(0, 50);
+      const eventType = String(data.eventType || '').substring(0, 50);
+      const platform = String(data.platform || '').substring(0, 60);
+      const outcome = String(data.outcome || '').substring(0, 30);
+      const confidence = typeof data.confidence === 'number' ? Math.max(0, Math.min(1, data.confidence)) : 0;
+      const questionCount = Math.max(0, parseInt(data.questionCount, 10) || 0);
+
+      // Deep sanitizer to redact sensitive tokens/credentials and truncate oversized strings
+      const sanitizeVal = (val, depth = 0) => {
+        if (depth > 6 || val === null || val === undefined) return val;
+        if (typeof val === 'string') {
+          return val
+            .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
+            .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?![a-zA-Z-]+$)[A-Za-z0-9_-]{32,})\b/g, '[token]')
+            .substring(0, 50000);
+        }
+        if (Array.isArray(val)) {
+          return val.slice(0, 80).map(item => sanitizeVal(item, depth + 1));
+        }
+        if (typeof val === 'object') {
+          const clean = {};
+          for (const [k, v] of Object.entries(val).slice(0, 40)) {
+            clean[String(k).substring(0, 60)] = sanitizeVal(v, depth + 1);
+          }
+          return clean;
+        }
+        return val;
+      };
+
+      const sanitized = {
+        action,
+        eventType,
+        platform,
+        detectorPlatform: String(data.detectorPlatform || '').substring(0, 60),
+        outcome,
+        confidence,
+        reason: String(data.reason || '').substring(0, 100),
+        questionCount,
+        supportedQuestionCount: Math.max(0, parseInt(data.supportedQuestionCount, 10) || 0),
+        optionCount: Math.max(0, parseInt(data.optionCount, 10) || 0),
+        attemptedTypes: Array.isArray(data.attemptedTypes) ? data.attemptedTypes.slice(0, 10).map(t => String(t).substring(0, 40)) : [],
+        questionTypes: Array.isArray(data.questionTypes) ? data.questionTypes.slice(0, 10).map(t => String(t).substring(0, 40)) : [],
+        parserVersion: String(data.parserVersion || 'v2').substring(0, 20),
+        userId: req.user?._id ? req.user._id.toString() : 'authenticated',
+        timestamp: new Date().toISOString(),
+        snapshot: sanitizeVal(data.snapshot)
+      };
+
+      const dirPath = path.join(__dirname, 'data');
+      const filePath = path.join(dirPath, 'parser_dataset.jsonl');
+
+      await fs.promises.mkdir(dirPath, { recursive: true });
+
+      // Disk space safeguard: rotate if file exceeds 50MB
+      try {
+        const stats = await fs.promises.stat(filePath);
+        if (stats.size > 50 * 1024 * 1024) {
+          const oldPath = path.join(dirPath, 'parser_dataset.old.jsonl');
+          await fs.promises.rename(filePath, oldPath).catch(() => {});
+        }
+      } catch {}
+
+      // Asynchronous non-blocking write
+      await fs.promises.appendFile(filePath, JSON.stringify(sanitized) + '\n', 'utf8');
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Dataset save error:', error);
+      res.status(500).json({ error: 'Server error' });
     }
-    data.timestamp = new Date().toISOString();
-    fs.appendFileSync(filePath, JSON.stringify(data) + '\n');
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Dataset save error:', error);
-    res.status(500).json({ error: 'Server error' });
   }
-});
+);
 app.use(['/api/parser/event', '/api/credits/report-bug'], parserSnapshotLimiter, express.json({ limit: '6mb' }));
 app.use(['/api/quiz/solve', '/api/quiz/solve-batch', '/api/quiz/solve-snapshot'], express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '80kb' }));
@@ -808,6 +875,14 @@ app.listen(PORT, HOST, async () => {
   createAdminServer().listen(ADMIN_PORT, ADMIN_HOST, () => {
     console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
   });
+
+  // Telegram Bot & Daily 08:00 AM Reports
+  try {
+    const telegramService = require('./services/telegramService');
+    telegramService.init();
+  } catch (tgErr) {
+    console.error('[Server] Telegram service init error:', tgErr.message);
+  }
 
   // Background Tasks
   setInterval(async () => {

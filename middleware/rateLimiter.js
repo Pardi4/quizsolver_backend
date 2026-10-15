@@ -156,6 +156,16 @@ const parserSnapshotLimiter = rateLimit({
   validate: false
 });
 
+const parserDatasetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many diagnostic reports. Please wait a moment.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKeyGenerator,
+  validate: false
+});
+
 const promoLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -166,6 +176,6 @@ const promoLimiter = rateLimit({
   validate: false
 });
 
-module.exports = { generalLimiter, authLimiter, registerLimiter, handoffLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter, promoLimiter };
+module.exports = { generalLimiter, authLimiter, registerLimiter, handoffLimiter, quizLimiter, webhookLimiter, adminLimiter, parserSnapshotLimiter, parserDatasetLimiter, promoLimiter };
 
 

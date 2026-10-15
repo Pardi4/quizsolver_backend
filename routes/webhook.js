@@ -370,6 +370,7 @@ router.post('/dpay', async (req, res) => {
 
     await Purchase.recordPurchase(targetUser._id, packInfo.id, credits, {
       priceUsd: amountPln > 0 ? (amountPln / 4.0) : packInfo.price,
+      pricePln: amountPln > 0 ? amountPln : (packInfo.pricePln || (packInfo.price * 4.0)),
       currency: 'PLN',
       paymentProvider: 'dpay',
       externalOrderId: orderIdToRecord

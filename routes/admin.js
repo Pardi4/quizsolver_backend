@@ -202,7 +202,9 @@ router.get('/stats', async (req, res) => {
       totalUsers, adminUsers, cachedAnswers, totalPurchases,
       totalBugReports, unreadBugReports, openSupportMessages, unreadSupportMessages,
       totalQuestionsAgg, totalCreditsAgg, revenueAgg,
-      todayPurchases, monthRevenueAgg, bannedUsers, recentUsers
+      todayPurchases, monthRevenueAgg, bannedUsers, recentUsers,
+      lemonRevenueAgg, lemonMonthRevenueAgg, blikRevenueAgg, blikMonthRevenueAgg,
+      lemonPurchasesCount, blikPurchasesCount
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ role: 'admin' }),
@@ -221,13 +223,37 @@ router.get('/stats', async (req, res) => {
         { $group: { _id: null, total: { $sum: '$priceUsd' } } }
       ]),
       User.countDocuments({ isBanned: true }),
-      User.find().sort({ createdAt: -1 }).limit(10).select('email displayName role credits stats createdAt isBanned')
+      User.find().sort({ createdAt: -1 }).limit(10).select('email displayName role credits stats createdAt isBanned'),
+      // Lemon Squeezy / USD earnings ($)
+      Purchase.aggregate([
+        { $match: { paymentProvider: { $in: ['lemonsqueezy', 'lemon', 'whop'] } } },
+        { $group: { _id: null, total: { $sum: '$priceUsd' } } }
+      ]),
+      Purchase.aggregate([
+        { $match: { paymentProvider: { $in: ['lemonsqueezy', 'lemon', 'whop'] }, createdAt: { $gte: thisMonth } } },
+        { $group: { _id: null, total: { $sum: '$priceUsd' } } }
+      ]),
+      // BLIK / DPay earnings (zł PLN)
+      Purchase.aggregate([
+        { $match: { paymentProvider: 'dpay' } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$pricePln', { $multiply: ['$priceUsd', 4] }] } } } }
+      ]),
+      Purchase.aggregate([
+        { $match: { paymentProvider: 'dpay', createdAt: { $gte: thisMonth } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$pricePln', { $multiply: ['$priceUsd', 4] }] } } } }
+      ]),
+      Purchase.countDocuments({ paymentProvider: { $in: ['lemonsqueezy', 'lemon', 'whop'] } }),
+      Purchase.countDocuments({ paymentProvider: 'dpay' })
     ]);
 
     const totalQuestions = totalQuestionsAgg[0]?.total || 0;
     const totalCreditsInSystem = totalCreditsAgg[0]?.total || 0;
     const totalRevenue = revenueAgg[0]?.total || 0;
     const monthRevenue = monthRevenueAgg[0]?.total || 0;
+    const lemonRevenue = Number((lemonRevenueAgg[0]?.total || 0).toFixed(2));
+    const lemonMonthRevenue = Number((lemonMonthRevenueAgg[0]?.total || 0).toFixed(2));
+    const blikRevenue = Number((blikRevenueAgg[0]?.total || 0).toFixed(2));
+    const blikMonthRevenue = Number((blikMonthRevenueAgg[0]?.total || 0).toFixed(2));
 
     res.json({
       success: true,
@@ -235,7 +261,10 @@ router.get('/stats', async (req, res) => {
         totalUsers, adminUsers, cachedAnswers, totalPurchases,
         totalBugReports, unreadBugReports, totalQuestions, totalCreditsInSystem,
         totalRevenue, todayPurchases, monthRevenue, bannedUsers,
-        openSupportMessages, unreadSupportMessages
+        openSupportMessages, unreadSupportMessages,
+        lemonRevenue, lemonMonthRevenue,
+        blikRevenue, blikMonthRevenue,
+        lemonPurchasesCount, blikPurchasesCount
       },
       recentUsers: recentUsers.map(u => u.toPublicJSON())
     });
@@ -333,18 +362,23 @@ router.get('/users/:userId/credits', async (req, res) => {
       : [];
     const notesByHash = new Map(notes.map(n => [n.questionHash, n]));
 
-    const formattedPurchases = purchases.map(p => ({
-      id: p._id,
-      pack: p.pack,
-      credits: p.credits,
-      priceUsd: p.priceUsd,
-      provider: p.paymentProvider,
-      currency: p.currency || (p.paymentProvider === 'dpay' ? 'PLN' : 'USD'),
-      date: p.createdAt,
-      creditsApplied: p.creditsApplied !== false,
-      creditsAppliedAt: p.creditsAppliedAt || null,
-      orderId: p.orderId || p.paymentId || ''
-    }));
+    const formattedPurchases = purchases.map(p => {
+      const isBlik = p.paymentProvider === 'dpay';
+      const pricePln = p.pricePln || (isBlik ? Number(((p.priceUsd || 0) * 4).toFixed(2)) : null);
+      return {
+        id: p._id,
+        pack: p.pack,
+        credits: p.credits,
+        priceUsd: p.priceUsd,
+        pricePln,
+        provider: p.paymentProvider,
+        currency: p.currency || (isBlik ? 'PLN' : 'USD'),
+        date: p.createdAt,
+        creditsApplied: p.creditsApplied !== false,
+        creditsAppliedAt: p.creditsAppliedAt || null,
+        orderId: p.orderId || p.paymentId || ''
+      };
+    });
 
     const formattedUsages = usages.map(u => {
       const note = notesByHash.get(u.questionHash);
@@ -482,13 +516,24 @@ router.get('/purchases', async (req, res) => {
     const purchases = await Purchase.find().sort({ createdAt: -1 }).limit(200).populate('userId', 'email displayName');
     res.json({
       success: true,
-      purchases: purchases.map(p => ({
-        id: p._id, user: p.userId?.email, pack: p.pack, credits: p.credits,
-        priceUsd: p.priceUsd, provider: p.paymentProvider, date: p.createdAt,
-        reason: p.grantReason,
-        creditsApplied: p.creditsApplied !== false,
-        creditsAppliedAt: p.creditsAppliedAt || null
-      }))
+      purchases: purchases.map(p => {
+        const isBlik = p.paymentProvider === 'dpay';
+        const pricePln = p.pricePln || (isBlik ? Number(((p.priceUsd || 0) * 4).toFixed(2)) : null);
+        return {
+          id: p._id,
+          user: p.userId?.email,
+          pack: p.pack,
+          credits: p.credits,
+          priceUsd: p.priceUsd,
+          pricePln,
+          currency: p.currency || (isBlik ? 'PLN' : 'USD'),
+          provider: p.paymentProvider,
+          date: p.createdAt,
+          reason: p.grantReason,
+          creditsApplied: p.creditsApplied !== false,
+          creditsAppliedAt: p.creditsAppliedAt || null
+        };
+      })
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching purchases.' });
@@ -1737,6 +1782,24 @@ router.get('/chart-stats', async (req, res) => {
         { $group: { 
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
             revenue: { $sum: '$priceUsd' },
+            revenueLemon: {
+              $sum: {
+                $cond: [
+                  { $in: ['$paymentProvider', ['lemonsqueezy', 'lemon', 'whop']] },
+                  '$priceUsd',
+                  0
+                ]
+              }
+            },
+            revenueBlik: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$paymentProvider', 'dpay'] },
+                  { $ifNull: ['$pricePln', { $multiply: ['$priceUsd', 4] }] },
+                  0
+                ]
+              }
+            },
             credits: { $sum: '$credits' }
           }
         },
@@ -2220,6 +2283,66 @@ router.delete('/promos/:id', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Error deleting promo:', err);
     res.status(500).json({ error: 'Błąd podczas usuwania kodu.' });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   TELEGRAM BOT & DAILY REPORTS
+   ───────────────────────────────────────────────────────────────── */
+router.get('/telegram/status', (req, res) => {
+  try {
+    const telegramService = require('../services/telegramService');
+    const hasToken = Boolean(process.env.TELEGRAM_BOT_TOKEN);
+    const adminChatId = telegramService.getAdminChatId();
+    res.json({
+      success: true,
+      hasToken,
+      botUsername: 'getQuizSolverbot',
+      adminChatId: adminChatId || null,
+      isBound: Boolean(adminChatId)
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd sprawdzania statusu Telegrama.' });
+  }
+});
+
+router.post('/telegram/test-report', async (req, res) => {
+  try {
+    const telegramService = require('../services/telegramService');
+    const adminChatId = req.body?.chatId || telegramService.getAdminChatId();
+
+    if (!adminChatId) {
+      return res.status(400).json({
+        error: 'Brak powiązanego czatu admina. Napisz do bota @getQuizSolverbot na Telegramie hasło admina lub /start.'
+      });
+    }
+
+    const isToday = req.body?.isToday === true;
+    const reportHtml = await telegramService.generateDailyReport({ isToday });
+    const sent = await telegramService.sendMessage(adminChatId, reportHtml);
+
+    if (sent) {
+      auditLog(req.user, 'TELEGRAM_TEST_REPORT_SENT', { chatId: adminChatId, isToday });
+      res.json({ success: true, message: 'Raport pomyślnie wysłany na Telegram!' });
+    } else {
+      res.status(502).json({ error: 'Nie udało się wysłać wiadomości przez Telegram API.' });
+    }
+  } catch (err) {
+    console.error('[Admin] Error sending telegram report:', err);
+    res.status(500).json({ error: 'Błąd podczas generowania lub wysyłania raportu.' });
+  }
+});
+
+router.post('/telegram/set-admin', (req, res) => {
+  try {
+    const { chatId } = req.body;
+    if (!chatId) return res.status(400).json({ error: 'Podaj chatId.' });
+    const telegramService = require('../services/telegramService');
+    telegramService.setAdminChatId(chatId);
+    auditLog(req.user, 'TELEGRAM_ADMIN_CHAT_SET', { chatId });
+    res.json({ success: true, adminChatId: chatId });
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd zapisu czatu Telegram.' });
   }
 });
 

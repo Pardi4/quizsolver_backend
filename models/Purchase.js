@@ -21,6 +21,10 @@ const purchaseSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  pricePln: {
+    type: Number,
+    default: null
+  },
   currency: {
     type: String,
     default: 'USD'
@@ -163,6 +167,9 @@ purchaseSchema.statics.recordPurchase = async function(userId, pack, credits, de
     pack,
     credits: normalizedCredits,
     priceUsd: details.priceUsd || 0,
+    pricePln: details.pricePln !== undefined && details.pricePln !== null
+      ? details.pricePln
+      : (details.paymentProvider === 'dpay' ? (details.amountPln || (details.priceUsd ? Number((details.priceUsd * 4).toFixed(2)) : null)) : null),
     currency: details.currency || (details.paymentProvider === 'dpay' ? 'PLN' : 'USD'),
     paymentProvider: details.paymentProvider || 'lemonsqueezy',
     grantedBy: details.grantedBy || null,

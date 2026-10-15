@@ -282,6 +282,7 @@ router.post('/buy', async (req, res) => {
           pack: packInfo.id,
           credits: packInfo.credits,
           priceUsd: paymentResult.amount ? (parseFloat(paymentResult.amount) / 4.0) : packInfo.price,
+          pricePln: paymentResult.amount ? parseFloat(paymentResult.amount) : (packInfo.pricePln || (packInfo.price * 4.0)),
           currency: 'PLN',
           paymentProvider: 'dpay',
           externalOrderId: `dpay:${paymentResult.transactionId}`,
