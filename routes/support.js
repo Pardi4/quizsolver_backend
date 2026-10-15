@@ -176,6 +176,13 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
         existingThread.status = 'open';
         existingThread.isRead = false;
         await existingThread.save();
+
+        try {
+          const telegramService = require('../services/telegramService');
+          telegramService.notifySupportMessage(existingThread, { isReply: true, replyText: safeText, fromEmail });
+        } catch (e) {
+          // Fire-and-forget notification
+        }
       }
       return res.status(200).json({ success: true, id: existingThread._id, threaded: true, duplicate });
     }
@@ -190,6 +197,14 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
       providerMessageId,
       source: normalizeSource(req.body.source)
     });
+
+    try {
+      const telegramService = require('../services/telegramService');
+      telegramService.notifySupportMessage(message, { isReply: false });
+    } catch (e) {
+      // Fire-and-forget notification
+    }
+
     res.status(201).json({ success: true, id: message._id, threaded: false });
   } catch (error) {
     console.error('[Support] inbound error:', error.message);
@@ -215,6 +230,14 @@ router.post('/contact', async (req, res) => {
       html: `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`,
       source: 'contact-form'
     });
+
+    try {
+      const telegramService = require('../services/telegramService');
+      telegramService.notifySupportMessage(message, { isContactForm: true });
+    } catch (e) {
+      // Fire-and-forget notification
+    }
+
     res.status(201).json({ success: true, id: message._id });
   } catch {
     res.status(500).json({ error: 'Could not send support request.' });

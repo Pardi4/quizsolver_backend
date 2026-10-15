@@ -136,7 +136,7 @@ async function createParserBugReportIfNeeded(req, event) {
 
   if (existing) return false;
 
-  await BugReport.create({
+  const bug = await BugReport.create({
     userId: event.userId,
     url: event.url,
     extensionVersion: event.extensionVersion || '',
@@ -156,6 +156,13 @@ async function createParserBugReportIfNeeded(req, event) {
     userAgent: (req.headers['user-agent'] || '').substring(0, 300),
     isRead: false
   });
+
+  try {
+    const telegramService = require('../services/telegramService');
+    telegramService.notifyBugReport(bug, req.user);
+  } catch (e) {
+    // Fire-and-forget notification
+  }
 
   return true;
 }

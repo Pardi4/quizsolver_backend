@@ -2309,11 +2309,11 @@ router.get('/telegram/status', (req, res) => {
 router.post('/telegram/test-report', async (req, res) => {
   try {
     const telegramService = require('../services/telegramService');
-    const adminChatId = req.body?.chatId || telegramService.getAdminChatId();
+    const adminChatId = telegramService.getAdminChatId();
 
     if (!adminChatId) {
       return res.status(400).json({
-        error: 'Brak powiązanego czatu admina. Napisz do bota @getQuizSolverbot na Telegramie hasło admina lub /start.'
+        error: 'Brak powiązanego czatu admina. Napisz ze swojego konta @kam567122 do bota @getQuizSolverbot na Telegramie.'
       });
     }
 

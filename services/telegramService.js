@@ -127,6 +127,154 @@ async function sendMessage(chatId, text, options = {}) {
   return res && res.ok === true;
 }
 
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+async function sendAdminAlert(htmlText) {
+  if (!adminChatId) {
+    loadPersistedState();
+  }
+  if (!adminChatId) return false;
+  return sendMessage(adminChatId, htmlText);
+}
+
+// Real-time alert: New Credit Purchase
+async function notifyPurchase(purchase, buyer) {
+  try {
+    if (!purchase || purchase.pack === 'referral_bonus' || purchase.paymentProvider === 'referral' || purchase.paymentProvider === 'admin') return;
+
+    let buyerEmail = buyer?.email || '';
+    if (!buyerEmail && purchase.userId) {
+      try {
+        const u = await User.findById(purchase.userId).select('email');
+        if (u) buyerEmail = u.email;
+      } catch {}
+    }
+
+    const provider = String(purchase.paymentProvider || '').toLowerCase();
+    const isPln = provider === 'dpay' || purchase.currency === 'PLN';
+    const amountStr = isPln
+      ? `${Number(purchase.pricePln || 0).toFixed(2)} zł (BLIK / DPay)`
+      : `$${Number(purchase.priceUsd || 0).toFixed(2)} (Lemon Squeezy)`;
+
+    const packName = purchase.pack ? String(purchase.pack).toUpperCase() : 'PAKIET';
+    const credits = purchase.credits || 0;
+    const discountInfo = purchase.discountCode ? `\n• 🏷 <b>Kod rabatowy:</b> <code>${escapeHtml(purchase.discountCode)}</code>` : '';
+    const nowWarsaw = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' });
+
+    const text = `
+💰 <b>NOWY ZAKUP KREDYTÓW!</b>
+
+• 👤 <b>Klient:</b> <code>${escapeHtml(buyerEmail || 'Nieznany')}</code>
+• 📦 <b>Pakiet:</b> <b>${escapeHtml(packName)}</b> (<b>+${credits.toLocaleString('pl-PL')}</b> kredytów)
+• 💵 <b>Kwota:</b> <b>${amountStr}</b>${discountInfo}
+• 🧾 <b>ID zamówienia:</b> <code>${escapeHtml(String(purchase.externalOrderId || purchase._id))}</code>
+• ⏰ <b>Godzina:</b> ${nowWarsaw}
+`.trim();
+
+    await sendAdminAlert(text);
+  } catch (err) {
+    console.error('[TelegramBot] notifyPurchase error:', err.message);
+  }
+}
+
+// Real-time alert: New Support Message / Email
+async function notifySupportMessage(message, options = {}) {
+  try {
+    if (!message) return;
+    const fromEmail = message.fromEmail || options.fromEmail || 'Nieznany nadawca';
+    const fromName = message.fromName || '';
+    const subject = message.subject || '(Brak tematu)';
+    const body = options.replyText || message.text || '(Brak treści)';
+    const shortBody = body.substring(0, 350) + (body.length > 350 ? '...' : '');
+
+    const senderDisplay = fromName ? `${escapeHtml(fromName)} &lt;${escapeHtml(fromEmail)}&gt;` : `<code>${escapeHtml(fromEmail)}</code>`;
+    const typeLabel = options.isReply ? 'Odpowiedź w wątku' : (options.isContactForm ? 'Formularz kontaktowy' : 'Nowa wiadomość e-mail');
+
+    const adminUrl = process.env.NODE_ENV === 'production' ? 'https://getquizsolver.com' : 'http://localhost:3000';
+    const nowWarsaw = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' });
+
+    const text = `
+📬 <b>NOWA WIADOMOŚĆ NA SUPPORCIE!</b>
+
+• 👤 <b>Od:</b> ${senderDisplay}
+• 📌 <b>Temat:</b> <b>${escapeHtml(subject)}</b>
+• 🏷 <b>Typ:</b> ${typeLabel}
+• ⏰ <b>Godzina:</b> ${nowWarsaw}
+• 💬 <b>Treść:</b>
+<blockquote>${escapeHtml(shortBody)}</blockquote>
+
+🔗 <a href="${adminUrl}">Przejdź do Panelu Admina</a>
+`.trim();
+
+    await sendAdminAlert(text);
+  } catch (err) {
+    console.error('[TelegramBot] notifySupportMessage error:', err.message);
+  }
+}
+
+// Deduplication map for bug reports to prevent flood (10 min cooldown per platform+url)
+const recentBugAlerts = new Map();
+
+// Real-time alert: Bug Report or Parser Failure
+async function notifyBugReport(bugReport, user) {
+  try {
+    if (!bugReport) return;
+
+    const dedupeKey = `${bugReport.platform || ''}_${bugReport.url || ''}_${bugReport.source || ''}`;
+    const now = Date.now();
+    if (recentBugAlerts.has(dedupeKey) && now - recentBugAlerts.get(dedupeKey) < 10 * 60 * 1000) {
+      return;
+    }
+    recentBugAlerts.set(dedupeKey, now);
+
+    if (recentBugAlerts.size > 200) {
+      for (const [k, ts] of recentBugAlerts.entries()) {
+        if (now - ts > 10 * 60 * 1000) recentBugAlerts.delete(k);
+      }
+    }
+
+    let userEmail = user?.email || '';
+    if (!userEmail && bugReport.userId) {
+      try {
+        const u = await User.findById(bugReport.userId).select('email');
+        if (u) userEmail = u.email;
+      } catch {}
+    }
+
+    const platform = bugReport.platform || 'universal';
+    const sourceLabel = bugReport.source === 'manual' ? 'Zgłoszenie ręczne (użytkownik)' : 'Automatyczny błąd parsera';
+    const description = bugReport.description || bugReport.parserDiagnostics?.reason || 'Brak opisu';
+    const shortDesc = description.substring(0, 300) + (description.length > 300 ? '...' : '');
+
+    const cleanUrl = bugReport.url ? (bugReport.url.length > 80 ? bugReport.url.slice(0, 77) + '...' : bugReport.url) : 'Brak URL';
+    const adminUrl = process.env.NODE_ENV === 'production' ? 'https://getquizsolver.com' : 'http://localhost:3000';
+    const nowWarsaw = new Date().toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' });
+
+    const text = `
+🐛 <b>NOWE ZGŁOSZENIE BŁĘDU!</b>
+
+• 👤 <b>Użytkownik:</b> <code>${escapeHtml(userEmail || 'Anonim')}</code>
+• 🌐 <b>Platforma:</b> <b>${escapeHtml(platform)}</b>
+• 🔗 <b>Strona:</b> <code>${escapeHtml(cleanUrl)}</code>
+• 🏷 <b>Typ:</b> ${sourceLabel}
+• ⏰ <b>Godzina:</b> ${nowWarsaw}
+• 📝 <b>Opis:</b>
+<blockquote>${escapeHtml(shortDesc)}</blockquote>
+
+🔗 <a href="${adminUrl}">Przejdź do Panelu Admina</a>
+`.trim();
+
+    await sendAdminAlert(text);
+  } catch (err) {
+    console.error('[TelegramBot] notifyBugReport error:', err.message);
+  }
+}
+
 // Data Aggregation & Report Generation
 async function generateDailyReport(options = {}) {
   const isToday = options.isToday === true;
@@ -277,13 +425,18 @@ ${titlePrefix} — <b>QUIZSOLVER PRO</b>
 // Handler for incoming messages from Telegram users
 async function handleIncomingMessage(msg) {
   if (!msg || !msg.chat) return;
+
+  // STRICT SECURITY GUARD 1: Only direct private 1-on-1 chats (ignore any groups/channels)
+  if (msg.chat.type && msg.chat.type !== 'private') return;
+
   const chatId = String(msg.chat.id);
   const text = String(msg.text || '').trim();
   const senderName = msg.from?.first_name || msg.from?.username || 'Użytkownik';
   const senderUsername = String(msg.from?.username || '').replace(/^@/, '').toLowerCase().trim();
   const allowedAdminUsername = String(process.env.TELEGRAM_ADMIN_USERNAME || 'kam567122').replace(/^@/, '').toLowerCase().trim();
 
-  // STRICT IDENTITY CHECK: Only @kam567122 can use admin features
+  // STRICT SECURITY GUARD 2: Only @kam567122 can be admin.
+  // Anyone else, regardless of message content, receives only the public website invite:
   const isOwnerUser = Boolean(senderUsername && senderUsername === allowedAdminUsername);
 
   // 1. For EVERYONE ELSE:
@@ -455,6 +608,10 @@ module.exports = {
   startPolling,
   stopPolling,
   sendMessage,
+  sendAdminAlert,
+  notifyPurchase,
+  notifySupportMessage,
+  notifyBugReport,
   generateDailyReport,
   getAdminChatId: () => adminChatId,
   setAdminChatId: persistAdminChatId

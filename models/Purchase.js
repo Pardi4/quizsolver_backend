@@ -111,6 +111,13 @@ purchaseSchema.statics.applyCredits = async function(purchaseOrId) {
     purchase.creditsApplied = true;
     purchase.creditsAppliedAt = purchase.creditsAppliedAt || new Date();
     await purchase.save();
+
+    try {
+      const telegramService = require('../services/telegramService');
+      telegramService.notifyPurchase(purchase, updatedUser);
+    } catch (e) {
+      // Fire-and-forget notification
+    }
   }
 
   return purchase;
