@@ -280,102 +280,86 @@ async function handleIncomingMessage(msg) {
   const chatId = String(msg.chat.id);
   const text = String(msg.text || '').trim();
   const senderName = msg.from?.first_name || msg.from?.username || 'Użytkownik';
-  const adminPassword = String(process.env.ADMIN_PASSWORD || 'Admin123!').trim();
+  const senderUsername = String(msg.from?.username || '').replace(/^@/, '').toLowerCase().trim();
+  const allowedAdminUsername = String(process.env.TELEGRAM_ADMIN_USERNAME || 'kam567122').replace(/^@/, '').toLowerCase().trim();
 
-  const isCurrentAdmin = adminChatId && chatId === adminChatId;
-  const claimsAdmin = text === adminPassword
-    || text === `/start ${adminPassword}`
-    || text.startsWith('/admin')
-    || text.startsWith('/login');
+  // STRICT IDENTITY CHECK: Only @kam567122 can use admin features
+  const isOwnerUser = Boolean(senderUsername && senderUsername === allowedAdminUsername);
 
-  // Case 1: First-time setup - admin has not bound their chat yet
-  if (!adminChatId && text === '/start') {
-    const promptMsg = `
+  // 1. For EVERYONE ELSE:
+  // No admin access, no password prompts - only friendly greeting with link to website
+  if (!isOwnerUser) {
+    const publicReply = `
 Cześć, ${senderName}! 👋 Jestem oficjalnym botem <b>QuizSolver</b>.
-
-👑 <b>Jesteś administratorem?</b>
-Wyślij mi hasło administratora (<code>${adminPassword}</code> lub <code>/admin ${adminPassword}</code>), aby powiązać ten czat z codziennymi raportami o <b>08:00 rano</b>.
-
-🚀 <b>Szukasz rozszerzenia do testów i quizów?</b>
-Odwiedź naszą stronę: https://getquizsolver.com
-`.trim();
-    await sendMessage(chatId, promptMsg);
-    return;
-  }
-
-  // Case 2: Message claims or confirms admin privileges with password
-  if (claimsAdmin) {
-    const passwordAttempt = text.replace(/^\/(?:start|admin|login)\s*/i, '').trim();
-    if (passwordAttempt === adminPassword || text === adminPassword || !adminChatId) {
-      persistAdminChatId(chatId);
-      const greeting = `
-👑 <b>Witaj, ${senderName}!</b>
-Twój czat został pomyślnie powiązany jako <b>Główny Administrator QuizSolver</b>.
-
-Od teraz codziennie o <b>08:00 rano</b> będziesz otrzymywać tutaj automatyczne podsumowanie dnia.
-
-<b>Dostępne komendy:</b>
-• <code>/raport</code> — natychmiastowy raport za dzień wczorajszy
-• <code>/dzis</code> — raport z dzisiejszego dnia do tej chwili
-• <code>/pomoc</code> — lista dostępnych funkcji
-`.trim();
-      await sendMessage(chatId, greeting);
-      // Immediately send test report for verification
-      const report = await generateDailyReport({ isToday: false });
-      await sendMessage(chatId, report);
-      return;
-    }
-  }
-
-  // Case 2: Verified Admin executing commands
-  if (isCurrentAdmin) {
-    const cmd = text.toLowerCase().split(' ')[0];
-    if (cmd === '/raport' || cmd === '/report') {
-      await sendMessage(chatId, '⏳ Generuję raport za wczorajszy dzień...');
-      const report = await generateDailyReport({ isToday: false });
-      await sendMessage(chatId, report);
-      return;
-    }
-
-    if (cmd === '/dzis' || cmd === '/today') {
-      await sendMessage(chatId, '⏳ Generuję statystyki z dzisiejszego dnia...');
-      const report = await generateDailyReport({ isToday: true });
-      await sendMessage(chatId, report);
-      return;
-    }
-
-    if (cmd === '/pomoc' || cmd === '/help' || cmd === '/start') {
-      const helpMsg = `
-👋 <b>Panel Bota QuizSolver (Admin)</b>
-
-Wybierz polecenie:
-• <code>/raport</code> — generuje i wysyła pełne podsumowanie dnia wczorajszego
-• <code>/dzis</code> — bieżące podsumowanie dnia dzisiejszego
-• <code>/pomoc</code> — wyświetla tę pomoc
-
-Codzienny raport przychodzi automatycznie o <b>08:00 rano</b>.
-`.trim();
-      await sendMessage(chatId, helpMsg);
-      return;
-    }
-
-    // Default response for admin chatting
-    await sendMessage(chatId, 'Cześć Adminie! Wpisz <code>/raport</code> lub <code>/dzis</code>, aby wyświetlić statystyki.');
-    return;
-  }
-
-  // Case 3: ANY OTHER USER WRITING TO THE BOT
-  // As requested: "tylko jak ktos inny napisze do bota to zeby mu link do strony dawal"
-  const publicReply = `
-Cześć, ${senderName}! 👋 Jestem oficjalnym asystentem <b>QuizSolver</b>.
 
 Szukasz automatycznego rozwiązywania quizów i testów online w czasie rzeczywistym z pomocą AI (Testportal, Kahoot, Google Forms, Moodle, Canvas i wiele innych)?
 
-👉 <b>Zainstaluj oficjalne rozszerzenie do przeglądarki:</b>
+👉 <b>Zainstaluj rozszerzenie na naszej stronie:</b>
 https://getquizsolver.com 🚀
 `.trim();
 
-  await sendMessage(chatId, publicReply);
+    await sendMessage(chatId, publicReply);
+    return;
+  }
+
+  // 2. FOR OWNER (@kam567122):
+  // Ensure chatId is persisted for daily 08:00 AM reports
+  if (!adminChatId || adminChatId !== chatId) {
+    persistAdminChatId(chatId);
+  }
+
+  const cmd = text.toLowerCase().split(' ')[0].replace(/@\w+$/, '');
+
+  // Command: /raport (yesterday's report)
+  if (cmd === '/raport' || cmd === '/report') {
+    await sendMessage(chatId, '⏳ Generuję raport za wczorajszy dzień...');
+    const report = await generateDailyReport({ isToday: false });
+    await sendMessage(chatId, report);
+    return;
+  }
+
+  // Command: /dzis (today's live stats)
+  if (cmd === '/dzis' || cmd === '/today') {
+    await sendMessage(chatId, '⏳ Generuję statystyki z dzisiejszego dnia...');
+    const report = await generateDailyReport({ isToday: true });
+    await sendMessage(chatId, report);
+    return;
+  }
+
+  if (cmd === '/pomoc' || cmd === '/help') {
+    const helpMsg = `
+👋 <b>Panel Administratora QuizSolver</b>
+
+• <code>/raport</code> — wyślij raport za wczoraj
+• <code>/dzis</code> — wyślij statystyki z dzisiaj
+
+Raport dzienny przychodzi automatycznie o <b>08:00 rano</b>.
+`.trim();
+    await sendMessage(chatId, helpMsg);
+    return;
+  }
+
+  // Initial greeting / /start / any other message from @kam567122
+  const greeting = `
+👑 <b>Cześć, @${msg.from.username}!</b>
+Twój czat został powiązany jako <b>Główny Administrator QuizSolver</b>.
+
+Codziennie o <b>08:00 rano</b> będziesz otrzymywać tutaj automatyczne podsumowanie dnia.
+
+<b>Dostępne polecenia:</b>
+• <code>/raport</code> — raport za wczoraj
+• <code>/dzis</code> — raport z dzisiaj
+• <code>/pomoc</code> — lista funkcji
+`.trim();
+  await sendMessage(chatId, greeting);
+
+  // Send initial report immediately so admin can verify
+  try {
+    const report = await generateDailyReport({ isToday: false });
+    await sendMessage(chatId, report);
+  } catch (e) {
+    console.error('[TelegramBot] Error sending report to admin:', e.message);
+  }
 }
 
 // Polling loop for receiving updates from Telegram

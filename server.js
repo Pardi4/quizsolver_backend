@@ -823,6 +823,13 @@ async function seedAdmin() {
       });
       await admin.save();
       console.log(`[Server] Admin created: ${adminEmail}`);
+    } else {
+      const matches = await existing.comparePassword(adminPassword);
+      if (!matches) {
+        existing.passwordHash = adminPassword;
+        await existing.save();
+        console.log(`[Server] Admin password updated for: ${adminEmail}`);
+      }
     }
   } catch (error) {
     if (error.code !== 11000) console.error('[Server] Admin seed error:', error.message);
