@@ -16,7 +16,7 @@ const cachedAnswerSchema = new mongoose.Schema({
   },
   questionType: {
     type: String,
-    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix'],
+    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'],
     required: true
   },
   options: [String],

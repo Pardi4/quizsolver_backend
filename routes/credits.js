@@ -545,10 +545,15 @@ router.post('/report-bug', async (req, res) => {
         .trim();
     }
 
+    const extVersion = cleanToken(
+      req.body.extensionVersion || req.body.version || req.headers['x-extension-version'] || req.user?.extensionVersion || '',
+      40
+    );
+
     const bug = await BugReport.create({
       userId: req.user._id,
       url: url.substring(0, 500),
-      extensionVersion: req.user.extensionVersion || req.body.version || '',
+      extensionVersion: extVersion,
       description: description || '',
       platform,
       source: 'manual',
@@ -579,6 +584,7 @@ router.post('/report-bug', async (req, res) => {
       optionCount: parserDiagnostics.optionCount || 0,
       attemptedTypes: parserDiagnostics.attemptedTypes || [],
       parserVersion: 'v2',
+      extensionVersion: extVersion,
       snapshot: parserSnapshot
     }).catch(error => console.warn('[ParserEvent] Could not record bug report event:', error.message));
 

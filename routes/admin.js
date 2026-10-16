@@ -1,3 +1,4 @@
+const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
@@ -11,7 +12,7 @@ const CreditUsage = require('../models/CreditUsage');
 const ParserEvent = require('../models/ParserEvent');
 const UninstallFeedback = require('../models/UninstallFeedback');
 const { sendEmail, supportReplyTemplate, SUPPORT_EMAIL, escapeHtml } = require('../services/emailService');
-const { sendParserSnapshotFile } = require('../utils/parserSnapshotFiles');
+const { sendParserSnapshotFile, snapshotFilePath } = require('../utils/parserSnapshotFiles');
 
 const router = express.Router();
 
@@ -1908,59 +1909,261 @@ function buildZip(files) {
   return Buffer.concat([...buffers, cdBuf, eocd]);
 }
 
-// List of extension versions seen in parser events / bug reports (newest first)
+// List of extension versions seen in parser events / bug reports / solved questions (newest first)
 router.get('/parser/versions', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const [a, b] = await Promise.all([
+    const [a, b, c, d] = await Promise.all([
       ParserEvent.distinct('extensionVersion'),
       BugReport.distinct('extensionVersion'),
+      StudyNote.distinct('extensionVersion'),
+      StudyNote.distinct('extensionVersions'),
     ]);
     const cmp = (x, y) => y.localeCompare(x, undefined, { numeric: true });
-    const versions = [...new Set([...a, ...b].filter(v => typeof v === 'string' && v.trim()))].sort(cmp);
+    const versions = [...new Set([...a, ...b, ...c, ...d].filter(v => typeof v === 'string' && v.trim()))].sort(cmp);
     res.json({ success: true, versions });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching versions' });
   }
 });
 
+function formatReportAnswerText(type, options, answer, prompts = [], rows = []) {
+  if (answer === undefined || answer === null || answer === '') return '';
+  if (type === 'radio' && Array.isArray(options)) {
+    const idx = Number(answer);
+    return Number.isInteger(idx) && options[idx] !== undefined ? options[idx] : String(answer);
+  }
+  if (type === 'checkbox' && Array.isArray(options) && Array.isArray(answer)) {
+    return answer.map(i => options[Number(i)] || String(i)).join(', ');
+  }
+  if (type === 'ordering' && Array.isArray(options) && Array.isArray(answer)) {
+    return answer.map((idx, i) => `${i + 1}. ${options[Number(idx)] || String(idx)}`).join(' -> ');
+  }
+  if ((type === 'matching' || type === 'matrix') && Array.isArray(options) && Array.isArray(answer)) {
+    const labels = type === 'matching' ? (prompts || []) : (rows || []);
+    return answer.map((idx, i) => {
+      const label = labels[i] ? `${labels[i]} -> ` : '';
+      return `${label}${options[Number(idx)] || String(idx)}`;
+    }).join('; ');
+  }
+  if (Array.isArray(answer) && Array.isArray(options) && options.length > 0) {
+    return answer.map(i => options[Number(i)] || String(i)).join(', ');
+  }
+  return typeof answer === 'object' ? JSON.stringify(answer) : String(answer);
+}
+
+function extractHostnameSafe(rawUrl = '') {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    return new URL(rawUrl).hostname || '';
+  } catch {
+    return '';
+  }
+}
+
 router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) => {
   try {
     const days        = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
     const includeHtml = req.query.includeHtml !== 'false';
-    const version = req.query.version || null;
-    const since = new Date(Date.now() - days * 86400_000);
+    const version     = req.query.version ? String(req.query.version).trim() : null;
+    const since       = new Date(Date.now() - days * 86400_000);
     const matchFilter = { createdAt: { $gte: since } };
     if (version) matchFilter.extensionVersion = version;
 
-    const [events, bugReports, recentAnswers] = await Promise.all([
+    const noteFilter = version
+      ? {
+          $and: [
+            { $or: [{ lastSeenAt: { $gte: since } }, { createdAt: { $gte: since } }] },
+            { $or: [{ extensionVersion: version }, { extensionVersions: version }] }
+          ]
+        }
+      : {
+          $or: [{ lastSeenAt: { $gte: since } }, { createdAt: { $gte: since } }]
+        };
+
+    const [events, bugReports, recentAnswers, questionNotes] = await Promise.all([
       ParserEvent.find(matchFilter)
         .populate('userId', 'email')
         .sort({ createdAt: -1 })
-        .limit(3000) // Reduced from 5000 to prevent OOM
+        .limit(5000)
         .select(includeHtml ? '' : '-snapshot.htmlSnippet -snapshot.bodyText')
         .lean(),
       BugReport.find(matchFilter)
         .populate('userId', 'email')
         .sort({ createdAt: -1 })
-        .limit(500)
+        .limit(1000)
         .lean(),
       version ? Promise.resolve([]) : CachedAnswer.find({ createdAt: { $gte: since } })
         .sort({ hitCount: -1 })
-        .limit(200)
-        .select('questionText questionType options answer explanation platform hitCount createdAt')
+        .limit(500)
+        .select('questionText questionType options prompts rows answer explanation platform hitCount createdAt')
+        .lean(),
+      StudyNote.find(noteFilter)
+        .populate('user', 'email')
+        .sort({ lastSeenAt: -1, createdAt: -1 })
+        .limit(10000)
+        .select(includeHtml
+          ? '-questionImageBase64 -personalNote -userNote'
+          : '-questionImageBase64 -personalNote -userNote -containerHtml -pageHtmlSnippet')
         .lean(),
     ]);
 
-    // Questions saved by users (tagged with extension version); images excluded to keep ZIP small
-    const questionNotes = await StudyNote.find(matchFilter)
-      .populate('user', 'email')
-      .sort({ createdAt: -1 })
-      .limit(2000)
-      .select('-questionImageBase64 -personalNote -userNote')
-      .lean();
-
-    const failedEvents  = events.filter(e => ['error','empty','weak'].includes(e.outcome));
+    const failedEvents  = events.filter(e => ['error', 'empty', 'weak', 'partial', 'reported'].includes(e.outcome));
     const successEvents = events.filter(e => e.outcome === 'success');
+
+    // ── Build unified questions list (StudyNote + ParserEvent questionsData) ──
+    const allQuestions = [];
+    const questionIndexByKey = new Map();
+    const eventPageLookup = new Map();
+
+    for (const e of events) {
+      const userEmail = e.userId?.email || 'unknown';
+      const urlKey = `${userEmail}|${(e.url || '').trim()}`;
+      if (!eventPageLookup.has(urlKey) && (e.snapshot?.htmlSnippet || e.snapshot?.fullHtmlFile?.id)) {
+        eventPageLookup.set(urlKey, {
+          htmlSnippet: e.snapshot?.htmlSnippet || '',
+          fullHtmlFileId: e.snapshot?.fullHtmlFile?.id || '',
+          detectorPlatform: e.detectorPlatform || ''
+        });
+      }
+    }
+
+    for (const n of questionNotes) {
+      const userEmail = n.user?.email || 'unknown';
+      const sourceUrl = n.sourceUrl || '';
+      const hostname = n.hostname || extractHostnameSafe(sourceUrl);
+      const pageFallback = eventPageLookup.get(`${userEmail}|${sourceUrl.trim()}`) || {};
+      const fullHtmlFileId = n.fullHtmlFile?.id || pageFallback.fullHtmlFileId || '';
+      const options = Array.isArray(n.options) ? n.options : [];
+      const prompts = Array.isArray(n.prompts) ? n.prompts : [];
+      const rows = Array.isArray(n.rows) ? n.rows : [];
+      const answerText = n.answerText || formatReportAnswerText(n.questionType, options, n.answer, prompts, rows);
+      const extVersions = Array.isArray(n.extensionVersions) && n.extensionVersions.length
+        ? n.extensionVersions
+        : (n.extensionVersion ? [n.extensionVersion] : []);
+
+      const record = {
+        source: 'solved_question',
+        id: String(n._id),
+        extensionVersion: version || n.extensionVersion || extVersions[0] || '',
+        extensionVersions: extVersions,
+        userEmail,
+        questionType: n.questionType || 'radio',
+        questionText: n.questionText || '',
+        detectedOptions: options,
+        options,
+        prompts,
+        rows,
+        aiAnswer: n.answer,
+        answer: n.answer,
+        aiAnswerText: answerText,
+        answerText,
+        explanation: n.explanation || '',
+        url: sourceUrl,
+        sourceUrl,
+        hostname,
+        platform: n.platform || 'universal',
+        detectorPlatform: pageFallback.detectorPlatform || n.platform || 'universal',
+        ...(includeHtml ? {
+          containerHtml: n.containerHtml || '',
+          pageHtmlSnippet: n.pageHtmlSnippet || pageFallback.htmlSnippet || '',
+        } : {}),
+        fullHtmlFileId,
+        htmlSnapshotZipPath: fullHtmlFileId ? `html_snapshots/${fullHtmlFileId}.txt` : '',
+        seenCount: n.seenCount || 1,
+        createdAt: n.createdAt,
+        lastSeenAt: n.lastSeenAt || n.createdAt
+      };
+
+      allQuestions.push(record);
+      const normKey = `${userEmail}|${sourceUrl.trim()}|${(n.questionText || '').trim().toLowerCase()}`;
+      if (!questionIndexByKey.has(normKey)) {
+        questionIndexByKey.set(normKey, record);
+      }
+    }
+
+    for (const e of events) {
+      const userEmail = e.userId?.email || 'unknown';
+      const sourceUrl = e.url || '';
+      const hostname = e.hostname || extractHostnameSafe(sourceUrl);
+      const fullHtmlFileId = e.snapshot?.fullHtmlFile?.id || '';
+      const qList = Array.isArray(e.snapshot?.questionsData) ? e.snapshot.questionsData : [];
+
+      for (let idx = 0; idx < qList.length; idx++) {
+        const q = qList[idx];
+        if (!q || (!q.text && (!Array.isArray(q.options) || !q.options.length))) continue;
+        const normKey = `${userEmail}|${sourceUrl.trim()}|${String(q.text || '').trim().toLowerCase()}`;
+        const existing = questionIndexByKey.get(normKey);
+
+        if (existing) {
+          if (includeHtml && !existing.containerHtml && q.containerHtml) {
+            existing.containerHtml = q.containerHtml;
+          }
+          if (includeHtml && !existing.pageHtmlSnippet && e.snapshot?.htmlSnippet) {
+            existing.pageHtmlSnippet = e.snapshot.htmlSnippet;
+          }
+          if (!existing.fullHtmlFileId && fullHtmlFileId) {
+            existing.fullHtmlFileId = fullHtmlFileId;
+            existing.htmlSnapshotZipPath = `html_snapshots/${fullHtmlFileId}.txt`;
+          }
+          if (existing.aiAnswer === undefined || existing.aiAnswer === null || existing.aiAnswer === '') {
+            if (q.aiAnswer !== undefined && q.aiAnswer !== null && q.aiAnswer !== '') {
+              existing.aiAnswer = q.aiAnswer;
+              existing.answer = q.aiAnswer;
+              const resolvedText = formatReportAnswerText(q.type || existing.questionType, existing.options, q.aiAnswer, existing.prompts, existing.rows);
+              existing.aiAnswerText = resolvedText;
+              existing.answerText = resolvedText;
+            }
+          }
+          continue;
+        }
+
+        const options = Array.isArray(q.options) ? q.options : [];
+        const prompts = Array.isArray(q.prompts) ? q.prompts : [];
+        const rows = Array.isArray(q.rows) ? q.rows : [];
+        const hasAiAnswer = q.aiAnswer !== undefined && q.aiAnswer !== null && q.aiAnswer !== '';
+        const answerText = hasAiAnswer
+          ? formatReportAnswerText(q.type || 'radio', options, q.aiAnswer, prompts, rows)
+          : '';
+
+        const record = {
+          source: 'parser_event',
+          id: `${e._id}_q${idx}`,
+          eventId: String(e._id),
+          eventOutcome: e.outcome,
+          extensionVersion: e.extensionVersion || version || '',
+          extensionVersions: e.extensionVersion ? [e.extensionVersion] : (version ? [version] : []),
+          userEmail,
+          questionType: q.type || 'radio',
+          questionText: q.text || '',
+          detectedOptions: options,
+          options,
+          prompts,
+          rows,
+          aiAnswer: hasAiAnswer ? q.aiAnswer : null,
+          answer: hasAiAnswer ? q.aiAnswer : null,
+          aiAnswerText: answerText,
+          answerText,
+          explanation: '',
+          url: sourceUrl,
+          sourceUrl,
+          hostname,
+          platform: e.platform || 'universal',
+          detectorPlatform: e.detectorPlatform || e.platform || 'universal',
+          ...(includeHtml ? {
+            containerHtml: q.containerHtml || '',
+            pageHtmlSnippet: e.snapshot?.htmlSnippet || '',
+          } : {}),
+          fullHtmlFileId,
+          htmlSnapshotZipPath: fullHtmlFileId ? `html_snapshots/${fullHtmlFileId}.txt` : '',
+          seenCount: 1,
+          createdAt: e.createdAt,
+          lastSeenAt: e.createdAt
+        };
+
+        allQuestions.push(record);
+        questionIndexByKey.set(normKey, record);
+      }
+    }
 
     // ── Aggregations ──────────────────────────────────────────
     const byOutcome  = {};
@@ -2039,36 +2242,108 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
     const dailyBreakdown = Object.values(dayMap).sort((a,b) => a.date.localeCompare(b.date));
 
     // ── Serializers ────────────────────────────────────────────
-    const serEvent = (e, withSnap) => ({
-      id: e._id, outcome: e.outcome, platform: e.platform, detectorPlatform: e.detectorPlatform,
-      url: e.url, hostname: e.hostname, confidence: e.confidence, reason: e.reason,
-      questionCount: e.questionCount, supportedQuestionCount: e.supportedQuestionCount,
-      questionTypes: e.questionTypes, attemptedTypes: e.attemptedTypes,
-      parserVersion: e.parserVersion, extensionVersion: e.extensionVersion,
-      userEmail: e.userId?.email || 'unknown', createdAt: e.createdAt,
-      ...(withSnap && includeHtml ? {
-        snapshot_title:          e.snapshot?.title,
-        snapshot_bodyText:       (e.snapshot?.bodyText    || '').slice(0, 2000),
-        snapshot_htmlSnippet:    (e.snapshot?.htmlSnippet || '').slice(0, 4000),
-        snapshot_questionTexts:  e.snapshot?.questionTexts || [],
-        snapshot_optionsSample:  e.snapshot?.optionsSample || [],
-        snapshot_selectorSummary: e.snapshot?.selectorSummary || {},
-        snapshot_questionsData:  (e.snapshot?.questionsData || []).slice(0, 10),
-      } : {}),
-    });
+    const serEvent = (e, withSnap = true) => {
+      const fullHtmlFileId = e.snapshot?.fullHtmlFile?.id || '';
+      return {
+        id: e._id, outcome: e.outcome, platform: e.platform, detectorPlatform: e.detectorPlatform,
+        url: e.url, hostname: e.hostname, confidence: e.confidence, reason: e.reason,
+        questionCount: e.questionCount, supportedQuestionCount: e.supportedQuestionCount,
+        questionTypes: e.questionTypes, attemptedTypes: e.attemptedTypes,
+        parserVersion: e.parserVersion, extensionVersion: e.extensionVersion,
+        userEmail: e.userId?.email || 'unknown', createdAt: e.createdAt,
+        fullHtmlFileId,
+        htmlSnapshotZipPath: fullHtmlFileId ? `html_snapshots/${fullHtmlFileId}.txt` : '',
+        ...(withSnap ? {
+          snapshot_title:           e.snapshot?.title,
+          snapshot_bodyText:        includeHtml ? (e.snapshot?.bodyText    || '').slice(0, 6000) : undefined,
+          snapshot_htmlSnippet:     includeHtml ? (e.snapshot?.htmlSnippet || '').slice(0, 12000) : undefined,
+          snapshot_questionTexts:   e.snapshot?.questionTexts || [],
+          snapshot_optionsSample:   e.snapshot?.optionsSample || [],
+          snapshot_selectorSummary: e.snapshot?.selectorSummary || {},
+          snapshot_questionsData:   (e.snapshot?.questionsData || []).map(q => ({
+            text: q.text || '',
+            type: q.type || 'radio',
+            options: q.options || [],
+            prompts: q.prompts || [],
+            rows: q.rows || [],
+            aiAnswer: q.aiAnswer,
+            aiAnswerText: q.aiAnswer !== undefined && q.aiAnswer !== null && q.aiAnswer !== ''
+              ? formatReportAnswerText(q.type || 'radio', q.options || [], q.aiAnswer, q.prompts || [], q.rows || [])
+              : '',
+            ...(includeHtml ? { containerHtml: q.containerHtml || '' } : {})
+          })),
+        } : {}),
+      };
+    };
 
-    const serBug = b => ({
-      id: b._id, isRead: b.isRead, platform: b.platform, sourceUrl: b.sourceUrl,
-      userEmail: b.userId?.email || 'unknown', description: b.description,
-      parserOutcome: b.parserOutcome, questionText: b.questionText,
-      extensionVersion: b.extensionVersion || '',
-      hasSnapshot: !!(b.parserSnapshotFileId || b.snapshotId), createdAt: b.createdAt,
-    });
+    const serBug = b => {
+      const fullHtmlFileId = b.parserSnapshot?.fullHtmlFile?.id || b.parserSnapshotFileId || b.snapshotId || '';
+      return {
+        id: b._id,
+        isRead: b.isRead,
+        platform: b.platform,
+        detectorPlatform: b.parserDiagnostics?.detectorPlatform || b.platform || '',
+        url: b.url || b.sourceUrl || '',
+        sourceUrl: b.url || b.sourceUrl || '',
+        hostname: b.hostname || extractHostnameSafe(b.url || b.sourceUrl || ''),
+        userEmail: b.userId?.email || 'unknown',
+        description: b.description,
+        parserOutcome: b.parserDiagnostics?.outcome || b.parserOutcome || '',
+        parserReason: b.parserDiagnostics?.reason || '',
+        parserConfidence: b.parserDiagnostics?.confidence ?? 0,
+        questionTexts: b.parserSnapshot?.questionTexts || (b.questionText ? [b.questionText] : []),
+        questionsData: b.parserSnapshot?.questionsData || [],
+        ...(includeHtml ? {
+          htmlSnippet: b.parserSnapshot?.htmlSnippet || '',
+          bodyText: b.parserSnapshot?.bodyText || '',
+        } : {}),
+        extensionVersion: b.extensionVersion || '',
+        hasSnapshot: !!fullHtmlFileId,
+        fullHtmlFileId,
+        htmlSnapshotZipPath: fullHtmlFileId ? `html_snapshots/${fullHtmlFileId}.txt` : '',
+        createdAt: b.createdAt,
+      };
+    };
+
+    // ── Collect HTML Snapshot files from disk ──────────────────
+    const snapshotZipEntries = [];
+    if (includeHtml) {
+      const fileIds = new Set();
+      for (const q of allQuestions) {
+        if (q.fullHtmlFileId) fileIds.add(q.fullHtmlFileId);
+      }
+      for (const e of events) {
+        if (e.snapshot?.fullHtmlFile?.id) fileIds.add(e.snapshot.fullHtmlFile.id);
+      }
+      for (const b of bugReports) {
+        if (b.parserSnapshot?.fullHtmlFile?.id) fileIds.add(b.parserSnapshot.fullHtmlFile.id);
+      }
+
+      let totalSnapshotBytes = 0;
+      const MAX_ZIP_SNAPSHOT_BYTES = 35 * 1024 * 1024; // 35 MB cap to prevent OOM
+      for (const fileId of fileIds) {
+        if (totalSnapshotBytes >= MAX_ZIP_SNAPSHOT_BYTES) break;
+        const diskPath = snapshotFilePath(fileId);
+        if (!diskPath) continue;
+        try {
+          const content = await fs.promises.readFile(diskPath);
+          if (totalSnapshotBytes + content.length > MAX_ZIP_SNAPSHOT_BYTES) continue;
+          totalSnapshotBytes += content.length;
+          snapshotZipEntries.push({
+            name: `html_snapshots/${fileId}.txt`,
+            data: content
+          });
+        } catch {
+          // Ignore missing or expired snapshot files on disk
+        }
+      }
+    }
 
     // ── README ─────────────────────────────────────────────────
     const readme = [
       '# Parser Analysis Export',
       `Generated: ${new Date().toISOString()}`,
+      `Extension Version Filter: ${version || 'all'}`,
       `Period: last ${days} days (${since.toISOString().slice(0,10)} → ${new Date().toISOString().slice(0,10)})`,
       '',
       '## Files',
@@ -2076,39 +2351,26 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       '| File | Description |',
       '|------|-------------|',
       '| summary.json | Totals, by-outcome counts, platform breakdown, daily trend |',
-      '| failed_events.jsonl | All error/empty/weak events with snapshot data — main debug source |',
-      '| success_sample.jsonl | 100 random successful events for comparison |',
-      '| bug_reports.json | User-submitted bug reports for the period |',
+      '| questions.jsonl | Every single triggered/detected question with detected options, AI answer (raw + text), URL, container HTML, page HTML snippet, and link to html_snapshots/ |',
+      '| failed_events.jsonl | All error/empty/weak/partial/reported events with snapshot data — main debug source |',
+      '| success_sample.jsonl | Successful parser events with full question & HTML snapshot data |',
+      '| bug_reports.json | User-submitted bug reports with full parser diagnostics and HTML snapshots |',
+      '| html_snapshots/*.txt | Full sanitized page HTML files captured during question solving and parser events |',
       '| problem_groups.json | Failures aggregated by hostname+platform+outcome with sample URLs |',
       '| confidence_distribution.json | Confidence score bucket histogram |',
       '| top_failure_reasons.json | Most frequent parser reason strings ranked |',
       '| selector_patterns.json | CSS selectors found on pages that failed parsing |',
       '| daily_breakdown.json | Per-day event counts |',
-      '| questions.jsonl | Questions saved by users (with extensionVersion) - filtered to the selected version |',
-      '| cached_answers_sample.json | Recently cached correct answers (what the parser did get right) |',
-      '',
-      '## Outcome meanings',
-      '- **success**: questions + high-confidence answers found',
-      '- **partial**: questions found, answers incomplete or low confidence',
-      '- **empty**: page loaded, no quiz structure detected at all',
-      '- **weak**: found something but confidence below threshold',
-      '- **error**: exception or timeout during parsing',
-      '- **reported**: user manually submitted as incorrect',
-      '',
-      '## Key analysis areas',
-      '1. **problem_groups.json** — hosts with many failures → indicates platform-specific issues',
-      '2. **top_failure_reasons.json** — most common reason strings → shows what the parser gives up on',
-      '3. **selector_patterns.json** in failed events → which DOM selectors exist on failing pages',
-      '4. **snapshot_htmlSnippet** in failed_events.jsonl → actual HTML the parser saw',
-      '5. **snapshot_questionsData** — what the parser partially extracted before giving up',
-      '6. **bug_reports.json** — user-confirmed bad results, best have questionText for ground truth',
-      '7. Compare snapshot_selectorSummary between failed and success events for DOM pattern diffs',
+      '| cached_answers_sample.json | Recently cached correct answers |',
       '',
       '## Stats at export time',
+      `- Extension version: ${version || 'all'}`,
+      `- Total questions in questions.jsonl: ${allQuestions.length} (solved StudyNotes: ${questionNotes.length})`,
       `- Total events: ${events.length}`,
-      `- Failed: ${failedEvents.length} (${events.length ? (failedEvents.length/events.length*100).toFixed(1) : 0}%)`,
+      `- Failed/Partial: ${failedEvents.length} (${events.length ? (failedEvents.length/events.length*100).toFixed(1) : 0}%)`,
       `- Success: ${successEvents.length}`,
       `- Bug reports: ${bugReports.length}`,
+      `- Attached full HTML snapshot files: ${snapshotZipEntries.length}`,
     ].join('\n');
 
     // ── Build ZIP ──────────────────────────────────────────────
@@ -2116,8 +2378,14 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
       exportedAt: new Date().toISOString(),
       period: { days, since: since.toISOString(), until: new Date().toISOString() },
       totals: {
-        events: events.length, failed: failedEvents.length, success: successEvents.length,
-        bugReports: bugReports.length, questions: questionNotes.length, extensionVersion: version || 'all',
+        events: events.length,
+        failed: failedEvents.length,
+        success: successEvents.length,
+        bugReports: bugReports.length,
+        questions: allQuestions.length,
+        solvedQuestions: questionNotes.length,
+        htmlSnapshotsAttached: snapshotZipEntries.length,
+        extensionVersion: version || 'all',
         avgConfidence: confCount ? Number((totalConf/confCount).toFixed(4)) : 0,
         successRate: events.length ? (successEvents.length/events.length*100).toFixed(1)+'%' : '—',
       },
@@ -2125,22 +2393,24 @@ router.get('/parser/analysis-zip', authMiddleware, adminOnly, async (req, res) =
     };
 
     const zipFiles = [
-      { name: 'README.md',                   data: readme },
-      { name: 'summary.json',                data: JSON.stringify(summary, null, 2) },
-      { name: 'failed_events.jsonl',         data: failedEvents.map(e => JSON.stringify(serEvent(e, true))).join('\n') || '// no failed events' },
-      { name: 'success_sample.jsonl',        data: successEvents.sort(() => Math.random()-.5).slice(0,100).map(e => JSON.stringify(serEvent(e, false))).join('\n') || '// no success events' },
-      { name: 'bug_reports.json',            data: JSON.stringify(bugReports.map(serBug), null, 2) },
-      { name: 'problem_groups.json',         data: JSON.stringify(problemGroups, null, 2) },
-      { name: 'confidence_distribution.json',data: JSON.stringify(confBuckets, null, 2) },
-      { name: 'top_failure_reasons.json',    data: JSON.stringify(topReasons, null, 2) },
-      { name: 'selector_patterns.json',      data: JSON.stringify(topSelectors, null, 2) },
-      { name: 'daily_breakdown.json',        data: JSON.stringify(dailyBreakdown, null, 2) },
-      { name: 'questions.jsonl',             data: questionNotes.map(n => JSON.stringify({ id: n._id, extensionVersion: n.extensionVersion || '', userEmail: n.user?.email || 'unknown', questionType: n.questionType, questionText: n.questionText, options: n.options, prompts: n.prompts, rows: n.rows, answer: n.answer, explanation: n.explanation, sourceUrl: n.sourceUrl, platform: n.platform, createdAt: n.createdAt })).join('\n') || '// no questions' },
-      { name: 'cached_answers_sample.json',  data: JSON.stringify(recentAnswers, null, 2) },
+      { name: 'README.md',                    data: readme },
+      { name: 'summary.json',                 data: JSON.stringify(summary, null, 2) },
+      { name: 'questions.jsonl',              data: allQuestions.map(q => JSON.stringify(q)).join('\n') || '// no questions' },
+      { name: 'failed_events.jsonl',          data: failedEvents.map(e => JSON.stringify(serEvent(e, true))).join('\n') || '// no failed events' },
+      { name: 'success_sample.jsonl',         data: successEvents.map(e => JSON.stringify(serEvent(e, true))).join('\n') || '// no success events' },
+      { name: 'bug_reports.json',             data: JSON.stringify(bugReports.map(serBug), null, 2) },
+      { name: 'problem_groups.json',          data: JSON.stringify(problemGroups, null, 2) },
+      { name: 'confidence_distribution.json', data: JSON.stringify(confBuckets, null, 2) },
+      { name: 'top_failure_reasons.json',     data: JSON.stringify(topReasons, null, 2) },
+      { name: 'selector_patterns.json',       data: JSON.stringify(topSelectors, null, 2) },
+      { name: 'daily_breakdown.json',         data: JSON.stringify(dailyBreakdown, null, 2) },
+      { name: 'cached_answers_sample.json',   data: JSON.stringify(recentAnswers, null, 2) },
+      ...snapshotZipEntries
     ];
 
     const zipBuf  = buildZip(zipFiles);
-    const fname   = `parser-analysis-${days}d-${new Date().toISOString().slice(0,10)}.zip`;
+    const verSlug = version ? `v${version.replace(/[^a-z0-9._-]/gi, '_')}-` : '';
+    const fname   = `parser-analysis-${verSlug}${days}d-${new Date().toISOString().slice(0,10)}.zip`;
 
     res.setHeader('Content-Type',        'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);

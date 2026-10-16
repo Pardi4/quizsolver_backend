@@ -32,7 +32,7 @@ const studyNoteSchema = new mongoose.Schema({
   },
   questionType: {
     type: String,
-    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix'],
+    enum: ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'],
     required: true
   },
   options: [String],
@@ -41,6 +41,11 @@ const studyNoteSchema = new mongoose.Schema({
   answer: {
     type: mongoose.Schema.Types.Mixed,
     required: true
+  },
+  answerText: {
+    type: String,
+    default: '',
+    maxlength: 2000
   },
   explanation: {
     type: String,
@@ -87,6 +92,11 @@ const studyNoteSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  hostname: {
+    type: String,
+    default: '',
+    maxlength: 180
+  },
   platform: {
     type: String,
     default: ''
@@ -94,7 +104,34 @@ const studyNoteSchema = new mongoose.Schema({
   extensionVersion: {
     type: String,
     default: '',
-    maxlength: 40
+    maxlength: 40,
+    index: true
+  },
+  extensionVersions: {
+    type: [String],
+    default: []
+  },
+  containerHtml: {
+    type: String,
+    default: '',
+    maxlength: 40000
+  },
+  pageHtmlSnippet: {
+    type: String,
+    default: '',
+    maxlength: 15000
+  },
+  fullHtmlFile: {
+    id: { type: String, default: '', maxlength: 100 },
+    filename: { type: String, default: '', maxlength: 140 },
+    bytes: { type: Number, default: 0 },
+    sha256: { type: String, default: '', maxlength: 80 },
+    truncated: { type: Boolean, default: false },
+    capturedAt: { type: Date, default: null }
+  },
+  hiddenFromUser: {
+    type: Boolean,
+    default: false
   },
   seenCount: {
     type: Number,
@@ -123,6 +160,7 @@ studyNoteSchema.index({ user: 1, lastSeenAt: -1 });
 studyNoteSchema.index({ user: 1, favorite: 1, lastSeenAt: -1 });
 studyNoteSchema.index({ user: 1, status: 1, lastSeenAt: -1 });
 studyNoteSchema.index({ user: 1, quizSessionId: 1, lastSeenAt: -1 });
+studyNoteSchema.index({ extensionVersion: 1, lastSeenAt: -1 });
 studyNoteSchema.index({ noteExpiresAt: 1 }, { expireAfterSeconds: 0 });
 
 
@@ -140,15 +178,52 @@ studyNoteSchema.statics.upsertFromCache = async function(userId, cachedAnswer, u
     lastSeenAt: new Date()
   };
 
+  if (updates.answerText !== undefined && updates.answerText !== '') {
+    set.answerText = String(updates.answerText).substring(0, 2000);
+  }
+
   if (updates.explanation !== undefined) {
     set.explanation = String(updates.explanation || '').substring(0, 2000);
     set.lastExplainedAt = new Date();
   }
 
-  if (updates.sourceUrl !== undefined) set.sourceUrl = String(updates.sourceUrl || '').substring(0, 500);
-  if (updates.platform !== undefined) set.platform = String(updates.platform || '').substring(0, 80);
-  if (updates.extensionVersion !== undefined) set.extensionVersion = String(updates.extensionVersion || '').substring(0, 40);
+  if (updates.sourceUrl !== undefined && updates.sourceUrl !== '') {
+    set.sourceUrl = String(updates.sourceUrl || '').substring(0, 500);
+  }
+  if (updates.hostname !== undefined && updates.hostname !== '') {
+    set.hostname = String(updates.hostname || '').substring(0, 180);
+  }
+  if (updates.platform !== undefined && updates.platform !== '') {
+    set.platform = String(updates.platform || '').substring(0, 80);
+  }
+  const cleanExtVersion = updates.extensionVersion !== undefined
+    ? String(updates.extensionVersion || '').trim().substring(0, 40)
+    : '';
+  if (cleanExtVersion) {
+    set.extensionVersion = cleanExtVersion;
+  }
   if (updates.quizSessionId !== undefined) set.quizSessionId = updates.quizSessionId;
+
+  if (updates.containerHtml !== undefined && updates.containerHtml) {
+    set.containerHtml = String(updates.containerHtml).substring(0, 40000);
+  }
+  if (updates.pageHtmlSnippet !== undefined && updates.pageHtmlSnippet) {
+    set.pageHtmlSnippet = String(updates.pageHtmlSnippet).substring(0, 15000);
+  }
+  if (updates.fullHtmlFile && typeof updates.fullHtmlFile === 'object' && updates.fullHtmlFile.id) {
+    set.fullHtmlFile = {
+      id: String(updates.fullHtmlFile.id || '').substring(0, 100),
+      filename: String(updates.fullHtmlFile.filename || '').substring(0, 140),
+      bytes: Math.max(0, Number(updates.fullHtmlFile.bytes || 0)),
+      sha256: String(updates.fullHtmlFile.sha256 || '').substring(0, 80),
+      truncated: Boolean(updates.fullHtmlFile.truncated),
+      capturedAt: updates.fullHtmlFile.capturedAt || new Date()
+    };
+  }
+
+  if (updates.hiddenFromUser === false) {
+    set.hiddenFromUser = false;
+  }
 
   if (updates.questionImageBase64 !== undefined && updates.questionImageBase64) {
     const MAX = 4 * 1024 * 1024;
@@ -166,22 +241,31 @@ studyNoteSchema.statics.upsertFromCache = async function(userId, cachedAnswer, u
   const inc = { seenCount: 1 };
   if (updates.explanation !== undefined) inc.explainCount = 1;
 
+  const setOnInsert = {
+    user: userId,
+    cachedAnswer: cachedAnswer._id,
+    favorite: false,
+    status: 'new',
+    personalNote: '',
+    userNote: '',
+    tags: []
+  };
+  if (updates.hiddenFromUser === true) {
+    setOnInsert.hiddenFromUser = true;
+  }
+
+  const updateDoc = {
+    $set: set,
+    $setOnInsert: setOnInsert,
+    $inc: inc
+  };
+  if (cleanExtVersion) {
+    updateDoc.$addToSet = { extensionVersions: cleanExtVersion };
+  }
 
   return this.findOneAndUpdate(
     { user: userId, cachedAnswer: cachedAnswer._id },
-    {
-      $set: set,
-      $setOnInsert: {
-        user: userId,
-        cachedAnswer: cachedAnswer._id,
-        favorite: false,
-        status: 'new',
-        personalNote: '',
-        userNote: '',
-        tags: []
-      },
-      $inc: inc
-    },
+    updateDoc,
     { new: true, upsert: true }
   );
 };

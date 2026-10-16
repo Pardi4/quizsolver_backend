@@ -128,5 +128,7 @@ async function sendParserSnapshotFile(res, fileId = '') {
 module.exports = {
   MAX_FULL_HTML_CHARS,
   storeParserSnapshotHtml,
-  sendParserSnapshotFile
+  sendParserSnapshotFile,
+  snapshotFilePath
 };
+

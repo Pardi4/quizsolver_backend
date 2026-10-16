@@ -95,6 +95,8 @@ const parserEventSchema = new mongoose.Schema({
     questionsData: [{
       text: { type: String, default: '' },
       options: { type: [String], default: [] },
+      prompts: { type: [String], default: [] },
+      rows: { type: [String], default: [] },
       type: { type: String, default: '' },
       imageUrl: { type: String, default: '' },
       imageAlt: { type: String, default: '' },

@@ -62,7 +62,7 @@ function validateQuestionData(q) {
   if (!q.text || typeof q.text !== 'string') return questionRetryNeeded('Missing question text.', 'missing-question-text');
   if (q.text.trim().length < 3) return questionRetryNeeded('Question text too short.', 'question-text-too-short');
   if (q.text.length > 2000) return 'Question text too long (max 2000 chars).';
-  if (q.type && !['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(q.type)) return 'Invalid question type.';
+  if (q.type && !['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(q.type)) return 'Invalid question type.';
   if (q.imageUrl !== undefined && q.imageUrl !== null && q.imageUrl !== '') {
     if (typeof q.imageUrl !== 'string') return 'Image URL must be a string.';
     if (q.imageUrl.length > MAX_IMAGE_DATA_URL_LENGTH) return 'Image too large.';
@@ -188,6 +188,91 @@ function sanitizeSourceUrl(url) {
   }
 }
 
+function extractHostname(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    const parsed = new URL(url);
+    return (parsed.hostname || '').substring(0, 180);
+  } catch {
+    return '';
+  }
+}
+
+function sanitizeHtmlSnippet(value, max = 30000) {
+  if (!value || typeof value !== 'string') return '';
+  return value
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/\son[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, '')
+    .replace(/\s(value|data-token|data-auth|data-key|data-secret|data-email|data-user|data-password|aria-valuetext)\s*=\s*(['"])[\s\S]*?\2/gi, ' $1="[redacted]"')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
+    .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?![a-zA-Z-]+$)[A-Za-z0-9_-]{32,})\b/g, '[token]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, max);
+}
+
+const recentPageSnapshots = new Map();
+const PAGE_SNAPSHOT_CACHE_TTL_MS = 15 * 60 * 1000;
+
+async function resolvePageSnapshotForSolve(userId, rawUrl, platform, pageHtml, source = 'quiz-solve-request') {
+  const cleanUrl = sanitizeSourceUrl(rawUrl);
+  const cacheKey = `${String(userId || 'anon')}:${cleanUrl || 'no-url'}`;
+  const now = Date.now();
+
+  if (pageHtml && typeof pageHtml === 'string' && pageHtml.trim()) {
+    const pageHtmlSnippet = sanitizeHtmlSnippet(pageHtml, 15000);
+    const fullHtmlFile = await storeParserSnapshotHtml({
+      html: pageHtml,
+      url: cleanUrl || rawUrl,
+      platform: platform || 'universal',
+      source,
+      outcome: 'requested',
+      userId
+    }).catch(() => null);
+
+    if (recentPageSnapshots.size > 500) {
+      for (const [k, v] of recentPageSnapshots.entries()) {
+        if (!v || v.expiresAt <= now) recentPageSnapshots.delete(k);
+      }
+      if (recentPageSnapshots.size > 500) {
+        const firstKey = recentPageSnapshots.keys().next().value;
+        if (firstKey) recentPageSnapshots.delete(firstKey);
+      }
+    }
+
+    const entry = {
+      fullHtmlFile,
+      pageHtmlSnippet,
+      expiresAt: now + PAGE_SNAPSHOT_CACHE_TTL_MS
+    };
+    recentPageSnapshots.set(cacheKey, entry);
+    return { fullHtmlFile, pageHtmlSnippet };
+  }
+
+  if (cleanUrl) {
+    const cached = recentPageSnapshots.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return {
+        fullHtmlFile: cached.fullHtmlFile || null,
+        pageHtmlSnippet: cached.pageHtmlSnippet || ''
+      };
+    }
+  }
+
+  return { fullHtmlFile: null, pageHtmlSnippet: '' };
+}
+
+function resolveExtensionVersion(req, body = {}) {
+  const raw = body?.extensionVersion || body?.version || req?.headers?.['x-extension-version'] || req?.user?.extensionVersion || '';
+  const clean = String(raw || '').replace(/[^a-z0-9_.:-]/gi, '').substring(0, 40);
+  if (clean && req?.user && req.user.extensionVersion !== clean) {
+    req.user.extensionVersion = clean;
+    User.updateOne({ _id: req.user._id }, { $set: { extensionVersion: clean } }).catch(() => {});
+  }
+  return clean;
+}
+
 function sanitizeImageUrl(url) {
   if (!url || typeof url !== 'string') return '';
   if (url.startsWith('data:image/')) return '';
@@ -248,6 +333,9 @@ function answerToText(type, options, answer, meta = {}) {
   if (type === 'checkbox' && Array.isArray(options) && Array.isArray(answer)) {
     return answer.map(i => options[i] || String(i)).join(', ');
   }
+  if (type === 'ordering' && Array.isArray(options) && Array.isArray(answer)) {
+    return answer.map((idx, i) => `${i + 1}. ${options[idx] || String(idx)}`).join(' -> ');
+  }
   if ((type === 'matching' || type === 'matrix') && Array.isArray(options) && Array.isArray(answer)) {
     const labels = type === 'matching' ? (meta.prompts || []) : (meta.rows || []);
     return answer.map((idx, i) => {
@@ -269,7 +357,7 @@ function isAnswerCorrect(note, given) {
   if (note.questionType === 'checkbox' && Array.isArray(given) && Array.isArray(correct)) {
     return JSON.stringify([...given].sort()) === JSON.stringify([...correct].sort());
   }
-  if ((note.questionType === 'matching' || note.questionType === 'matrix') && Array.isArray(given) && Array.isArray(correct)) {
+  if ((note.questionType === 'matching' || note.questionType === 'matrix' || note.questionType === 'ordering') && Array.isArray(given) && Array.isArray(correct)) {
     return JSON.stringify(given) === JSON.stringify(correct);
   }
   if (note.questionType === 'text' && typeof given === 'string') {
@@ -362,20 +450,41 @@ function serializeStudyNote(note) {
   };
 }
 
-async function saveStudyNote(userId, cachedAnswer, body, updates = {}) {
-  if (!cachedAnswer || body.saveToStudyNotes === false) return null;
+async function saveStudyNote(userId, cachedAnswer, body = {}, updates = {}, req = null) {
+  if (!cachedAnswer) return null;
+  const rawUrl = body.url || body.sourceUrl || '';
+  const sourceUrl = sanitizeSourceUrl(rawUrl);
+  const hostname = extractHostname(rawUrl);
+  const extensionVersion = updates.extensionVersion || resolveExtensionVersion(req, body);
+  const containerHtml = sanitizeHtmlSnippet(
+    updates.containerHtml || body.containerHtml || body.questionData?.containerHtml || '',
+    40000
+  );
+  const pageHtmlSnippet = updates.pageHtmlSnippet || sanitizeHtmlSnippet(body.pageHtml || '', 15000);
+  const answerText = answerToText(
+    cachedAnswer.questionType,
+    cachedAnswer.options || [],
+    cachedAnswer.answer,
+    { prompts: cachedAnswer.prompts || [], rows: cachedAnswer.rows || [] }
+  );
+
   return StudyNote.upsertFromCache(userId, cachedAnswer, {
     ...imageUpdatesFromBody(body),
     ...updates,
-    sourceUrl: sanitizeSourceUrl(body.url),
+    answerText,
+    sourceUrl,
+    hostname,
     platform: body.platform,
-    extensionVersion: body.extensionVersion || body.version
+    extensionVersion,
+    containerHtml,
+    pageHtmlSnippet,
+    hiddenFromUser: body.saveToStudyNotes === false
   });
 }
 
-async function saveStudyNoteBestEffort(userId, cachedAnswer, body, updates = {}) {
+async function saveStudyNoteBestEffort(userId, cachedAnswer, body = {}, updates = {}, req = null) {
   try {
-    return await saveStudyNote(userId, cachedAnswer, body, updates);
+    return await saveStudyNote(userId, cachedAnswer, body, updates, req);
   } catch (error) {
     console.warn('[StudyNote] Could not save solved question history:', error.message);
     return null;
@@ -821,7 +930,7 @@ router.get('/study-notes', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const search = String(req.query.search || '').trim();
-    const filter = { user: req.user._id };
+    const filter = { user: req.user._id, hiddenFromUser: { $ne: true } };
 
     if (req.query.favorite === 'true') filter.favorite = true;
     if (['new', 'learning', 'mastered'].includes(req.query.status)) filter.status = req.query.status;
@@ -944,16 +1053,13 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
     const imageData = String(req.body.imageData || '');
     const user = req.user;
 
-    if (pageHtml) {
-      storeParserSnapshotHtml({
-        html: pageHtml,
-        url: sourceUrl,
-        platform: platform || 'focusscan',
-        source: 'quiz-solve-snapshot',
-        outcome: 'requested',
-        userId: user._id
-      }).catch(() => {});
-    }
+    const pageSnapshot = await resolvePageSnapshotForSolve(
+      user._id,
+      sourceUrl,
+      platform || 'focusscan',
+      pageHtml,
+      'quiz-solve-snapshot'
+    );
 
     if (!parseDataImage(imageData)) {
       return res.status(400).json({ error: 'Missing or invalid FocusScan image.' });
@@ -971,7 +1077,21 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
     };
     const questionHash = CachedAnswer.generateHash(snapshotQuestionData);
     const replay = await getSolveReplay(user._id, 'solve-snapshot', questionHash);
-    if (replay) return res.json(replay);
+    if (replay) {
+      const cachedDoc = await CachedAnswer.findOne({ questionHash });
+      if (cachedDoc) {
+        await saveStudyNoteBestEffort(user._id, cachedDoc, {
+          ...req.body,
+          url: req.body.sourceUrl,
+          platform: req.body.platform || 'focusscan',
+          questionImageBase64: imageData
+        }, {
+          fullHtmlFile: pageSnapshot.fullHtmlFile,
+          pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+        }, req);
+      }
+      return res.json(replay);
+    }
 
     const cachedHit = await getCachedAnswerHit(snapshotQuestionData, questionHash, 'text');
     if (cachedHit) {
@@ -985,16 +1105,20 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
         url: req.body.sourceUrl,
         platform: req.body.platform || 'focusscan',
         questionImageBase64: imageData
-      });
+      }, {
+        fullHtmlFile: pageSnapshot.fullHtmlFile,
+        pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+      }, req);
+      const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
       const body = {
         success: true,
         answer: cachedHit.answer,
         extractedQuestion: cachedHit.cachedDoc?.questionText || 'FocusScan image question',
         cached: true,
         deduped: !!chargeResult.duplicate,
-        remaining: remainingFor(finalUser),
-        studyNoteSaved: !!studyNote,
-        noteId: studyNote?._id || null
+        remaining: remainingFor(responseUser),
+        studyNoteSaved: visibleNote,
+        noteId: visibleNote ? (studyNote?._id || null) : null
       };
       rememberSolveReplay(user._id, 'solve-snapshot', questionHash, body);
       return res.json(body);
@@ -1023,7 +1147,11 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       url: req.body.sourceUrl,
       platform: req.body.platform || 'focusscan',
       questionImageBase64: imageData
-    });
+    }, {
+      fullHtmlFile: pageSnapshot.fullHtmlFile,
+      pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+    }, req);
+    const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
 
     const body = {
       success: true,
@@ -1032,8 +1160,8 @@ router.post('/solve-snapshot', preventConcurrentQuiz, async (req, res) => {
       cached: false,
       deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
-      studyNoteSaved: !!studyNote,
-      noteId: studyNote?._id || null
+      studyNoteSaved: visibleNote,
+      noteId: visibleNote ? (studyNote?._id || null) : null
     };
     rememberSolveReplay(user._id, 'solve-snapshot', questionHash, body);
     res.json(body);
@@ -1051,16 +1179,13 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     const { questionData, pageHtml, url, platform, questionImageBase64 } = req.body; if (questionImageBase64 && questionData) { questionData.imageUrl = questionImageBase64; }
     const user = req.user;
 
-    if (pageHtml) {
-      storeParserSnapshotHtml({
-        html: pageHtml,
-        url: url,
-        platform: platform || 'universal',
-        source: 'quiz-solve-request',
-        outcome: 'requested',
-        userId: user._id
-      }).catch(() => {});
-    }
+    const pageSnapshot = await resolvePageSnapshotForSolve(
+      user._id,
+      url,
+      platform || 'universal',
+      pageHtml,
+      'quiz-solve-request'
+    );
 
     const err = validateQuestionData(questionData);
     if (err) return sendQuestionPayloadError(res, err);
@@ -1070,7 +1195,16 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
 
     const questionHash = CachedAnswer.generateHash(questionData);
     const replay = await getSolveReplay(user._id, 'solve', questionHash);
-    if (replay) return res.json(replay);
+    if (replay) {
+      const cachedDoc = await CachedAnswer.findOne({ questionHash });
+      if (cachedDoc) {
+        await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, {
+          fullHtmlFile: pageSnapshot.fullHtmlFile,
+          pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+        }, req);
+      }
+      return res.json(replay);
+    }
 
     const cachedHit = await getCachedAnswerHit(questionData, questionHash, questionData.type);
     if (cachedHit) {
@@ -1079,15 +1213,19 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
         return res.status(chargeResult.status).json(chargeResult.body);
       }
       const responseUser = chargeResult.user || user;
-      const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, req.body);
+      const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, req.body, {
+        fullHtmlFile: pageSnapshot.fullHtmlFile,
+        pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+      }, req);
+      const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
       const body = {
         success: true,
         answer: cachedHit.answer,
         cached: true,
         deduped: !!chargeResult.duplicate,
         remaining: remainingFor(responseUser),
-        studyNoteSaved: !!studyNote,
-        noteId: studyNote?._id || null
+        studyNoteSaved: visibleNote,
+        noteId: visibleNote ? (studyNote?._id || null) : null
       };
       rememberSolveReplay(user._id, 'solve', questionHash, body);
       return res.json(body);
@@ -1108,7 +1246,11 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
     }
     creditUsage = null;
     responseUser = chargeResult.user || responseUser;
-    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body);
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, {
+      fullHtmlFile: pageSnapshot.fullHtmlFile,
+      pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+    }, req);
+    const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
 
     const body = {
       success: true,
@@ -1116,8 +1258,8 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
       cached: false,
       deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
-      studyNoteSaved: !!studyNote,
-      noteId: studyNote?._id || null
+      studyNoteSaved: visibleNote,
+      noteId: visibleNote ? (studyNote?._id || null) : null
     };
     rememberSolveReplay(user._id, 'solve', questionHash, body);
     res.json(body);
@@ -1132,13 +1274,21 @@ router.post('/solve', preventConcurrentQuiz, async (req, res) => {
 
 router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
   try {
-    const { questions } = req.body;
+    const { questions, pageHtml, url, platform } = req.body;
     const user = req.user;
 
     if (!Array.isArray(questions) || questions.length === 0)
       return res.status(400).json({ error: 'No questions provided.' });
     if (questions.length > 50)
       return res.status(400).json({ error: 'Max 50 questions per batch.' });
+
+    const pageSnapshot = await resolvePageSnapshotForSolve(
+      user._id,
+      url,
+      platform || 'universal',
+      pageHtml,
+      'quiz-solve-batch'
+    );
 
     const preparedQuestions = [];
 
@@ -1211,13 +1361,17 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
           if (!chargeResult.ok) {
             return { success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached };
           }
-          const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, { ...req.body, questionData });
+          const studyNote = await saveStudyNoteBestEffort(user._id, cachedHit.cachedDoc, { ...req.body, questionData }, {
+            fullHtmlFile: pageSnapshot.fullHtmlFile,
+            pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+          }, req);
+          const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
           return {
             success: true,
             answer: cachedHit.answer,
             cached: true,
             deduped: !!chargeResult.duplicate,
-            noteId: studyNote?._id || null
+            noteId: visibleNote ? (studyNote?._id || null) : null
           };
         }
 
@@ -1227,13 +1381,17 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
         if (!chargeResult.ok) {
           return { success: false, error: chargeResult.body.error, limitReached: chargeResult.body.limitReached };
         }
-        const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData });
+        const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, { ...req.body, questionData }, {
+          fullHtmlFile: pageSnapshot.fullHtmlFile,
+          pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+        }, req);
+        const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
         return {
           success: true,
           answer,
           cached: false,
           deduped: !!chargeResult.duplicate,
-          noteId: studyNote?._id || null
+          noteId: visibleNote ? (studyNote?._id || null) : null
         };
       } catch (error) {
         await abortCreditUsage(itemCreditUsage);
@@ -1243,7 +1401,7 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     })));
 
     const finalUser = await User.findById(user._id) || user;
-    res.json({ success: true, results, remaining: remainingFor(responseUser) });
+    res.json({ success: true, results, remaining: remainingFor(finalUser) });
 
   } catch (error) {
     console.error('[Quiz] Batch error:', error.message);
@@ -1254,10 +1412,10 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
 router.post('/explain', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
   try {
-    const { answer } = req.body;
+    const { answer, pageHtml, url, platform } = req.body;
     const text = sanitizeText(req.body.text);
     const options = Array.isArray(req.body.options) ? req.body.options.map(sanitizeText) : [];
-    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(req.body.type) ? req.body.type : 'radio';
+    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(req.body.type) ? req.body.type : 'radio';
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
     const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const user = req.user;
@@ -1269,6 +1427,14 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
+
+    const pageSnapshot = await resolvePageSnapshotForSolve(
+      user._id,
+      url,
+      platform || 'universal',
+      pageHtml,
+      'quiz-explain-request'
+    );
 
     const questionHash = CachedAnswer.generateHash(questionData);
 
@@ -1295,15 +1461,20 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
     }
     creditUsage = null;
     responseUser = chargeResult.user || responseUser;
-    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, { explanation });
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, {
+      explanation,
+      fullHtmlFile: pageSnapshot.fullHtmlFile,
+      pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+    }, req);
+    const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
 
     res.json({
       success: true,
       explanation,
       deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
-      studyNoteSaved: !!studyNote,
-      noteId: studyNote?._id || null
+      studyNoteSaved: visibleNote,
+      noteId: visibleNote ? (studyNote?._id || null) : null
     });
   } catch (error) {
     await abortCreditUsage(creditUsage);
@@ -1318,10 +1489,10 @@ router.post('/explain', preventConcurrentQuiz, async (req, res) => {
 router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
   let creditUsage = null;
   try {
-    const { answer } = req.body;
+    const { answer, pageHtml, url, platform } = req.body;
     const text = sanitizeText(req.body.text);
     const options = Array.isArray(req.body.options) ? req.body.options.map(sanitizeText) : [];
-    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix'].includes(req.body.type) ? req.body.type : 'radio';
+    const type = ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(req.body.type) ? req.body.type : 'radio';
     const prompts = Array.isArray(req.body.prompts) ? req.body.prompts.map(sanitizeText).slice(0, 30) : [];
     const rows = Array.isArray(req.body.rows) ? req.body.rows.map(sanitizeText).slice(0, 30) : [];
     const prompt = sanitizeText(String(req.body.prompt || 'Explain more.')).substring(0, 500);
@@ -1335,6 +1506,14 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     if (!questionData.text || answer === undefined) {
       return res.status(400).json({ error: 'Missing question text or answer.' });
     }
+
+    const pageSnapshot = await resolvePageSnapshotForSolve(
+      user._id,
+      url,
+      platform || 'universal',
+      pageHtml,
+      'quiz-followup-request'
+    );
 
     const questionHash = CachedAnswer.generateHash(questionData);
     const chargeCredits = await shouldChargeForQuestion(user._id, 'follow-up', questionHash);
@@ -1364,15 +1543,20 @@ router.post('/follow-up', preventConcurrentQuiz, async (req, res) => {
     }
     creditUsage = null;
     responseUser = chargeResult.user || responseUser;
-    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, { explanation: followUp });
+    const studyNote = await saveStudyNoteBestEffort(user._id, cachedDoc, req.body, {
+      explanation: followUp,
+      fullHtmlFile: pageSnapshot.fullHtmlFile,
+      pageHtmlSnippet: pageSnapshot.pageHtmlSnippet
+    }, req);
+    const visibleNote = req.body.saveToStudyNotes !== false && !!studyNote;
 
     res.json({
       success: true,
       followUp,
       deduped: !!chargeResult.duplicate,
       remaining: remainingFor(responseUser),
-      studyNoteSaved: !!studyNote,
-      noteId: studyNote?._id || null
+      studyNoteSaved: visibleNote,
+      noteId: visibleNote ? (studyNote?._id || null) : null
     });
   } catch (error) {
     await abortCreditUsage(creditUsage);

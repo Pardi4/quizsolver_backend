@@ -76,16 +76,18 @@ function cleanSnapshot(snapshot = {}) {
     title: cleanText(snapshot.title, 180),
     bodyText: cleanText(snapshot.bodyText, 8000),
     htmlSnippet: cleanHtml(snapshot.htmlSnippet, 12000),
-    questionTexts: cleanStringArray(snapshot.questionTexts, 8, 300),
-    optionsSample: cleanStringArray(snapshot.optionsSample, 20, 180),
+    questionTexts: cleanStringArray(snapshot.questionTexts, 50, 500),
+    optionsSample: cleanStringArray(snapshot.optionsSample, 40, 220),
     selectorSummary,
     questionsData: Array.isArray(snapshot.questionsData) ? snapshot.questionsData.map(q => ({
       text: cleanText(q.text, 2000),
-      options: cleanStringArray(q.options, 20, 1000),
+      options: cleanStringArray(q.options, 30, 1000),
+      prompts: cleanStringArray(q.prompts, 30, 500),
+      rows: cleanStringArray(q.rows, 30, 500),
       type: cleanToken(q.type, 40),
       imageUrl: cleanToken(q.imageUrl, 500),
       imageAlt: cleanText(q.imageAlt, 500),
-      aiAnswer: q.aiAnswer,
+      aiAnswer: q.aiAnswer !== undefined && q.aiAnswer !== null ? q.aiAnswer : '',
       containerHtml: cleanHtml(q.containerHtml, 40000)
     })).slice(0, 100) : [],
     fullHtmlFile: snapshot.fullHtmlFile && typeof snapshot.fullHtmlFile === 'object' ? {
@@ -189,6 +191,11 @@ router.post('/event', async (req, res) => {
     });
     if (fullHtmlFile) snapshot.fullHtmlFile = fullHtmlFile;
 
+    const extVersion = cleanToken(
+      body.extensionVersion || body.version || req.headers['x-extension-version'] || req.user?.extensionVersion || '',
+      40
+    );
+
     const event = await ParserEvent.create({
       userId: req.user._id,
       eventType: ['solve', 'manual-report', 'diagnostic'].includes(body.eventType) ? body.eventType : 'solve',
@@ -205,7 +212,7 @@ router.post('/event', async (req, res) => {
       attemptedTypes: cleanStringArray(body.attemptedTypes, 8, 80),
       questionTypes: cleanStringArray(body.questionTypes, 10, 40),
       parserVersion: cleanToken(body.parserVersion || 'v2', 40) || 'v2',
-      extensionVersion: cleanToken(body.extensionVersion || '', 40),
+      extensionVersion: extVersion,
       snapshot
     });
 
