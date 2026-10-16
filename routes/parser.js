@@ -11,8 +11,8 @@ function redactSensitiveText(value) {
   return String(value || '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email]')
     .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|(?![a-zA-Z-]+$)[A-Za-z0-9_-]{32,})\b/g, '[token]')
-    .replace(/\b(?:\d[ -]?){13,19}\b/g, '[number]')
-    .replace(/\+?\d[\d\s().-]{7,}\d/g, '[phone]');
+    .replace(/\b(?:\d{4}[ -]){3}\d{4}\b/g, '[number]')
+    .replace(/\+\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3}[\s.-]?\d{2,4}\b/g, '[phone]');
 }
 
 function cleanText(value, max = 500) {
@@ -59,9 +59,10 @@ function cleanUrl(value) {
   }
 }
 
-function cleanStringArray(value, maxItems = 12, maxLength = 220) {
+function cleanStringArray(value, maxItems = 12, maxLength = 220, dedupe = true) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map(item => cleanText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
+  const cleaned = value.map(item => cleanText(item, maxLength)).filter(Boolean);
+  return (dedupe ? [...new Set(cleaned)] : cleaned).slice(0, maxItems);
 }
 
 function cleanSnapshot(snapshot = {}) {
@@ -81,9 +82,9 @@ function cleanSnapshot(snapshot = {}) {
     selectorSummary,
     questionsData: Array.isArray(snapshot.questionsData) ? snapshot.questionsData.map(q => ({
       text: cleanText(q.text, 2000),
-      options: cleanStringArray(q.options, 30, 1000),
-      prompts: cleanStringArray(q.prompts, 30, 500),
-      rows: cleanStringArray(q.rows, 30, 500),
+      options: cleanStringArray(q.options, 30, 1000, false),
+      prompts: cleanStringArray(q.prompts, 30, 500, false),
+      rows: cleanStringArray(q.rows, 30, 500, false),
       type: cleanToken(q.type, 40),
       imageUrl: cleanToken(q.imageUrl, 500),
       imageAlt: cleanText(q.imageAlt, 500),
