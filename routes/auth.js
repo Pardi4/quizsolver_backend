@@ -147,6 +147,7 @@ async function issueVerificationCode(user) {
   const code = generateCode();
   user.emailVerificationCodeHash = hashCode(code);
   user.emailVerificationExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  user.emailVerificationSentAt = new Date();
   await user.save();
   const template = verificationTemplate({ code, email: user.email });
   let delivery = { success: false, disabled: true };
@@ -265,6 +266,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       success: true,
       requiresVerification: true,
       email,
+      retryAfterSeconds: 30,
       mailSent: !!verification.delivery.success,
       mailDisabled: !!verification.delivery.disabled,
       devCode: shouldExposeDevCode() || verification.delivery.disabled ? verification.code : undefined,
@@ -318,10 +320,15 @@ router.post('/login', authLimiter, async (req, res) => {
     if (user.emailVerified === false) {
       const hasRecentActiveCode = Boolean(user.emailVerificationCodeHash && user.emailVerificationExpiresAt && new Date(user.emailVerificationExpiresAt).getTime() > Date.now() + 5 * 60 * 1000);
       const verification = hasRecentActiveCode ? { code: undefined, delivery: { success: true, disabled: false } } : await issueVerificationCode(user);
+      const lastSent = user.emailVerificationSentAt
+        ? new Date(user.emailVerificationSentAt).getTime()
+        : (user.emailVerificationExpiresAt ? new Date(user.emailVerificationExpiresAt).getTime() - 15 * 60 * 1000 : 0);
+      const retryAfterSeconds = Math.max(0, Math.ceil((30 * 1000 - (Date.now() - lastSent)) / 1000));
       return res.status(403).json({
         error: 'Please verify your email first.',
         requiresVerification: true,
         email: user.email,
+        retryAfterSeconds,
         mailSent: !!verification.delivery.success,
         mailDisabled: !!verification.delivery.disabled,
         devCode: shouldExposeDevCode() || verification.delivery.disabled ? verification.code : undefined
@@ -392,9 +399,26 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.json({ success: true, message: 'If the account exists, a code was sent.' });
     if (user.emailVerified) return res.json({ success: true, alreadyVerified: true });
+    const now = Date.now();
+    const lastSent = user.emailVerificationSentAt
+      ? new Date(user.emailVerificationSentAt).getTime()
+      : (user.emailVerificationExpiresAt ? new Date(user.emailVerificationExpiresAt).getTime() - 15 * 60 * 1000 : 0);
+    const timeSinceLastSent = now - lastSent;
+    const COOLDOWN_MS = 30 * 1000;
+
+    if (lastSent > 0 && timeSinceLastSent < COOLDOWN_MS) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((COOLDOWN_MS - timeSinceLastSent) / 1000));
+      return res.status(429).json({
+        error: `Please wait ${retryAfterSeconds}s before requesting a new code.`,
+        retryAfterSeconds,
+        code: 'RESEND_COOLDOWN'
+      });
+    }
+
     const verification = await issueVerificationCode(user);
     res.json({
       success: true,
+      retryAfterSeconds: 30,
       mailSent: !!verification.delivery.success,
       mailDisabled: !!verification.delivery.disabled,
       devCode: shouldExposeDevCode() || verification.delivery.disabled ? verification.code : undefined
