@@ -316,7 +316,8 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 
     if (user.emailVerified === false) {
-      const verification = await issueVerificationCode(user);
+      const hasRecentActiveCode = Boolean(user.emailVerificationCodeHash && user.emailVerificationExpiresAt && new Date(user.emailVerificationExpiresAt).getTime() > Date.now() + 5 * 60 * 1000);
+      const verification = hasRecentActiveCode ? { code: undefined, delivery: { success: true, disabled: false } } : await issueVerificationCode(user);
       return res.status(403).json({
         error: 'Please verify your email first.',
         requiresVerification: true,

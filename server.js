@@ -63,6 +63,7 @@ const PAGE_SLUGS = {
   terms: 'terms',
   success: 'success',
   notFound: '404',
+  uninstall: 'uninstall',
   quizSolverAi: 'quiz-solver-ai',
   testportal: 'testportal-quiz-solver',
   moodle: 'moodle-quiz-solver',
@@ -94,7 +95,8 @@ const PAGE_ROUTES = Object.fromEntries(
 const ANGULAR_CANONICAL_ROUTE_PATHS = Array.from(new Set(
   [
     ...Object.values(PAGE_ROUTES).flatMap(route => Object.values(route)),
-    ADMIN_PANEL_URL
+    ADMIN_PANEL_URL,
+    ...SUPPORTED_LOCALES.map(locale => `/${locale.code}/uninstall`)
   ]
 ));
 const ANGULAR_TRAILING_SLASH_PATHS = ANGULAR_CANONICAL_ROUTE_PATHS
@@ -106,7 +108,8 @@ const ANGULAR_ROUTE_PATHS = Array.from(new Set(
       pageRoute === '/' ? ['/'] : [pageRoute, `${pageRoute}/`]
     ))),
     ADMIN_PANEL_URL,
-    `${ADMIN_PANEL_URL}/`
+    `${ADMIN_PANEL_URL}/`,
+    ...SUPPORTED_LOCALES.flatMap(locale => [`/${locale.code}/uninstall`, `/${locale.code}/uninstall/`])
   ]
 ));
 
@@ -388,7 +391,7 @@ async function sendAngularPage(req, res, routePath = req.path, statusCode = 200)
   }
 
   const privateRoute = isAdminPanelPath(routePath) || isLegacyAdminPath(routePath);
-  const privatePage = ['dashboard', 'success', 'notFound'].some(pageKey => routeMatchesPage(routePath, pageKey));
+  const privatePage = ['dashboard', 'success', 'notFound', 'uninstall'].some(pageKey => routeMatchesPage(routePath, pageKey)) || /^\/[a-z]{2}\/uninstall\/?$/.test(routePath);
   const noStore = privateRoute || privatePage;
   const noindex = privateRoute || privatePage;
 
