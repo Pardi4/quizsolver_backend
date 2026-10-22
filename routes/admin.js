@@ -2573,66 +2573,6 @@ router.delete('/promos/:id', async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────────────────────────
-   TELEGRAM BOT & DAILY REPORTS
-   ───────────────────────────────────────────────────────────────── */
-router.get('/telegram/status', (req, res) => {
-  try {
-    const telegramService = require('../services/telegramService');
-    const hasToken = Boolean(process.env.TELEGRAM_BOT_TOKEN);
-    const adminChatId = telegramService.getAdminChatId();
-    res.json({
-      success: true,
-      hasToken,
-      botUsername: 'getQuizSolverbot',
-      adminChatId: adminChatId || null,
-      isBound: Boolean(adminChatId)
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Błąd sprawdzania statusu Telegrama.' });
-  }
-});
-
-router.post('/telegram/test-report', async (req, res) => {
-  try {
-    const telegramService = require('../services/telegramService');
-    const adminChatId = telegramService.getAdminChatId();
-
-    if (!adminChatId) {
-      return res.status(400).json({
-        error: 'Brak powiązanego czatu admina. Napisz ze swojego konta @kam567122 do bota @getQuizSolverbot na Telegramie.'
-      });
-    }
-
-    const isToday = req.body?.isToday === true;
-    const reportHtml = await telegramService.generateDailyReport({ isToday });
-    const sent = await telegramService.sendMessage(adminChatId, reportHtml);
-
-    if (sent) {
-      auditLog(req.user, 'TELEGRAM_TEST_REPORT_SENT', { chatId: adminChatId, isToday });
-      res.json({ success: true, message: 'Raport pomyślnie wysłany na Telegram!' });
-    } else {
-      res.status(502).json({ error: 'Nie udało się wysłać wiadomości przez Telegram API.' });
-    }
-  } catch (err) {
-    console.error('[Admin] Error sending telegram report:', err);
-    res.status(500).json({ error: 'Błąd podczas generowania lub wysyłania raportu.' });
-  }
-});
-
-router.post('/telegram/set-admin', (req, res) => {
-  try {
-    const { chatId } = req.body;
-    if (!chatId) return res.status(400).json({ error: 'Podaj chatId.' });
-    const telegramService = require('../services/telegramService');
-    telegramService.setAdminChatId(chatId);
-    auditLog(req.user, 'TELEGRAM_ADMIN_CHAT_SET', { chatId });
-    res.json({ success: true, adminChatId: chatId });
-  } catch (err) {
-    res.status(500).json({ error: 'Błąd zapisu czatu Telegram.' });
-  }
-});
-
-/* ─────────────────────────────────────────────────────────────────
    UNINSTALL FEEDBACK
    ───────────────────────────────────────────────────────────────── */
 router.get('/uninstall-feedback', async (req, res) => {

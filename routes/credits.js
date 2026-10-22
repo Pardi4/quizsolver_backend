@@ -562,12 +562,6 @@ router.post('/report-bug', async (req, res) => {
       userAgent: (req.headers['user-agent'] || '').substring(0, 300)
     });
 
-    try {
-      const telegramService = require('../services/telegramService');
-      telegramService.notifyBugReport(bug, req.user);
-    } catch (e) {
-      // Fire-and-forget notification
-    }
 
     // Intentional fire-and-forget: non-critical event logging
     ParserEvent.create({

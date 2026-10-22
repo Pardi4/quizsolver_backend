@@ -1,6 +1,5 @@
 const express = require('express');
 const UninstallFeedback = require('../models/UninstallFeedback');
-const telegramService = require('../services/telegramService');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -60,12 +59,6 @@ router.post('/uninstall', feedbackLimiter, async (req, res) => {
       ip
     });
 
-    // Notify Telegram Admin asynchronously
-    try {
-      telegramService.notifyUninstallFeedback(item);
-    } catch (e) {
-      // Fire-and-forget
-    }
 
     res.status(201).json({ success: true, id: item._id });
   } catch (err) {

@@ -160,12 +160,6 @@ async function createParserBugReportIfNeeded(req, event) {
     isRead: false
   });
 
-  try {
-    const telegramService = require('../services/telegramService');
-    telegramService.notifyBugReport(bug, req.user);
-  } catch (e) {
-    // Fire-and-forget notification
-  }
 
   return true;
 }

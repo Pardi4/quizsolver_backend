@@ -898,13 +898,6 @@ app.listen(PORT, HOST, async () => {
     console.log(`[Server] Admin panel on ${ADMIN_HOST}:${ADMIN_PORT}`);
   });
 
-  // Telegram Bot & Daily 08:00 AM Reports
-  try {
-    const telegramService = require('./services/telegramService');
-    telegramService.init();
-  } catch (tgErr) {
-    console.error('[Server] Telegram service init error:', tgErr.message);
-  }
 
   // Background Tasks
   setInterval(async () => {

@@ -176,13 +176,6 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
         existingThread.status = 'open';
         existingThread.isRead = false;
         await existingThread.save();
-
-        try {
-          const telegramService = require('../services/telegramService');
-          telegramService.notifySupportMessage(existingThread, { isReply: true, replyText: safeText, fromEmail });
-        } catch (e) {
-          // Fire-and-forget notification
-        }
       }
       return res.status(200).json({ success: true, id: existingThread._id, threaded: true, duplicate });
     }
@@ -198,12 +191,6 @@ router.post('/inbound', requireInboundSecret, async (req, res) => {
       source: normalizeSource(req.body.source)
     });
 
-    try {
-      const telegramService = require('../services/telegramService');
-      telegramService.notifySupportMessage(message, { isReply: false });
-    } catch (e) {
-      // Fire-and-forget notification
-    }
 
     res.status(201).json({ success: true, id: message._id, threaded: false });
   } catch (error) {
@@ -231,12 +218,6 @@ router.post('/contact', async (req, res) => {
       source: 'contact-form'
     });
 
-    try {
-      const telegramService = require('../services/telegramService');
-      telegramService.notifySupportMessage(message, { isContactForm: true });
-    } catch (e) {
-      // Fire-and-forget notification
-    }
 
     res.status(201).json({ success: true, id: message._id });
   } catch {
