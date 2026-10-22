@@ -346,14 +346,23 @@ function corsBlockedError(origin) {
   return error;
 }
 
-app.use(cors({
+const apiCorsMiddleware = cors({
   origin: (origin, callback) => {
     if (isAllowedCorsOrigin(origin)) return callback(null, true);
     if (IS_PRODUCTION) return callback(corsBlockedError(origin));
     return callback(null, true);
   },
   credentials: true
-}));
+});
+
+app.use((req, res, next) => {
+  // CORS validation strictly applies to API routes (/api/*).
+  // Public web pages (e.g. /de/kahoot-ai-bot, /blog), prerendered HTML, assets, and search engine crawlers/prefetches must never be blocked by CORS.
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+  return apiCorsMiddleware(req, res, next);
+});
 
 function angularIndexPath(routePath) {
   const cleanPath = routePath.replace(/^\/+/, '').replace(/\/+$/, '');
