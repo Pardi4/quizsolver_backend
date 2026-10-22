@@ -125,6 +125,9 @@ function normalizePayloadTextList(values) {
 }
 
 function normalizeQuestionPayload(questionData) {
+  if (!questionData.type || !['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(questionData.type)) {
+    questionData.type = (Array.isArray(questionData.options) && questionData.options.length > 0) ? 'radio' : 'text';
+  }
   const rawText = sanitizeText(questionData.text);
   questionData.options = normalizePayloadTextList(questionData.options);
   questionData.prompts = normalizePayloadTextList(questionData.prompts);

@@ -39,6 +39,10 @@ function normalizeOption(text) {
   return cleanQuizText(text).toLowerCase().replace(/\s+/g, ' ');
 }
 
+function stripOptionPrefix(text) {
+  return String(text || '').replace(/^[\s•·\-–—*]*([A-Za-z0-9]+[.)]\s*)+/i, '').trim();
+}
+
 function imageFingerprint(questionData) {
   const raw = String(questionData?.imageFingerprint || questionData?.imageUrl || '').trim();
   if (!raw) return '';
@@ -66,13 +70,16 @@ cachedAnswerSchema.statics.generateImageFingerprint = imageFingerprint;
 cachedAnswerSchema.statics.generateHash = function(questionData) {
   const sortedOptions = [...(questionData.options || [])].map(normalizeOption).sort();
   const normalizedText = cacheSafeQuestionText(questionData.text).toLowerCase().replace(/\s+/g, ' ');
+  const resolvedType = ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(questionData.type)
+    ? questionData.type
+    : ((Array.isArray(questionData.options) && questionData.options.length > 0) ? 'radio' : 'text');
 
   const normalized = JSON.stringify({
     text: normalizedText,
     options: sortedOptions,
     prompts: [...(questionData.prompts || [])].map(normalizeOption),
     rows: [...(questionData.rows || [])].map(normalizeOption),
-    type: questionData.type,
+    type: resolvedType,
     image: imageFingerprint(questionData)
   });
   return crypto.createHash('sha256').update(normalized).digest('hex');
@@ -93,21 +100,34 @@ cachedAnswerSchema.statics.findCached = async function(questionData) {
     if (questionData.type === 'radio' && typeof cached.answer === 'number') {
       const oldText = cached.options[cached.answer];
       if (oldText && questionData.options) {
-        const newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
+        let newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
+        if (newIdx === -1) {
+          const cleanOld = stripOptionPrefix(normalizeOption(oldText));
+          newIdx = questionData.options.findIndex(o => stripOptionPrefix(normalizeOption(o)) === cleanOld);
+        }
         if (newIdx !== -1) return newIdx;
       }
-    } else if (['checkbox', 'matching', 'matrix'].includes(questionData.type) && Array.isArray(cached.answer)) {
+    } else if (['checkbox', 'matching', 'matrix', 'ordering'].includes(questionData.type) && Array.isArray(cached.answer)) {
       if (questionData.options) {
         const newIndices = [];
         for (const oldIdx of cached.answer) {
           const oldText = cached.options[oldIdx];
           if (oldText) {
-            const newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
+            let newIdx = questionData.options.findIndex(o => normalizeOption(o) === normalizeOption(oldText));
+            if (newIdx === -1) {
+              const cleanOld = stripOptionPrefix(normalizeOption(oldText));
+              newIdx = questionData.options.findIndex(o => stripOptionPrefix(normalizeOption(o)) === cleanOld);
+            }
             if (newIdx !== -1) newIndices.push(newIdx);
           }
         }
-        if (newIndices.length === cached.answer.length) return newIndices;
-        if (['matching', 'matrix'].includes(questionData.type)) return cached.answer;
+        if (newIndices.length === cached.answer.length) {
+          if (questionData.type === 'checkbox') {
+            return [...newIndices].sort((a, b) => a - b);
+          }
+          return newIndices;
+        }
+        if (['matching', 'matrix', 'ordering'].includes(questionData.type)) return cached.answer;
       }
     }
 
@@ -121,7 +141,16 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
     return null;
   }
 
-  const hash = this.generateHash(questionData);
+  const resolvedType = ['radio', 'checkbox', 'text', 'matching', 'matrix', 'ordering'].includes(questionData.type)
+    ? questionData.type
+    : ((Array.isArray(questionData.options) && questionData.options.length > 0) ? 'radio' : 'text');
+
+  const normalizedQuestionData = {
+    ...questionData,
+    type: resolvedType
+  };
+
+  const hash = this.generateHash(normalizedQuestionData);
   const displayQuestionText = (
     cacheSafeQuestionText(questionData.cacheQuestionText || questionData.text || '') ||
     cleanQuizText(questionData.imageCaption || questionData.imageAlt || questionData.text || '') ||
@@ -132,11 +161,11 @@ cachedAnswerSchema.statics.cacheAnswer = async function(questionData, answer) {
       { questionHash: hash },
       {
         $set: {
-          questionText: displayQuestionText.substring(0, 500),
-          questionType: questionData.type,
-          options: (questionData.options || []).map(o => cleanQuizText(o).substring(0, 200)),
-          prompts: (questionData.prompts || []).map(o => cleanQuizText(o).substring(0, 200)),
-          rows: (questionData.rows || []).map(o => cleanQuizText(o).substring(0, 200)),
+          questionText: displayQuestionText.substring(0, 2000),
+          questionType: resolvedType,
+          options: (questionData.options || []).map(o => cleanQuizText(o).substring(0, 500)),
+          prompts: (questionData.prompts || []).map(o => cleanQuizText(o).substring(0, 500)),
+          rows: (questionData.rows || []).map(o => cleanQuizText(o).substring(0, 500)),
           imageFingerprint: imageFingerprint(questionData),
           answer: answer,
           lastUsedAt: new Date()

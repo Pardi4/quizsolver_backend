@@ -369,7 +369,7 @@ function parseAnswer(raw, type, options, expectedCount = null) {
   text = text.replace(/\b([A-F])[.)]\s/gi, (_, l) => LETTER_MAP[l.toUpperCase()] ?? l);
   text = text.replace(/^([A-F])$/gi, (_, l) => LETTER_MAP[l.toUpperCase()] ?? l);
 
-  if (type === 'matching' || type === 'matrix') {
+  if (type === 'matching' || type === 'matrix' || type === 'ordering') {
     return parseIndexArrayAnswer(text, raw, type, options, expectedCount);
   }
 
