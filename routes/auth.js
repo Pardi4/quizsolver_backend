@@ -220,6 +220,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     const password = req.body.password;
     const displayName = sanitizeDisplayName(req.body.displayName || email.split('@')[0]);
     const referralCode = req.body.referralCode;
+    const deviceId = String(req.body.deviceId || req.headers['x-device-id'] || '').trim().slice(0, 120);
 
     if (!email || !EMAIL_REGEX.test(email)) {
       return res.status(400).json({ error: 'Invalid email format.' });
@@ -248,12 +249,13 @@ router.post('/register', registerLimiter, async (req, res) => {
       passwordHash: password,
       authProviders: ['password'],
       emailVerified: false,
+      registrationDeviceId: deviceId,
       marketingConsent: req.body.marketingConsent === true || req.body.marketingOptIn === true
     };
 
     if (referralCode) {
       const referrer = await User.findOne({ referralCode: referralCode.trim() });
-      if (referrer) {
+      if (referrer && (!referrer.email || referrer.email.toLowerCase() !== email.toLowerCase())) {
         userData.referredBy = referrer._id;
       }
     }
@@ -383,6 +385,67 @@ router.post('/verify-email', authLimiter, async (req, res) => {
       sendEmail({ to: user.email, ...welcomeTemplate({ email: user.email }) })
         .then(res => console.log(`[Email] Welcome email sent:`, res))
         .catch((err) => console.error(`[Email] Failed to send welcome email:`, err));
+
+      if (user.referredBy && !user.referralBonusGranted) {
+        try {
+          const deviceId = user.registrationDeviceId || String(req.body.deviceId || req.headers['x-device-id'] || '').trim().slice(0, 120);
+          let deviceAllowed = true;
+
+          if (deviceId) {
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            const [bonusesLastHour, bonusesLast24h] = await Promise.all([
+              User.countDocuments({
+                registrationDeviceId: deviceId,
+                referralBonusGranted: true,
+                referralBonusGrantedAt: { $gte: oneHourAgo }
+              }),
+              User.countDocuments({
+                registrationDeviceId: deviceId,
+                referralBonusGranted: true,
+                referralBonusGrantedAt: { $gte: twentyFourHoursAgo }
+              })
+            ]);
+
+            if (bonusesLastHour >= 1 || bonusesLast24h >= 5) {
+              deviceAllowed = false;
+              console.log(`[Referral] Device limit reached for device ${deviceId} (1h: ${bonusesLastHour}, 24h: ${bonusesLast24h}). Skipping bonus.`);
+            }
+          }
+
+          if (deviceAllowed) {
+            const referrer = await User.findById(user.referredBy);
+            if (referrer && !referrer._id.equals(user._id)) {
+              const Purchase = require('../models/Purchase');
+              const SIGNUP_BONUS_CREDITS = 5;
+
+              referrer.credits = (referrer.credits || 0) + SIGNUP_BONUS_CREDITS;
+              await referrer.save();
+              await Purchase.recordPurchase(referrer._id, 'referral_bonus', SIGNUP_BONUS_CREDITS, {
+                paymentProvider: 'referral',
+                externalOrderId: `referral_signup:${referrer._id}:${user._id}`,
+                grantReason: `Referral signup bonus (+${SIGNUP_BONUS_CREDITS}) from ${user.email}`
+              });
+
+              user.credits = (user.credits || 0) + SIGNUP_BONUS_CREDITS;
+              user.referralBonusGranted = true;
+              user.referralBonusGrantedAt = new Date();
+              if (deviceId && !user.registrationDeviceId) user.registrationDeviceId = deviceId;
+              await user.save();
+              await Purchase.recordPurchase(user._id, 'referral_bonus', SIGNUP_BONUS_CREDITS, {
+                paymentProvider: 'referral',
+                externalOrderId: `referral_welcome:${user._id}`,
+                grantReason: `Welcome referral bonus (+${SIGNUP_BONUS_CREDITS} credits)`
+              });
+
+              console.log(`[Referral] Granted +${SIGNUP_BONUS_CREDITS} signup bonus to referrer ${referrer.email} and new user ${user.email}`);
+            }
+          }
+        } catch (refErr) {
+          console.error('[Referral] Error granting referral signup bonus:', refErr);
+        }
+      }
     }
 
     const token = generateToken(user._id, rememberMe);

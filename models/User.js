@@ -83,6 +83,9 @@ const userSchema = new mongoose.Schema({
   extensionVersion: { type: String, default: '', maxlength: 40 },
   referralCode: { type: String, unique: true, sparse: true },
   referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  registrationDeviceId: { type: String, default: '', index: true, maxlength: 120 },
+  referralBonusGranted: { type: Boolean, default: false },
+  referralBonusGrantedAt: { type: Date, default: null, index: true },
   streak: {
     current: { type: Number, default: 0 },
     lastSolveDate: { type: String, default: '' },
@@ -120,6 +123,7 @@ userSchema.index({ role: -1, credits: 1, createdAt: -1 });
 userSchema.index({ extensionLastSeenAt: -1, createdAt: -1 });
 userSchema.index({ 'stats.totalQuestionsSolved': -1, createdAt: -1 });
 userSchema.index({ 'streak.current': -1, createdAt: -1 });
+userSchema.index({ registrationDeviceId: 1, referralBonusGranted: 1, referralBonusGrantedAt: -1 });
 
 userSchema.pre('save', async function(next) {
   if (!this.isModified('passwordHash') || !this.passwordHash) return next();
