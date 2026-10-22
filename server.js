@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./utils/logger').initLogger();
 
 const express = require('express');
 const helmet = require('helmet');

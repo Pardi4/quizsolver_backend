@@ -4,6 +4,8 @@ angular-web/dist/
 .npm-cache/
 .env
 *.log
+*.log.*
+logs/
 npm-debug.log*
 .env.example
 .env.vps.example

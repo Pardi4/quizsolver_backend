@@ -1463,6 +1463,21 @@ router.get('/system/health', async (req, res) => {
   }
 });
 
+router.get('/server-logs', async (req, res) => {
+  try {
+    const { getRecentLogs, getLogFilesInfo } = require('../utils/logger');
+    const type = req.query.type === 'error' ? 'error' : 'app';
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 10), 1000);
+    const [lines, files] = await Promise.all([
+      getRecentLogs(type, limit),
+      Promise.resolve(getLogFilesInfo())
+    ]);
+    res.json({ success: true, type, count: lines.length, files, logs: lines });
+  } catch (err) {
+    res.status(500).json({ error: 'Error fetching server logs.' });
+  }
+});
+
 router.get('/client-errors', async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
