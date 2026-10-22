@@ -74,6 +74,8 @@ purchaseSchema.index(
   }
 );
 
+purchaseSchema.index({ userId: 1, pack: 1, createdAt: -1 });
+
 purchaseSchema.statics.applyCredits = async function(purchaseOrId) {
   const User = require('./User');
   const purchase = typeof purchaseOrId === 'object' && purchaseOrId?._id

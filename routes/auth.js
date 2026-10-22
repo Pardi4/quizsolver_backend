@@ -393,24 +393,15 @@ router.post('/verify-email', authLimiter, async (req, res) => {
 
           if (deviceId) {
             const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const bonusesLastHour = await User.countDocuments({
+              registrationDeviceId: deviceId,
+              referralBonusGranted: true,
+              referralBonusGrantedAt: { $gte: oneHourAgo }
+            });
 
-            const [bonusesLastHour, bonusesLast24h] = await Promise.all([
-              User.countDocuments({
-                registrationDeviceId: deviceId,
-                referralBonusGranted: true,
-                referralBonusGrantedAt: { $gte: oneHourAgo }
-              }),
-              User.countDocuments({
-                registrationDeviceId: deviceId,
-                referralBonusGranted: true,
-                referralBonusGrantedAt: { $gte: twentyFourHoursAgo }
-              })
-            ]);
-
-            if (bonusesLastHour >= 1 || bonusesLast24h >= 5) {
+            if (bonusesLastHour >= 1) {
               deviceAllowed = false;
-              console.log(`[Referral] Device limit reached for device ${deviceId} (1h: ${bonusesLastHour}, 24h: ${bonusesLast24h}). Skipping bonus.`);
+              console.log(`[Referral] Device limit reached for device ${deviceId} (1h: ${bonusesLastHour}). Skipping bonus.`);
             }
           }
 
@@ -420,26 +411,48 @@ router.post('/verify-email', authLimiter, async (req, res) => {
               const Purchase = require('../models/Purchase');
               const SIGNUP_BONUS_CREDITS = 5;
 
-              referrer.credits = (referrer.credits || 0) + SIGNUP_BONUS_CREDITS;
-              await referrer.save();
-              await Purchase.recordPurchase(referrer._id, 'referral_bonus', SIGNUP_BONUS_CREDITS, {
+              // Referrer account limit: max 5 bonuses (+25 credits) per 24 hours
+              const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+              const referrerBonusCountLast24h = await Purchase.countDocuments({
+                userId: referrer._id,
+                pack: 'referral_bonus',
                 paymentProvider: 'referral',
-                externalOrderId: `referral_signup:${referrer._id}:${user._id}`,
-                grantReason: `Referral signup bonus (+${SIGNUP_BONUS_CREDITS}) from ${user.email}`
+                externalOrderId: { $regex: '^referral_signup:' },
+                createdAt: { $gte: twentyFourHoursAgo }
               });
 
-              user.credits = (user.credits || 0) + SIGNUP_BONUS_CREDITS;
+              const canReferrerReceive = referrerBonusCountLast24h < 5;
+
+              if (canReferrerReceive) {
+                await Purchase.recordPurchase(referrer._id, 'referral_bonus', SIGNUP_BONUS_CREDITS, {
+                  paymentProvider: 'referral',
+                  externalOrderId: `referral_signup:${referrer._id}:${user._id}`,
+                  grantReason: `Referral signup bonus (+${SIGNUP_BONUS_CREDITS}) from ${user.email}`
+                });
+                console.log(`[Referral] Granted +${SIGNUP_BONUS_CREDITS} signup bonus to referrer ${referrer.email} (bonuses last 24h: ${referrerBonusCountLast24h + 1}/5)`);
+              } else {
+                console.log(`[Referral] Referrer ${referrer.email} reached 24h limit (${referrerBonusCountLast24h}/5 bonuses, max +25 credits/24h). Referrer bonus skipped.`);
+              }
+
+              // Welcome bonus for newly verified user (+5 credits)
               user.referralBonusGranted = true;
               user.referralBonusGrantedAt = new Date();
               if (deviceId && !user.registrationDeviceId) user.registrationDeviceId = deviceId;
               await user.save();
+
               await Purchase.recordPurchase(user._id, 'referral_bonus', SIGNUP_BONUS_CREDITS, {
                 paymentProvider: 'referral',
                 externalOrderId: `referral_welcome:${user._id}`,
                 grantReason: `Welcome referral bonus (+${SIGNUP_BONUS_CREDITS} credits)`
               });
 
-              console.log(`[Referral] Granted +${SIGNUP_BONUS_CREDITS} signup bonus to referrer ${referrer.email} and new user ${user.email}`);
+              const refreshedUser = await User.findById(user._id);
+              if (refreshedUser) {
+                user.credits = refreshedUser.credits;
+                user.paidCredits = refreshedUser.paidCredits;
+              }
+
+              console.log(`[Referral] Granted +${SIGNUP_BONUS_CREDITS} welcome bonus to new user ${user.email}`);
             }
           }
         } catch (refErr) {
