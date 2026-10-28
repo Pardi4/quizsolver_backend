@@ -44,6 +44,7 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'im
 // more generous floor than the default 'low' path.
 const COMPRESSION_FLOORS = {
   low: { minWidth: 1000, minQuality: 60 },
+  auto: { minWidth: 1200, minQuality: 65 },
   high: { minWidth: 1400, minQuality: 70 }
 };
 
@@ -192,6 +193,7 @@ function imageUrlFromBase64(base64, mimeType) {
 const QUIZ_SOLVER_SYSTEM_PREFIX = [
   'You are QuizSolver Answer Engine.',
   'Solve normalized quiz payloads from websites. The payload may include text, options, rows, matching items, and an image.',
+  'When an image is present, inspect it thoroughly for fine details, small text, labels, formulas, exponents, and diagrams.',
   'Use the option text, question wording, and image when present. Return only the required machine-readable answer.',
   'If the payload does not contain a real answerable question, return exactly: null',
   'Never include explanation, markdown, labels, letters like A/B/C, or extra words.'
@@ -435,7 +437,7 @@ function detectModelReason(questionData) {
 
 function getInitialAIRoute(questionData) {
   return {
-    imageDetail: 'low',
+    imageDetail: 'high',
     reason: detectModelReason(questionData)
   };
 }
@@ -609,16 +611,16 @@ function parseSnapshotPayload(raw) {
 async function callSnapshotAI(imageData, imageDetail = 'low', model = PRIMARY_MODEL) {
   const { base64, mimeType } = await fetchImageAsBase64(imageData, imageDetail);
   const body = {
-    max_completion_tokens: 400, // headroom for hidden reasoning tokens, see getMaxTokens
+    max_completion_tokens: 600, // headroom for hidden reasoning tokens, see getMaxTokens
     messages: [
       {
         role: 'system',
-        content: 'You solve quiz questions from screenshots. Return compact JSON only: {"question":"short extracted question","answer":"shortest final answer without a final period"}. If choices are visible, answer with the exact choice text, not its letter. No markdown.'
+        content: 'You solve quiz questions from screenshots. Inspect the image with extreme care for any small text, mathematical notation, exponents, subscripts, fractions, diagram labels, and multiple-choice options. Return compact JSON only: {"question":"short extracted question","answer":"shortest final answer without a final period"}. If choices are visible, answer with the exact choice text, not its letter. No markdown.'
       },
       {
         role: 'user',
         content: [
-          { type: 'text', text: 'Extract the visible question from this selected screenshot region and solve it. Keep the answer as short as possible.' },
+          { type: 'text', text: 'Carefully read and solve the question shown in this screenshot region. Transcribe accurately even if text is small. Keep the answer as short as possible.' },
           { type: 'image_url', image_url: { url: imageUrlFromBase64(base64, mimeType), detail: imageDetail } }
         ]
       }
@@ -632,7 +634,7 @@ async function callSnapshotAI(imageData, imageDetail = 'low', model = PRIMARY_MO
 }
 
 async function solveSnapshotImage(imageData) {
-  const initialRoute = { imageDetail: 'low', reason: 'focusscan' };
+  const initialRoute = { imageDetail: 'high', reason: 'focusscan' };
   try {
     console.log('[AI Snapshot Route]', JSON.stringify({ ...initialRoute, model: PRIMARY_MODEL }));
     return await callSnapshotAI(imageData, initialRoute.imageDetail, PRIMARY_MODEL);
