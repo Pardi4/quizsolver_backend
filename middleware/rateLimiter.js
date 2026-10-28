@@ -1,9 +1,20 @@
 const rateLimit = require('express-rate-limit');
 
 const QUIZ_REQUESTS_PER_MINUTE = 1000;
-const quizSolveEndpointPattern = /^\/api\/quiz\/(?:solve(?:-batch|-snapshot)?|explain|follow-up)(?:[/?#]|$)/i;
+const quizSolveEndpointPattern = /^(?:\/api)?\/quiz\/(?:solve(?:-batch|-snapshot)?|explain|follow-up)(?:[/?#]|$)/i;
 
-const requestIp = (req) => req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+const requestIp = (req) => {
+  const cfIp = req.headers && req.headers['cf-connecting-ip'];
+  if (cfIp) return String(cfIp).trim();
+  const xRealIp = req.headers && req.headers['x-real-ip'];
+  if (xRealIp) return String(xRealIp).trim();
+  const xForwarded = req.headers && req.headers['x-forwarded-for'];
+  if (typeof xForwarded === 'string' && xForwarded.trim()) {
+    const firstIp = xForwarded.split(',')[0].trim();
+    if (firstIp) return firstIp;
+  }
+  return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+};
 
 const userKeyGenerator = (req) => {
   if (req.user && req.user._id) return `user_${req.user._id}`;
