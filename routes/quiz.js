@@ -725,7 +725,7 @@ async function beginCreditUsage(user, action, questionHash, shouldCharge, option
     const retryUser = await User.findById(user._id);
     return {
       ok: false,
-      status: 429,
+      status: 402,
       body: { error: 'No credits remaining.', limitReached: true, remaining: remainingFor(retryUser) }
     };
   }
@@ -1328,7 +1328,7 @@ router.post('/solve-batch', preventConcurrentQuiz, async (req, res) => {
     const spendCheck = await userCanSpend(user, creditsNeeded);
     if (!spendCheck.allowed) {
       const remaining = spendCheck.user?.getRemaining?.() || 0;
-      return res.status(429).json({
+      return res.status(402).json({
         error: `${remaining} credits left, need ${creditsNeeded}.`,
         limitReached: true,
         remaining,

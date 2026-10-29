@@ -169,7 +169,7 @@ const parserSnapshotLimiter = rateLimit({
 
 const parserDatasetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 500,
   message: { error: 'Too many diagnostic reports. Please wait a moment.' },
   standardHeaders: true,
   legacyHeaders: false,
